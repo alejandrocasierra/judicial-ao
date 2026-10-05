@@ -225,6 +225,22 @@ docker compose -p judicial-site --env-file .env.advisorlegal exec -T api \
   python /srv/scripts/seed_ai_models.py --org-id <uuid-org> --user-id <uuid-admin> --api-key <GEMINI_API_KEY>
 ```
 
+## 10) Verificación y carga del expediente
+Verifica los 3 dominios (API/Web + TLS) o la salud local por puertos:
+```bash
+bash scripts/verify_deploy.sh
+bash scripts/verify_deploy.sh --local
+```
+Carga el **mismo expediente** en las 3 instancias (una vez exportado):
+```bash
+# 1) exporta desde tu instancia origen (local)
+python scripts/export_case.py --case-id <uuid> --org-id <uuid> --out casos/<uuid>
+# 2) importa en site / develop / quality (auto-resuelve la organización destino de cada una)
+bash scripts/import_case_all.sh --export-dir casos/<uuid>
+```
+> Si hay varias organizaciones por instancia, pasa `--site-org/--develop-org/--quality-org <uuid>`.
+> `import_case_all.sh` copia la carpeta al contenedor y ejecuta `import_case.py` (remapea org y usuarios).
+
 ## Con OpenCode en el VPS
 Una vez instalado (`curl -fsSL https://opencode.ai/install | bash`), puedes usarlo dentro del servidor:
 ```bash

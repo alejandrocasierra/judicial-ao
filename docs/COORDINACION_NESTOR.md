@@ -33,6 +33,8 @@ Ramas actualizadas (todas al mismo commit): `main`, `develop`, `develop01`, `dev
 - `infra/docker/docker-compose.shared-infra.yml` + `docker-compose.shared-app.yml` — **modo compartido** (un Postgres/Redis/ClamAV para las 3 instancias).
 - `docker-compose.shared-proxy.yml` + `infra/docker/Caddyfile.shared` — **Caddy único** que sirve los 3 dominios por `Host` con TLS automático (`site-api/site-web`, `develop-*`, `quality-*`).
 - `scripts/db_create.py` — ahora corre dentro del contenedor (crea BD + roles de cada instancia).
+- `scripts/verify_deploy.sh` — verificación post-deploy (health + TLS de los 3 dominios; `--local` por puertos).
+- `scripts/import_case_all.sh` — carga el **mismo expediente** en site/develop/quality (auto-resuelve la org destino).
 
 ## 4) Cómo bajar la última versión (para cualquiera)
 ```bash
