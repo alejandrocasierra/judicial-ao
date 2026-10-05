@@ -49,12 +49,15 @@ CORS_ALLOWED_ORIGINS=https://advisorlegal.co
 API_PUBLIC_URL=/v1                 # mismo dominio tras Caddy → sin CORS
 MCP_ALLOWED_HOSTS=advisorlegal.co
 REGISTRY_IMAGE=                    # vacío = build en el VPS; o registry.gitlab.com/usuario/repo (recomendado)
-LLM_PROVIDER=anthropic             # o openai/deepseek/gemini/kimi
-LLM_MODEL=__SET_ME__
-LLM_API_KEY=__SET_ME__
-EMBEDDING_PROVIDER=openai          # o sentence-transformers local
-EMBEDDING_MODEL=__SET_ME__         # debe devolver 1024 dims (coherente con EMBEDDING_DIMENSIONS)
-EMBEDDING_API_KEY=__SET_ME__
+# LLM por defecto. Para Gemini se usa el adaptador OpenAI-compatible:
+LLM_PROVIDER=openai
+LLM_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+LLM_MODEL=gemini-flash-latest
+LLM_API_KEY=tu_api_key_de_gemini
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL=gemini-embedding-001   # devuelve 1024 dims (coherente con EMBEDDING_DIMENSIONS)
+EMBEDDING_API_KEY=tu_api_key_de_gemini
+EMBEDDING_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
 # Storage = el MISMO GCS de local (bucket compartido). La credencial gcp-credentials.json
 # se monta en el contenedor; NO va al repo.
 STORAGE_BACKEND=gcs

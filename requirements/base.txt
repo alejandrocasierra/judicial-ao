@@ -36,7 +36,7 @@ soundfile==0.13.1
 av==18.1.0
 jsonschema==4.23.0
 pgvector==0.2.5
-openai==1.51.0
+openai==1.55.3
 sentence-transformers==3.1.1
 sentencepiece==0.2.2
 prometheus-client==0.23.1
