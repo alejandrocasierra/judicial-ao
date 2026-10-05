@@ -16,7 +16,7 @@ services:
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
-    ports: ["6379:6379"]
+    ports: ["${REDIS_PORT:-6379}:6379"]
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -37,9 +37,9 @@ services:
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL_DOCKER:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND_DOCKER:-redis://redis:6379/2}
       API_HOST: 0.0.0.0
       # Google Document AI: credenciales montadas como volumen.
       GOOGLE_APPLICATION_CREDENTIALS: /srv/gcp-credentials.json
@@ -68,9 +68,9 @@ services:
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL_DOCKER:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND_DOCKER:-redis://redis:6379/2}
       CELERY_TASK_ALWAYS_EAGER: "false"
       # Fase 3 (ASR/diarización): GPU si Docker Desktop/WSL2 la expone; faster-whisper
       # y pyannote caen a CPU automáticamente si CUDA no está disponible.
@@ -117,9 +117,9 @@ services:
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL_DOCKER:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND_DOCKER:-redis://redis:6379/2}
       CELERY_TASK_ALWAYS_EAGER: "false"
       MCP_SERVER_HOST: 0.0.0.0
       PYTHONPATH: /srv/apps:/srv/apps/api
@@ -144,7 +144,7 @@ services:
       # URL pública del API que ve el NAVEGADOR (no la red interna de Docker).
       # Vacío = http://localhost:8000/v1 (desarrollo). En GCP: https://api.tudominio.com/v1
       API_PUBLIC_URL: ${API_PUBLIC_URL:-}
-    ports: ["3000:3000"]
+    ports: ["${WEB_PORT:-3000}:3000"]
     depends_on:
       api: {condition: service_started}
     healthcheck:

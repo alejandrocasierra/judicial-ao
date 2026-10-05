@@ -5,20 +5,23 @@
 #   bash scripts/migrate_seeds.sh .env.dev .env.staging .env.prod
 #   MIGRATE_ENVS=".env.dev .env.staging .env.prod" bash scripts/migrate_seeds.sh
 #   bash scripts/migrate_seeds.sh --no-seed .env.prod          # solo migraciones
+#   bash scripts/migrate_seeds.sh --seed .env.quality          # fuerza semilla en staging
 #   DOCKER=1 bash scripts/migrate_seeds.sh .env.prod           # dentro del contenedor api
 #
 # Cada archivo define su BD (POSTGRES_*) y su APP_ENV. La semilla se aplica SÓLO si
-# APP_ENV no es production/staging (el seed de demo se rechaza en prod por diseño).
+# APP_ENV no es production (el seed de demo se rechaza en prod por diseño). En staging
+# se omite salvo que se pase --seed.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 SEED=1
+FORCE=0
 DOCKER="${DOCKER:-0}"
 ENVS=()
 for a in "$@"; do
   case "$a" in
     --no-seed) SEED=0 ;;
-    --seed) SEED=1 ;;
+    --seed) SEED=1; FORCE=1 ;;
     --docker) DOCKER=1 ;;
     *) ENVS+=("$a") ;;
   esac
@@ -46,7 +49,7 @@ for f in "${ENVS[@]}"; do
     ENV_FILE="$f" "$PY" -m alembic -c apps/api/alembic.ini upgrade head
   fi
 
-  if [ "$SEED" = "1" ] && [ "${app_env:-}" != "production" ] && [ "${app_env:-}" != "staging" ]; then
+  if [ "$SEED" = "1" ] && [ "${app_env:-}" != "production" ] && { [ "${app_env:-}" != "staging" ] || [ "$FORCE" = "1" ]; }; then
     echo "    -> seed"
     if [ "$DOCKER" = "1" ]; then
       docker compose --env-file "$f" exec -T api python -m seeds.seed || true

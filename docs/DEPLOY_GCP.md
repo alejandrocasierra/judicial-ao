@@ -140,6 +140,47 @@ Recuerda: **nunca** subas el volcado ni `var/storage` a GitHub; `.gitignore` y `
   - `docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml ps` → todo `healthy`.
   - Abre un PDF (original + OCR) y pregunta al chat (debe citar documento+página / video+minuto).
 
+## 8) Varias instancias (site / develop / quality)
+Tres despliegues sobre el mismo VPS, cada uno con su BD/roles, su índice de Redis y sus puertos.
+Los `.env` ya están listos: `.env.advisorlegal` (site), `.env.develop` y `.env.quality`.
+
+| Instancia | `.env` | POSTGRES_DB | Rol dueño | Rol app | Redis | API · MCP | Dominio |
+|---|---|---|---|---|---|---|---|
+| **site** | `.env.advisorlegal` | `judicial` | `judicial_owner` | `judicial_app` | /0 /1 /2 | 8000 · 8100 | advisorlegal.co |
+| **develop** | `.env.develop` | `judicial_develop` | `judicial_owner_dev` | `judicial_app_dev` | /3 /4 /5 | 8001 · 8101 | develop.advisorlegal.co |
+| **quality** | `.env.quality` | `judicial_quality` | `judicial_owner_qa` | `judicial_app_qa` | /6 /7 /8 | 8002 · 8102 | quality.advisorlegal.co |
+
+Cada instancia con su propio proyecto Compose y `--env-file`:
+```bash
+docker compose -p judicial-site    --env-file .env.advisorlegal -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker compose -p judicial-develop --env-file .env.develop      -f docker-compose.yml -f docker-compose.prod.yml up -d
+docker compose -p judicial-quality --env-file .env.quality      -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+> Comparten el **bucket GCS** `welladvisor` con prefijo distinto por instancia
+> (`judicial-ai/prod`, `judicial-ai/dev`, `judicial-ai/quality`).
+> Si prefieres **un Postgres/Redis compartido** en vez de uno por instancia, apunta `POSTGRES_HOST`
+> y `REDIS_URL_DOCKER`/`CELERY_*_DOCKER` a ese servicio (red Docker externa) y conserva los
+> índices de Redis (`/0-2`, `/3-5`, `/6-8`) y el `POSTGRES_DB`.
+
+Migraciones y semillas por instancia:
+```bash
+bash scripts/migrate_seeds.sh .env.develop .env.quality      # develop siembra; quality (staging) no
+bash scripts/migrate_seeds.sh --seed .env.quality            # forzar semilla en quality
+bash scripts/migrate_seeds.sh --no-seed .env.advisorlegal    # site: sólo migrar
+```
+
+## 9) Post-despliegue: embeddings e IA (Gemini)
+Tras importar los datos, **reindexa el caso** para que los vectores usen el modelo real (Gemini):
+```bash
+docker compose -p judicial-site --env-file .env.advisorlegal exec -T api \
+  python /srv/scripts/index_chunks_cli.py --case-id <uuid-caso> --org-id <uuid-org> --user-id <uuid-user>
+```
+Da de alta los **modelos de Gemini** en la organización (idempotente; aparecen en el selector del chat):
+```bash
+docker compose -p judicial-site --env-file .env.advisorlegal exec -T api \
+  python /srv/scripts/seed_ai_models.py --org-id <uuid-org> --user-id <uuid-admin> --api-key <GEMINI_API_KEY>
+```
+
 ## Con OpenCode en el VPS
 Una vez instalado (`curl -fsSL https://opencode.ai/install | bash`), puedes usarlo dentro del servidor:
 ```bash

@@ -16,20 +16,20 @@ Ramas actualizadas (todas al mismo commit): `main`, `develop`, `develop01`, `dev
 ## 2) Pendientes §10 y estado
 | Punto | Estado | Cómo se resuelve |
 |---|---|---|
-| **Storage de producción** | ✅ confirmado | **GCS**: bucket `welladvisor`, prefijo `judicial-ai/prod` (en local se usa `judicial-ai/dev`). Credencial: `gcp-credentials.json` (service account `ocrdocumentai@welladvisor.iam.gserviceaccount.com`). La subida directa (presign) usa esa misma credencial. |
-| **Migraciones + semillas de las 3 BD** | ⏳ falta info | `bash scripts/migrate_seeds.sh .env.dev .env.staging .env.prod`. **Falta**: hosts/nombres de las 3 BD y si las semillas son sintéticas o reales (ver §5.1). |
-| **API keys de \"site\"** | ⏳ falta provisión | Ver matriz §5.2. Van en el `.env` del servidor, **nunca** al repo. |
-| **Node.js para el frontend** | ✅ no hace falta | El frontend se despliega como **imagen Docker** (build con `node:22` dentro). Sólo se necesita Node en el host si se compila fuera de Docker. |
-| **Límite de 100 MB de Cloudflare (videos grandes)** | ✅ implementado | **Subida directa a GCS** por URL prefirmada (`/uploads/presign` + `/uploads/complete`), sin pasar por el proxy de Cloudflare. Alternativa/simple: subdominio **solo-DNS (gris)** para subidas. |
+| **Storage de producción** | ✅ | **GCS** bucket `welladvisor` con prefijo por instancia (`judicial-ai/prod`, `judicial-ai/dev`, `judicial-ai/quality`). Credencial `gcp-credentials.json` (SA `ocrdocumentai@welladvisor`). La subida directa (presign) usa esa misma credencial. |
+| **Migraciones + semillas de las 3 BD** | ✅ | Ver tabla en §5.1. `bash scripts/migrate_seeds.sh .env.develop .env.quality` (quality/staging sólo con `--seed`; `site` nunca siembra). |
+| **API keys de "site"** | ✅ | Gemini (LLM **y** embeddings) ya configurado en los `.env`; ver §5.2. |
+| **Node.js para el frontend** | ✅ no hace falta | El frontend se despliega como **imagen Docker** (build con `node:22` dentro). |
+| **Límite de 100 MB de Cloudflare** | ✅ implementado | **Subida directa a GCS** por URL prefirmada (`/uploads/presign` + `/uploads/complete`). |
 
 ## 3) Qué se agregó al repo (ya en `main`)
-- `scripts/migrate_seeds.sh` — migra + siembra varias BD en un comando.
-- **Subida directa de archivos grandes** a GCS/S3:
-  - Backend: `POST /cases/{case_id}/uploads/presign` (devuelve URL prefirmada; si el storage es local, `mode: local`) y
-    `POST /cases/{case_id}/uploads/complete` (registra y encola el procesamiento).
-  - Frontend: los archivos **> 90 MB** se suben directo al storage; los pequeños siguen por multipart.
-- `docs/DEPLOY_GCP.md` — guía de despliegue (con OpenCode en el VPS).
-- `docs/MIGRAR_DATOS.md` — migración de datos (instancia completa o un solo expediente).
+- `scripts/migrate_seeds.sh` — migra + siembra varias BD (`--seed` / `--no-seed`).
+- `scripts/seed_ai_models.py` — **alta de modelos Gemini** por organización (idempotente).
+- **Subida directa** de archivos grandes a GCS/S3 (presign + complete) y frontend para > 90 MB.
+- **3 `.env` listos** (gitignored, se entregan aparte): `.env.advisorlegal` (site), `.env.develop`, `.env.quality`.
+- `docker-compose.yml` — soporta `WEB_PORT`, `REDIS_PORT` y `REDIS_URL_DOCKER`/`CELERY_*_DOCKER` por instancia.
+- `requirements/base.txt` — `openai==1.55.3` (compatible con httpx 0.28; **necesario** para los embeddings de Gemini).
+- `docs/DEPLOY_GCP.md` §8 (multi-instancia) y §9 (reindexado + alta de modelos).
 
 ## 4) Cómo bajar la última versión (para cualquiera)
 ```bash
@@ -38,23 +38,26 @@ git checkout main && git pull origin main     # o la rama que corresponda (devel
 ```
 > Todas las ramas (`main`, `develop`, `develop01`, `develop07`, `quality`, `Site`) apuntan al **mismo commit**.
 
-## 5) Qué necesitamos de Néstor
+## 5) Config acordada
 
-### 5.1 Las 3 BD (para migrar + sembrar)
-- **Nombres y hosts/puertos** de las 3 bases (¿dev / staging / prod? ¿un Postgres por ambiente o todos en el mismo?).
-- Usuario/rol y si son alcanzables desde el contenedor `api`.
-- **Semillas**: ¿sintéticas (demo) o datos reales? En producción el seed de demo se **rechaza por diseño** (sólo migramos).
-- Con eso se crean `.env.dev`, `.env.staging` y `.env.prod` (copiando la sección PostgreSQL) y se corre:
-  `bash scripts/migrate_seeds.sh .env.dev .env.staging .env.prod`
+### 5.1 Las 3 instancias
+| Instancia | `.env` | POSTGRES_DB | Rol dueño | Rol app | Redis | API · MCP | Dominio |
+|---|---|---|---|---|---|---|---|
+| **site** | `.env.advisorlegal` | `judicial` | `judicial_owner` | `judicial_app` | /0 /1 /2 | 8000 · 8100 | advisorlegal.co |
+| **develop** | `.env.develop` | `judicial_develop` | `judicial_owner_dev` | `judicial_app_dev` | /3 /4 /5 | 8001 · 8101 | develop.advisorlegal.co |
+| **quality** | `.env.quality` | `judicial_quality` | `judicial_owner_qa` | `judicial_app_qa` | /6 /7 /8 | 8002 · 8102 | quality.advisorlegal.co |
 
-### 5.2 API keys / credenciales que necesita \"site\"
-| Necesidad | Variables | Quién provee |
-|---|---|---|
-| **LLM** (chat/agentes) | `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_API_BASE_URL` | Cuenta del proveedor elegido (Google/Gemini, OpenAI, Anthropic, Moonshot/Kimi…) |
-| **Embeddings** (búsqueda vectorial, **1024 dims**) | `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `EMBEDDING_API_KEY` | Cuenta del proveedor de embeddings (puede ser la misma que la LLM) |
-| **OCR Document AI** (modo `document_ai`) | `gcp-credentials.json`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `GOOGLE_DOCUMENT_AI_PROCESSOR_ID` | GCP propio (proyecto `welladvisor`); la credencial ya existe |
-| **Storage** (GCS) | `gcp-credentials.json` + `S3_BUCKET=welladvisor` + `S3_PREFIX=judicial-ai/prod` | igual que en local |
-| **ASR / diarización** (opcional) | `HF_TOKEN` / `ASR_DIARIZATION_TOKEN` | Hugging Face |
-| **Correo** (opcional) | `SMTP_*` | cuenta SMTP de la organización |
+- **Semillas**: `develop` (`APP_ENV=development`) siembra; `quality` (`staging`) sólo con `--seed`; `site` (`production`) nunca.
+- **A confirmar con Néstor**: ¿un Postgres/Redis **compartido** entre las 3, o uno por instancia? Los `.env` soportan ambos.
 
-> ⚠️ Las API keys que se compartieron por chat (Gemini/OpenAI/Kimi) **deben rotarse**. Se copian una sola vez al `.env` del servidor; **nunca** al repo.
+### 5.2 API keys / credenciales
+| Necesidad | Estado |
+|---|---|
+| **LLM** | ✅ Gemini (`gemini-flash-latest`, endpoint OpenAI-compatible) |
+| **Embeddings** (1024 dims) | ✅ `gemini-embedding-001` |
+| **OCR Document AI** | ✅ `gcp-credentials.json` (proyecto `welladvisor`) |
+| **Storage** | ✅ GCS `welladvisor` |
+| **ASR / diarización** (opcional) | ✅ `HF_TOKEN` |
+| **Correo** (opcional) | ⏳ si se quiere SMTP |
+
+> ⚠️ Las API keys compartidas por chat (Gemini/OpenAI/Kimi) **deben rotarse**. Se copian una sola vez al `.env` del servidor; **nunca** al repo.
