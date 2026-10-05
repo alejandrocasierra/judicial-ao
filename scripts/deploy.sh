@@ -2,9 +2,13 @@
 # Despliegue en el VPS: imágenes + up + migraciones + healthcheck.
 #
 # Uso:
-#   bash scripts/deploy.sh            # pull (si REGISTRY_IMAGE) o build, y levanta todo
+#   bash scripts/deploy.sh            # pull (si REGISTRY_IMAGE) o build, y levanta todo (aislado)
+#   bash scripts/deploy.sh --shared   # usa la infra COMPARTIDA (Postgres/Redis/ClamAV externos)
 #   bash scripts/deploy.sh --seed     # además siembra datos de demo (NO usar en prod real)
-#   ENV_FILE=.env.production bash scripts/deploy.sh
+#   ENV_FILE=.env.advisorlegal bash scripts/deploy.sh --shared
+#
+# En modo --shared debes tener ya levantada la infra compartida (docs/DEPLOY_GCP.md §8.1)
+# y arranca SÓLO los servicios de app (api/worker/mcp/web), sin Postgres/Redis locales.
 #
 # Requisitos: docker + docker compose v2, y un archivo .env en la raíz (usa
 # .env.production.example como plantilla).
@@ -13,7 +17,13 @@ cd "$(dirname "$0")/.."
 
 ENV_FILE="${ENV_FILE:-.env}"
 SEED=0
-[ "${1:-}" = "--seed" ] && SEED=1
+SHARED=0
+for a in "$@"; do
+  case "$a" in
+    --seed) SEED=1 ;;
+    --shared) SHARED=1 ;;
+  esac
+done
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "ERROR: falta $ENV_FILE. Copia .env.production.example a .env y complétalo:"
@@ -29,7 +39,13 @@ PUBLIC_DOMAIN="$(read_env PUBLIC_DOMAIN)"
 API_PORT="$(read_env API_PORT)"; API_PORT="${API_PORT:-8000}"
 
 DC=(docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml)
-[ "$MALWARE" = "clamav" ] && DC+=(--profile clamav)
+UP_SERVICES=()
+if [ "$SHARED" = "1" ]; then
+  DC+=(-f infra/docker/docker-compose.shared-app.yml)
+  UP_SERVICES=(--no-deps api worker mcp web)
+else
+  [ "$MALWARE" = "clamav" ] && DC+=(--profile clamav)
+fi
 
 echo "==> 1/4 Imágenes"
 if [ -n "$REGISTRY_IMAGE" ]; then
@@ -41,7 +57,7 @@ else
 fi
 
 echo "==> 2/4 Levantando servicios"
-"${DC[@]}" up -d --remove-orphans
+"${DC[@]}" up -d --remove-orphans "${UP_SERVICES[@]}"
 
 echo "==> 3/4 Migraciones de base de datos"
 migrated=0

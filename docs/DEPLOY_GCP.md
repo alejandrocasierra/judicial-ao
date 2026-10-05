@@ -143,6 +143,10 @@ Recuerda: **nunca** subas el volcado ni `var/storage` a GitHub; `.gitignore` y `
 ## 8) Varias instancias (site / develop / quality)
 Tres despliegues sobre el mismo VPS, cada uno con su BD/roles, su índice de Redis y sus puertos.
 Los `.env` ya están listos: `.env.advisorlegal` (site), `.env.develop` y `.env.quality`.
+Cada `.env` trae su `COMPOSE_PROJECT_NAME` (`judicial-site` / `judicial-develop` / `judicial-quality`).
+
+> **Modo por defecto: COMPARTIDO** (un Postgres + Redis + ClamAV para las 3) → ver **§8.1**.
+> Los comandos de abajo son la alternativa **aislada** (un Postgres/Redis por instancia).
 
 | Instancia | `.env` | POSTGRES_DB | Rol dueño | Rol app | Redis | API · MCP | Dominio |
 |---|---|---|---|---|---|---|---|
@@ -170,7 +174,7 @@ bash scripts/migrate_seeds.sh --seed .env.quality            # forzar semilla en
 bash scripts/migrate_seeds.sh --no-seed .env.advisorlegal    # site: sólo migrar
 ```
 
-### 8.1 Modo compartido (un Postgres + Redis + ClamAV) — opcional
+### 8.1 Modo compartido (recomendado, por defecto) — un Postgres + Redis + ClamAV
 En vez de 3 Postgres/Redis (uno por instancia), se puede correr **uno solo** y que las 3 instancias apunten a él. Ficheros incluidos: `infra/docker/docker-compose.shared-infra.yml` y `infra/docker/docker-compose.shared-app.yml`.
 > Requisito: el **mismo** `POSTGRES_SUPERUSER_PASSWORD` en los 3 `.env` (ya viene unificado).
 

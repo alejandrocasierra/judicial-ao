@@ -50,7 +50,7 @@ git checkout main && git pull origin main     # o la rama que corresponda (devel
 | **quality** | `.env.quality` | `judicial_quality` | `judicial_owner_qa` | `judicial_app_qa` | /6 /7 /8 | 8002 · 8102 | quality.advisorlegal.co |
 
 - **Semillas**: `develop` (`APP_ENV=development`) siembra; `quality` (`staging`) sólo con `--seed`; `site` (`production`) nunca.
-- **A confirmar con Néstor**: ¿un Postgres/Redis **compartido** entre las 3, o uno por instancia? Los `.env` soportan ambos.
+- **Modo por defecto: COMPARTIDO** (un Postgres/Redis/ClamAV para las 3): `DEPLOY_GCP.md` §8.1 y `deploy.sh --shared`. Alternativa aislada en §8.
 
 ### 5.2 API keys / credenciales
 | Necesidad | Estado |
