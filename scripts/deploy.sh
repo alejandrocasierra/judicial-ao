@@ -4,6 +4,7 @@
 # Uso:
 #   bash scripts/deploy.sh            # pull (si REGISTRY_IMAGE) o build, y levanta todo (aislado)
 #   bash scripts/deploy.sh --shared   # usa la infra COMPARTIDA (Postgres/Redis/ClamAV externos)
+#   bash scripts/deploy.sh --no-proxy # sin reverse proxy (para develop/quality: sólo un proxy en el host)
 #   bash scripts/deploy.sh --seed     # además siembra datos de demo (NO usar en prod real)
 #   ENV_FILE=.env.advisorlegal bash scripts/deploy.sh --shared
 #
@@ -18,10 +19,12 @@ cd "$(dirname "$0")/.."
 ENV_FILE="${ENV_FILE:-.env}"
 SEED=0
 SHARED=0
+NO_PROXY=0
 for a in "$@"; do
   case "$a" in
     --seed) SEED=1 ;;
     --shared) SHARED=1 ;;
+    --no-proxy) NO_PROXY=1 ;;
   esac
 done
 
@@ -38,7 +41,8 @@ MALWARE="$(read_env MALWARE_SCANNER)"
 PUBLIC_DOMAIN="$(read_env PUBLIC_DOMAIN)"
 API_PORT="$(read_env API_PORT)"; API_PORT="${API_PORT:-8000}"
 
-DC=(docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml)
+DC=(docker compose --env-file "$ENV_FILE" -f docker-compose.yml)
+[ "$NO_PROXY" = "0" ] && DC+=(-f docker-compose.prod.yml)
 UP_SERVICES=()
 if [ "$SHARED" = "1" ]; then
   DC+=(-f infra/docker/docker-compose.shared-app.yml)

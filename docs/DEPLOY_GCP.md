@@ -201,6 +201,12 @@ bash scripts/migrate_seeds.sh --no-seed .env.advisorlegal
 > Los **datos** deben estar en las 3: importa el expediente/seeds en cada instancia
 > (`import_case.py` copia los bytes al prefijo de cada una). Si prefieres no complicarte,
 > usa el modo **aislado** de §8 (cada instancia con su Postgres/Redis).
+>
+> **Proxy/TLS**: no levantes 3 Caddy en 80/443. Corre el reverse proxy **sólo con site**
+> (`ENV_FILE=.env.advisorlegal bash scripts/deploy.sh --shared`) y para develop/quality usa
+> `ENV_FILE=.env.develop bash scripts/deploy.sh --shared --no-proxy`
+> (quedan en sus puertos: API 8001/8002, web 3001/3002), o un único Caddy que enrute por `Host`.
+> `deploy.sh` hace build + up + migraciones + healthcheck.
 
 ## 9) Post-despliegue: embeddings e IA (Gemini)
 Tras importar los datos, **reindexa el caso** para que los vectores usen el modelo real (Gemini):
