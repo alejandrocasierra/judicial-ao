@@ -16,7 +16,7 @@ Ramas actualizadas (todas al mismo commit): `main`, `develop`, `develop01`, `dev
 ## 2) Pendientes §10 y estado
 | Punto | Estado | Cómo se resuelve |
 |---|---|---|
-| **Storage de producción** | ✅ | **GCS** bucket `welladvisor` con prefijo por instancia (`judicial-ai/prod`, `judicial-ai/dev`, `judicial-ai/quality`). Credencial `gcp-credentials.json` (SA `ocrdocumentai@welladvisor`). La subida directa (presign) usa esa misma credencial. |
+| **Storage de producción** | ✅ | **GCS** bucket `welladvisor`. **site y develop leen `judicial-ai/dev`** (site ve directo los objetos subidos desde local); quality usa `judicial-ai/quality`. Credencial `gcp-credentials.json` (SA `ocrdocumentai@welladvisor`). La subida directa (presign) usa esa misma credencial. |
 | **Migraciones + semillas de las 3 BD** | ✅ | Ver tabla en §5.1. `bash scripts/migrate_seeds.sh .env.develop .env.quality` (quality/staging sólo con `--seed`; `site` nunca siembra). |
 | **API keys de "site"** | ✅ | Gemini (LLM **y** embeddings) ya configurado en los `.env`; ver §5.2. |
 | **Node.js para el frontend** | ✅ no hace falta | El frontend se despliega como **imagen Docker** (build con `node:22` dentro). |

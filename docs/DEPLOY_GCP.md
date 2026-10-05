@@ -64,7 +64,7 @@ STORAGE_BACKEND=gcs
 S3_ENDPOINT_URL=https://storage.googleapis.com
 S3_BUCKET=welladvisor
 S3_REGION=auto
-S3_PREFIX=judicial-ai/prod          # en local es judicial-ai/dev
+S3_PREFIX=judicial-ai/dev            # para leer los objetos ya subidos desde local; usa "judicial-ai/prod" si haces export/import
 S3_SSE=
 GOOGLE_CLOUD_PROJECT=welladvisor    # OCR document_ai (opcional)
 GOOGLE_DOCUMENT_AI_PROCESSOR_ID=16e9ace786ea8124
@@ -156,8 +156,9 @@ docker compose -p judicial-site    --env-file .env.advisorlegal -f docker-compos
 docker compose -p judicial-develop --env-file .env.develop      -f docker-compose.yml -f docker-compose.prod.yml up -d
 docker compose -p judicial-quality --env-file .env.quality      -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
-> Comparten el **bucket GCS** `welladvisor` con prefijo distinto por instancia
-> (`judicial-ai/prod`, `judicial-ai/dev`, `judicial-ai/quality`).
+> Comparten el **bucket GCS** `welladvisor`. **site y develop usan `judicial-ai/dev`** (para que site
+> lea directamente los objetos ya subidos desde local); quality usa `judicial-ai/quality`.
+> Si quieres separar site, cambia su `S3_PREFIX` a `judicial-ai/prod` (y haz export/import del caso).
 > Si prefieres **un Postgres/Redis compartido** en vez de uno por instancia, apunta `POSTGRES_HOST`
 > y `REDIS_URL_DOCKER`/`CELERY_*_DOCKER` a ese servicio (red Docker externa) y conserva los
 > índices de Redis (`/0-2`, `/3-5`, `/6-8`) y el `POSTGRES_DB`.
