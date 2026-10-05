@@ -1,0 +1,38 @@
+# Reverse proxy ÚNICO (Caddy) para las 3 instancias en la infra compartida.
+# Va APARTE de cada instancia: un solo contenedor publica 80/443 y enruta por Host.
+#
+# Uso:
+#   docker network create judicial-net 2>/dev/null || true
+#   docker compose -p judicial-proxy -f docker-compose.shared-proxy.yml up -d
+#
+# Requiere que las 3 instancias estén levantadas con docker-compose.shared-app.yml
+# (que define los alias de red site-api/site-web, develop-api/develop-web, quality-api/quality-web).
+#
+# Variables opcionales (también pueden venir en el entorno): DOMAIN_SITE, DOMAIN_DEVELOP,
+# DOMAIN_QUALITY, ACME_EMAIL.
+name: judicial-proxy
+services:
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN_SITE: ${DOMAIN_SITE:-advisorlegal.co}
+      DOMAIN_DEVELOP: ${DOMAIN_DEVELOP:-develop.advisorlegal.co}
+      DOMAIN_QUALITY: ${DOMAIN_QUALITY:-quality.advisorlegal.co}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@advisorlegal.co}
+    volumes:
+      - ./infra/docker/Caddyfile.shared:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      judicial-net:
+        aliases: [proxy]
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+
+networks:
+  judicial-net:
+    external: true

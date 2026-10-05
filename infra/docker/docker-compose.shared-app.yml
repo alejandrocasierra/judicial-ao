@@ -8,19 +8,28 @@
 #     up -d --no-deps api worker mcp web
 #
 # Requisitos en el .env de cada instancia:
+#   INSTANCE_NAME=site | develop | quality   (define los alias de red: <name>-api / <name>-web)
 #   POSTGRES_HOST=postgres
 #   REDIS_URL_DOCKER=redis://redis:6379/<índice>   (y CELERY_*_DOCKER)
 #   CLAMAV_HOST=clamav
 #   POSTGRES_SUPERUSER_PASSWORD común a las tres
+#
+# El proxy único (docker-compose.shared-proxy.yml) enruta por Host a esos alias.
 services:
   api:
-    networks: [default, judicial-net]
-  worker:
-    networks: [default, judicial-net]
-  mcp:
-    networks: [default, judicial-net]
+    networks:
+      default: {}
+      judicial-net:
+        aliases: ["${INSTANCE_NAME:?define INSTANCE_NAME}-api"]
   web:
-    networks: [default, judicial-net]
+    networks:
+      default: {}
+      judicial-net:
+        aliases: ["${INSTANCE_NAME:?define INSTANCE_NAME}-web"]
+  worker:
+    networks: [judicial-net]
+  mcp:
+    networks: [judicial-net]
 
 networks:
   judicial-net:

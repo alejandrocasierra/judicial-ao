@@ -31,6 +31,7 @@ Ramas actualizadas (todas al mismo commit): `main`, `develop`, `develop01`, `dev
 - `requirements/base.txt` — `openai==1.55.3` (compatible con httpx 0.28; **necesario** para los embeddings de Gemini).
 - `docs/DEPLOY_GCP.md` §8 (multi-instancia), §8.1 (modo compartido) y §9 (reindexado + alta de modelos).
 - `infra/docker/docker-compose.shared-infra.yml` + `docker-compose.shared-app.yml` — **modo compartido** (un Postgres/Redis/ClamAV para las 3 instancias).
+- `docker-compose.shared-proxy.yml` + `infra/docker/Caddyfile.shared` — **Caddy único** que sirve los 3 dominios por `Host` con TLS automático (`site-api/site-web`, `develop-*`, `quality-*`).
 - `scripts/db_create.py` — ahora corre dentro del contenedor (crea BD + roles de cada instancia).
 
 ## 4) Cómo bajar la última versión (para cualquiera)

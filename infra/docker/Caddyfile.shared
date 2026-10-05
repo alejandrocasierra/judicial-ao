@@ -1,0 +1,42 @@
+# Reverse proxy ÚNICO para las 3 instancias (infra compartida, red judicial-net).
+#  - /v1/* y /health  -> API (FastAPI) de la instancia
+#  - todo lo demás     -> Web (Next.js) de la instancia
+# Los upstreams son los alias de red de cada instancia: site-api/site-web,
+# develop-api/develop-web, quality-api/quality-web (los define docker-compose.shared-app.yml).
+# El frontend usa API_PUBLIC_URL=/v1 (mismo origen), así no hay CORS ni "localhost".
+{
+	email {$ACME_EMAIL:admin@advisorlegal.co}
+}
+
+{$DOMAIN_SITE:advisorlegal.co} {
+	encode gzip
+	@api path /v1/* /health
+	handle @api {
+		reverse_proxy site-api:8000
+	}
+	handle {
+		reverse_proxy site-web:3000
+	}
+}
+
+{$DOMAIN_DEVELOP:develop.advisorlegal.co} {
+	encode gzip
+	@api path /v1/* /health
+	handle @api {
+		reverse_proxy develop-api:8000
+	}
+	handle {
+		reverse_proxy develop-web:3000
+	}
+}
+
+{$DOMAIN_QUALITY:quality.advisorlegal.co} {
+	encode gzip
+	@api path /v1/* /health
+	handle @api {
+		reverse_proxy quality-api:8000
+	}
+	handle {
+		reverse_proxy quality-web:3000
+	}
+}
