@@ -224,6 +224,8 @@ bash scripts/deploy_all.sh --export-dir casos/<uuid> \
 ```
 Opciones: `--no-build`, `--seed-quality`, `--skip-verify`, `--instances "site develop quality"`.
 
+Atajos con **make** (ver `Makefile`): `make deploy`, `make verify`, `make gemini`, `make import EXPORT=casos/<uuid>`, `make migrate`, `make admin ENV=...`, `make ps`, `make logs`.
+
 ## 9) Post-despliegue: embeddings e IA (Gemini)
 Tras importar los datos, **reindexa el caso** para que los vectores usen el modelo real (Gemini):
 ```bash
@@ -241,6 +243,10 @@ Verifica los 3 dominios (API/Web + TLS) o la salud local por puertos:
 ```bash
 bash scripts/verify_deploy.sh
 bash scripts/verify_deploy.sh --local
+```
+Prueba de humo de **Gemini** (modelos + chat + embeddings) con la key del `.env`:
+```bash
+bash scripts/check_gemini.sh .env.advisorlegal
 ```
 Carga el **mismo expediente** en las 3 instancias (una vez exportado):
 ```bash

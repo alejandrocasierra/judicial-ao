@@ -36,6 +36,8 @@ Ramas actualizadas (todas al mismo commit): `main`, `develop`, `develop01`, `dev
 - `scripts/verify_deploy.sh` — verificación post-deploy (health + TLS de los 3 dominios; `--local` por puertos).
 - `scripts/import_case_all.sh` — carga el **mismo expediente** en site/develop/quality (auto-resuelve la org destino).
 - `scripts/deploy_all.sh` — **un solo comando** que encadena todo el modo compartido (build → infra → db_create → apps → seed_admin → semillas → proxy → import → reindex → verificación).
+- `scripts/check_gemini.sh` — prueba de humo de Gemini (modelos + chat + embeddings) contra la key del `.env`.
+- `Makefile` — atajos: `make deploy`, `make verify`, `make gemini`, `make import EXPORT=casos/<uuid>`, `make migrate`, `make admin`, `make ps`, `make logs`.
 
 ## 4) Cómo bajar la última versión (para cualquiera)
 ```bash

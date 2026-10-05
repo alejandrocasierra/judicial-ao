@@ -1,0 +1,10 @@
+# Normaliza finales de línea a LF en scripts y configs (evita que CRLF rompa en Linux/Docker/VPS).
+*.sh text eol=lf
+Makefile text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
+Caddyfile text eol=lf
+Caddyfile.* text eol=lf
