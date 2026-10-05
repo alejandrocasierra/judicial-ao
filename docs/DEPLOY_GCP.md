@@ -213,6 +213,17 @@ bash scripts/migrate_seeds.sh --no-seed .env.advisorlegal
 > `deploy.sh` hace build + up + migraciones + healthcheck; usa `--shared --no-proxy` para las
 > instancias cuando el proxy es el compartido.
 
+### 8.2 Un solo comando (recomendado)
+Encadena todo el flujo compartido (build → infra → `db_create` → apps + migraciones → `seed_admin` →
+semillas dev/qa → proxy único → import del expediente → reindex + modelos → verificación):
+```bash
+bash scripts/deploy_all.sh
+# con carga del expediente y post-despliegue:
+bash scripts/deploy_all.sh --export-dir casos/<uuid> \
+  --case-id <uuid> --org-id <uuid> --user-id <uuid> --gemini-key <KEY> --seed-models
+```
+Opciones: `--no-build`, `--seed-quality`, `--skip-verify`, `--instances "site develop quality"`.
+
 ## 9) Post-despliegue: embeddings e IA (Gemini)
 Tras importar los datos, **reindexa el caso** para que los vectores usen el modelo real (Gemini):
 ```bash

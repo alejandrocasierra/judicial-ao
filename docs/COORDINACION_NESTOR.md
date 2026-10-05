@@ -35,6 +35,7 @@ Ramas actualizadas (todas al mismo commit): `main`, `develop`, `develop01`, `dev
 - `scripts/db_create.py` — ahora corre dentro del contenedor (crea BD + roles de cada instancia).
 - `scripts/verify_deploy.sh` — verificación post-deploy (health + TLS de los 3 dominios; `--local` por puertos).
 - `scripts/import_case_all.sh` — carga el **mismo expediente** en site/develop/quality (auto-resuelve la org destino).
+- `scripts/deploy_all.sh` — **un solo comando** que encadena todo el modo compartido (build → infra → db_create → apps → seed_admin → semillas → proxy → import → reindex → verificación).
 
 ## 4) Cómo bajar la última versión (para cualquiera)
 ```bash
