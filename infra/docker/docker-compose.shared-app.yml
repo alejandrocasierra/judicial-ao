@@ -1,0 +1,27 @@
+# Overlay para instancias que usan la infra COMPARTIDA (docker-compose.shared-infra.yml).
+# Conecta los servicios de app a la red externa `judicial-net` y evita arrancar el
+# Postgres/Redis locales de cada instancia (se arrancan sólo los servicios de app).
+#
+# Uso (por instancia):
+#   docker compose -p judicial-site --env-file .env.advisorlegal \
+#     -f docker-compose.yml -f docker-compose.shared-app.yml \
+#     up -d --no-deps api worker mcp web
+#
+# Requisitos en el .env de cada instancia:
+#   POSTGRES_HOST=postgres
+#   REDIS_URL_DOCKER=redis://redis:6379/<índice>   (y CELERY_*_DOCKER)
+#   CLAMAV_HOST=clamav
+#   POSTGRES_SUPERUSER_PASSWORD común a las tres
+services:
+  api:
+    networks: [default, judicial-net]
+  worker:
+    networks: [default, judicial-net]
+  mcp:
+    networks: [default, judicial-net]
+  web:
+    networks: [default, judicial-net]
+
+networks:
+  judicial-net:
+    external: true

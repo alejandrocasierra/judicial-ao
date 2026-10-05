@@ -1,0 +1,48 @@
+# Infra COMPARTIDA: un solo Postgres + Redis + ClamAV para varias instancias
+# (site/develop/quality) en el mismo VPS.
+#
+# Uso:
+#   docker network create judicial-net 2>/dev/null || true
+#   docker compose -p judicial-infra --env-file .env.advisorlegal \
+#     -f infra/docker/docker-compose.shared-infra.yml up -d
+#
+# Los .env de las instancias deben compartir POSTGRES_SUPERUSER_PASSWORD.
+# Luego cada instancia arranca SÓLO sus servicios de app con docker-compose.shared-app.yml.
+name: judicial-infra
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?define POSTGRES_SUPERUSER_PASSWORD}
+    volumes: [pgdata_shared:/var/lib/postgresql/data]
+    networks:
+      judicial-net:
+        aliases: [postgres]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER:-postgres}"]
+      interval: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata_shared:/data]
+    networks:
+      judicial-net:
+        aliases: [redis]
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    networks:
+      judicial-net:
+        aliases: [clamav]
+
+volumes:
+  pgdata_shared: {}
+  redisdata_shared: {}
+
+networks:
+  judicial-net:
+    external: true

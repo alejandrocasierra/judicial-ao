@@ -29,7 +29,9 @@ Ramas actualizadas (todas al mismo commit): `main`, `develop`, `develop01`, `dev
 - **3 `.env` listos** (gitignored, se entregan aparte): `.env.advisorlegal` (site), `.env.develop`, `.env.quality`.
 - `docker-compose.yml` — soporta `WEB_PORT`, `REDIS_PORT` y `REDIS_URL_DOCKER`/`CELERY_*_DOCKER` por instancia.
 - `requirements/base.txt` — `openai==1.55.3` (compatible con httpx 0.28; **necesario** para los embeddings de Gemini).
-- `docs/DEPLOY_GCP.md` §8 (multi-instancia) y §9 (reindexado + alta de modelos).
+- `docs/DEPLOY_GCP.md` §8 (multi-instancia), §8.1 (modo compartido) y §9 (reindexado + alta de modelos).
+- `infra/docker/docker-compose.shared-infra.yml` + `docker-compose.shared-app.yml` — **modo compartido** (un Postgres/Redis/ClamAV para las 3 instancias).
+- `scripts/db_create.py` — ahora corre dentro del contenedor (crea BD + roles de cada instancia).
 
 ## 4) Cómo bajar la última versión (para cualquiera)
 ```bash

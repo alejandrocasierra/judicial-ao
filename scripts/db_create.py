@@ -17,7 +17,10 @@ from psycopg import sql
 sys.path.insert(0, os.path.dirname(__file__))
 import envload  # noqa: E402
 
-envload.load(override=True)  # el archivo ENV_FILE es la fuente de verdad
+try:
+    envload.load(override=True)  # el archivo ENV_FILE es la fuente de verdad
+except SystemExit:
+    pass  # en contenedor (sin /srv/.env) valen las variables de entorno del compose
 env, host, port, su, su_pw, db, owner, owner_pw, app, app_pw = envload.require(
     "APP_ENV", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_SUPERUSER", "POSTGRES_SUPERUSER_PASSWORD", "POSTGRES_DB",
     "DB_OWNER_USER", "DB_OWNER_PASSWORD", "DB_APP_USER", "DB_APP_PASSWORD")

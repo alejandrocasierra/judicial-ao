@@ -169,6 +169,34 @@ bash scripts/migrate_seeds.sh --seed .env.quality            # forzar semilla en
 bash scripts/migrate_seeds.sh --no-seed .env.advisorlegal    # site: sólo migrar
 ```
 
+### 8.1 Modo compartido (un Postgres + Redis + ClamAV) — opcional
+En vez de 3 Postgres/Redis (uno por instancia), se puede correr **uno solo** y que las 3 instancias apunten a él. Ficheros incluidos: `infra/docker/docker-compose.shared-infra.yml` y `infra/docker/docker-compose.shared-app.yml`.
+> Requisito: el **mismo** `POSTGRES_SUPERUSER_PASSWORD` en los 3 `.env` (ya viene unificado).
+
+```bash
+# 1) Red externa + infra compartida (una sola vez)
+docker network create judicial-net 2>/dev/null || true
+docker compose -p judicial-infra --env-file .env.advisorlegal \
+  -f infra/docker/docker-compose.shared-infra.yml up -d
+
+# 2) Crear BD + roles de cada instancia (idempotente) desde un contenedor de la red
+docker compose -p judicial-site    --env-file .env.advisorlegal -f docker-compose.yml -f infra/docker/docker-compose.shared-app.yml run --rm --no-deps api python /srv/scripts/db_create.py
+docker compose -p judicial-develop --env-file .env.develop      -f docker-compose.yml -f infra/docker/docker-compose.shared-app.yml run --rm --no-deps api python /srv/scripts/db_create.py
+docker compose -p judicial-quality --env-file .env.quality      -f docker-compose.yml -f infra/docker/docker-compose.shared-app.yml run --rm --no-deps api python /srv/scripts/db_create.py
+
+# 3) Arrancar las apps (sin Postgres/Redis locales)
+docker compose -p judicial-site    --env-file .env.advisorlegal -f docker-compose.yml -f infra/docker/docker-compose.shared-app.yml up -d --no-deps api worker mcp web
+docker compose -p judicial-develop --env-file .env.develop      -f docker-compose.yml -f infra/docker/docker-compose.shared-app.yml up -d --no-deps api worker mcp web
+docker compose -p judicial-quality --env-file .env.quality      -f docker-compose.yml -f infra/docker/docker-compose.shared-app.yml up -d --no-deps api worker mcp web
+
+# 4) Migraciones + semillas (por instancia)
+bash scripts/migrate_seeds.sh .env.develop .env.quality
+bash scripts/migrate_seeds.sh --no-seed .env.advisorlegal
+```
+> Los **datos** deben estar en las 3: importa el expediente/seeds en cada instancia
+> (`import_case.py` copia los bytes al prefijo de cada una). Si prefieres no complicarte,
+> usa el modo **aislado** de §8 (cada instancia con su Postgres/Redis).
+
 ## 9) Post-despliegue: embeddings e IA (Gemini)
 Tras importar los datos, **reindexa el caso** para que los vectores usen el modelo real (Gemini):
 ```bash
