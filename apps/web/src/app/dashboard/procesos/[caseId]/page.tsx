@@ -144,13 +144,51 @@ export default function ProcesoDetallePage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error"),
   });
 
+  async function sha256Hex(file: File): Promise<string> {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  /** Sube un archivo grande directo al storage (GCS/S3) y lo registra. null si storage local. */
+  async function uploadDirect(file: File, ocrMode: string, folderId: string | null): Promise<UploadResult | null> {
+    const sha256 = await sha256Hex(file);
+    const contentType = file.type || "application/octet-stream";
+    const pre = await api.post<{ mode: string; upload_url?: string }>(`/cases/${caseId}/uploads/presign`,
+      { filename: file.name, sha256, size_bytes: file.size, content_type: contentType });
+    if (pre.mode !== "direct" || !pre.upload_url) return null;
+    const put = await fetch(pre.upload_url, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
+    if (!put.ok) throw new Error(`No se pudo subir ${file.name} al storage (${put.status})`);
+    return api.post<UploadResult>(`/cases/${caseId}/uploads/complete`, {
+      filename: file.name, sha256, size_bytes: file.size, mime_type: contentType,
+      folder_id: folderId || null, ocr_mode: ocrMode && ocrMode !== "none" ? ocrMode : null,
+    });
+  }
+
   const upload = useMutation({
-    mutationFn: ({ files, ocrMode }: { files: File[]; ocrMode: string }) => {
-      const form = new FormData();
-      for (const f of files) form.append("uploads", f);
-      if (currentFolder) form.append("folder_id", currentFolder);
-      if (ocrMode && ocrMode !== "none") form.append("ocr_mode", ocrMode);
-      return api.upload<{ results: UploadResult[] }>(`/cases/${caseId}/files`, form);
+    mutationFn: async ({ files, ocrMode }: { files: File[]; ocrMode: string }) => {
+      // Archivos > 90 MB: subida DIRECTA al storage por URL prefirmada (evita el límite
+      // de 100 MB de Cloudflare). Si el storage es local, cae a la subida normal.
+      const direct: File[] = [];
+      const normal: File[] = [];
+      for (const f of files) (f.size > 90 * 1024 * 1024 ? direct : normal).push(f);
+      const results: UploadResult[] = [];
+      for (const f of direct) {
+        try {
+          const r = await uploadDirect(f, ocrMode, currentFolder);
+          if (r) results.push(r); else normal.push(f);  // storage local -> multipart
+        } catch (e) {
+          results.push({ filename: f.name, status: "error", code: e instanceof Error ? e.message : "UPLOAD_ERROR" });
+        }
+      }
+      if (normal.length) {
+        const form = new FormData();
+        for (const f of normal) form.append("uploads", f);
+        if (currentFolder) form.append("folder_id", currentFolder);
+        if (ocrMode && ocrMode !== "none") form.append("ocr_mode", ocrMode);
+        const res = await api.upload<{ results: UploadResult[] }>(`/cases/${caseId}/files`, form);
+        results.push(...res.results);
+      }
+      return { results };
     },
     onSuccess: (r) => {
       invalidate();

@@ -104,6 +104,28 @@ class CaseFilePatch(Strict):
     _v = field_validator("filename")(_no_control)
 
 
+class UploadPresignIn(Strict):
+    """Petición de URL prefirmada para subir un archivo grande DIRECTO al storage."""
+    filename: str = Field(min_length=1, max_length=300)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    size_bytes: int = Field(ge=1)
+    content_type: str | None = Field(default=None, max_length=200)
+
+    _f = field_validator("filename", "content_type")(_no_control)
+
+
+class UploadCompleteIn(Strict):
+    """Registro de un archivo ya subido por URL prefirmada."""
+    filename: str = Field(min_length=1, max_length=300)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    size_bytes: int = Field(ge=1)
+    mime_type: str | None = Field(default=None, max_length=200)
+    folder_id: UUID | None = None
+    ocr_mode: Literal["basico", "document_ai"] | None = None
+
+    _f = field_validator("filename", "mime_type")(_no_control)
+
+
 class ReviewIn(Strict):
     entity_type: Literal["claim", "fact", "speaker", "contradiction"]
     action: Literal["ACCEPT", "EDIT", "REJECT", "FLAG"]

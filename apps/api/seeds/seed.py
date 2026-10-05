@@ -19,7 +19,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "apps" / "api"))
 import envload  # noqa: E402
 
-envload.load(override=True)  # el archivo ENV_FILE es la fuente de verdad
+# Carga el archivo ENV_FILE si existe (host); en contenedor valen las env de compose.
+_env_file = Path(os.environ["ENV_FILE"]) if os.environ.get("ENV_FILE") else ROOT / ".env"
+if not _env_file.is_absolute():
+    _env_file = ROOT / _env_file
+if _env_file.exists():
+    envload.load(str(_env_file), override=True)
 
 import yaml  # noqa: E402
 from sqlalchemy import text  # noqa: E402

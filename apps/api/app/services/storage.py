@@ -50,6 +50,10 @@ class LocalStorage:
             shutil.copy2(source, p)
         return f"local://{key}"
 
+    def presign_put(self, key: str, content_type: str | None, expires: int = 3600) -> str | None:
+        """El storage local no soporta subida directa (se sube por la API)."""
+        return None
+
     def get(self, key: str) -> bytes:
         return self._p(key).read_bytes()
 
@@ -101,6 +105,14 @@ class S3Storage:
     def put_file(self, key: str, source: Path) -> str:
         self.c.upload_file(str(source), self.bucket, self._key(key), ExtraArgs=self._extra() or None)
         return f"s3://{self.bucket}/{key}"
+
+    def presign_put(self, key: str, content_type: str | None, expires: int = 3600) -> str | None:
+        """URL prefirmada para subir DIRECTO al bucket (evita el proxy de Cloudflare)."""
+        params: dict = {"Bucket": self.bucket, "Key": self._key(key)}
+        if content_type:
+            params["ContentType"] = content_type
+        params.update(self._extra())
+        return self.c.generate_presigned_url("put_object", Params=params, ExpiresIn=expires)
 
     def get(self, key: str) -> bytes:
         return self.c.get_object(Bucket=self.bucket, Key=self._key(key))["Body"].read()
@@ -162,6 +174,13 @@ class GcsStorage:
     def put_file(self, key: str, source: Path) -> str:
         self.bucket.blob(self._key(key)).upload_from_filename(str(source))
         return f"gs://{self.bucket_name}/{key}"
+
+    def presign_put(self, key: str, content_type: str | None, expires: int = 3600) -> str | None:
+        """URL firmada (v4) para subir DIRECTO al bucket (evita el proxy de Cloudflare)."""
+        from datetime import timedelta
+        blob = self.bucket.blob(self._key(key))
+        return blob.generate_signed_url(version="v4", expiration=timedelta(seconds=expires),
+                                        method="PUT", content_type=content_type or "application/octet-stream")
 
     def get(self, key: str) -> bytes:
         return self.bucket.blob(self._key(key)).download_as_bytes()

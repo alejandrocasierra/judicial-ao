@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.config import get_settings
 from app.core.db import one, rows, tx
 from app.core.errors import AppError
-from app.schemas import CaseFilePatch, FolderCreate, FolderPatch
+from app.schemas import CaseFilePatch, FolderCreate, FolderPatch, UploadCompleteIn, UploadPresignIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import audit, files, ratelimit
 from app.services.storage import key_from_uri, original_key, storage
@@ -318,6 +318,107 @@ async def upload_files(case_id: UUID, request: Request,
     for job in ingest_jobs:
         enqueue_if_pending(job, p.org_id, p.user_id)
     return {"results": results}
+
+
+def _storage_key_and_kind(case_id: UUID, filename: str, sha256: str) -> tuple[str, str]:
+    ext = files.extension(filename)
+    if ext not in ALLOWED_EXTS:
+        raise AppError("UPLOAD_TYPE_NOT_ALLOWED", 415)
+    if ext in MEDIA_ROUTE_EXTS:
+        return "media", original_key(str(case_id), sha256, "media")
+    if ext in DOC_ROUTE_EXTS:
+        return "document", original_key(str(case_id), sha256, "document")
+    return "file", f"cases/{case_id}/files/{sha256}"
+
+
+@router.post("/uploads/presign")
+def presign_upload(case_id: UUID, body: UploadPresignIn, p: Principal = Depends(current_principal)):
+    """URL prefirmada para subir un archivo GRANDE directo al storage (evita el proxy
+    de Cloudflare, que limita a 100 MB). Si el storage es local, devuelve `mode: local`
+    y el cliente debe usar la subida normal (multipart)."""
+    s = get_settings()
+    kind, key = _storage_key_and_kind(case_id, body.filename, body.sha256)
+    case_access(p, case_id, "media.upload" if kind == "media" else "document.upload")
+    ratelimit.check("upload", p.user_id)
+    ratelimit.check_org("upload", p.org_id)
+    limit = s.UPLOAD_MAX_BYTES_MEDIA if kind == "media" else s.UPLOAD_MAX_BYTES_DOCUMENT
+    if body.size_bytes > limit:
+        raise AppError("UPLOAD_TOO_LARGE", 413)
+    ext = files.extension(body.filename)
+    content_type = body.content_type or EXTRA_MIME.get(ext) or files.MIME.get(ext)
+    url = storage().presign_put(key, content_type, 3600)
+    if not url:
+        return {"mode": "local", "kind": kind}
+    return {"mode": "direct", "method": "PUT", "upload_url": url, "key": key, "kind": kind}
+
+
+@router.post("/uploads/complete", status_code=201)
+def complete_upload(case_id: UUID, body: UploadCompleteIn, request: Request,
+                    p: Principal = Depends(current_principal)):
+    """Registra un archivo ya subido por URL prefirmada (documents/media/case_files)
+    y encola su procesamiento, igual que la subida normal."""
+    s = get_settings()
+    kind, key = _storage_key_and_kind(case_id, body.filename, body.sha256)
+    case_access(p, case_id, "media.upload" if kind == "media" else "document.upload")
+    ratelimit.check("upload", p.user_id)
+    ratelimit.check_org("upload", p.org_id)
+    limit = s.UPLOAD_MAX_BYTES_MEDIA if kind == "media" else s.UPLOAD_MAX_BYTES_DOCUMENT
+    if body.size_bytes > limit:
+        raise AppError("UPLOAD_TOO_LARGE", 413)
+    st = storage()
+    if getattr(st, "size", lambda _k: None)(key) is None:
+        raise AppError("NOT_FOUND", 404)  # el objeto no llegó al storage
+
+    ext = files.extension(body.filename)
+    mime = EXTRA_MIME.get(ext) or files.MIME.get(ext) or body.mime_type or "application/octet-stream"
+    fid = _folder_param(str(body.folder_id)) if body.folder_id else None
+    with tx(p.org_id, p.user_id) as c:
+        if fid:
+            _folder_or_404(c, case_id, fid)
+        existing = _already_registered(c, case_id, body.sha256, body.filename)
+        if existing:
+            raise AppError("DOCUMENT_DUPLICATE", 409, [{"existing_kind": existing}])
+        if kind == "document":
+            uri = f"{'s3' if s.STORAGE_BACKEND == 's3' else 'gs'}://{s.S3_BUCKET}/{key}"
+            row = one(c, """INSERT INTO documents (organization_id, case_id, folder_id, storage_uri, sha256,
+                                size_bytes, mime_type, filename, uploaded_by, ocr_mode)
+                VALUES (:o,:c,:f,:u,:h,:sz,:m,:fn,:by,:ocr_mode) RETURNING id, processing_status""",
+                      o=p.org_id, c=str(case_id), f=fid, u=uri, h=body.sha256, sz=body.size_bytes, m=mime,
+                      fn=body.filename, by=p.user_id, ocr_mode=body.ocr_mode)
+        elif kind == "media":
+            uri = f"{'s3' if s.STORAGE_BACKEND == 's3' else 'gs'}://{s.S3_BUCKET}/{key}"
+            row = one(c, """INSERT INTO media (organization_id, case_id, folder_id, storage_uri, sha256,
+                                size_bytes, mime_type, filename, title, media_type, uploaded_by, asr_mode)
+                VALUES (:o,:c,:f,:u,:h,:sz,:m,:fn,:t,'video',:by,:asr_mode) RETURNING id, processing_status""",
+                      o=p.org_id, c=str(case_id), f=fid, u=uri, h=body.sha256, sz=body.size_bytes, m=mime,
+                      fn=body.filename, t=body.filename, by=p.user_id, asr_mode=body.ocr_mode)
+        else:
+            uri = f"{'s3' if s.STORAGE_BACKEND == 's3' else 'gs'}://{s.S3_BUCKET}/{key}"
+            row = one(c, """INSERT INTO case_files (organization_id, case_id, folder_id, storage_uri, sha256,
+                                size_bytes, mime_type, filename, uploaded_by)
+                VALUES (:o,:c,:f,:u,:h,:sz,:m,:fn,:by) RETURNING id""",
+                      o=p.org_id, c=str(case_id), f=fid, u=uri, h=body.sha256, sz=body.size_bytes, m=mime,
+                      fn=body.filename, by=p.user_id)
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action=f"{kind}.uploaded", entity_type=kind,
+                     entity_id=str(row["id"]),
+                     after={"sha256": body.sha256, "size": body.size_bytes, "folder_id": fid,
+                            "ocr_mode": body.ocr_mode, "via": "direct_upload"}, request=request)
+        job = None
+        if kind in ("document", "media") and body.ocr_mode:
+            job = create_job(c, org_id=p.org_id, case_id=str(case_id), job_type="file_ingest",
+                             input_ids=[str(row["id"])], actor_id=p.user_id,
+                             key_parts=["file_ingest", str(case_id), str(row["id"]), s.PIPELINE_VERSION],
+                             pipeline_version=s.PIPELINE_VERSION, model_version=s.LLM_MODEL)
+        elif kind == "file" and ext == "xlsx":
+            job = create_job(c, org_id=p.org_id, case_id=str(case_id), job_type="xlsx_ingest",
+                             input_ids=[str(row["id"])], actor_id=p.user_id,
+                             key_parts=["xlsx_ingest", str(case_id), str(row["id"]), s.PIPELINE_VERSION],
+                             pipeline_version=s.PIPELINE_VERSION, model_version=s.LLM_MODEL)
+    if job is not None:
+        enqueue_if_pending(job, p.org_id, p.user_id)
+    return {"filename": body.filename, "status": "uploaded", "kind": kind, "id": str(row["id"]),
+            "ocr_mode": body.ocr_mode,
+            **({"processing": "QUEUED", "job_id": str(job["id"])} if job else {})}
 
 
 @router.get("/files/{file_id}/download")

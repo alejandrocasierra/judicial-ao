@@ -302,3 +302,24 @@ def test_it_acr_12_document_markdown_endpoint(client, auth, ids):
     md = r.json()["markdown"]
     assert md.startswith("#")
     assert "## Página 1" in md
+
+
+def test_it_acr_13_direct_upload_presign_and_complete(client, auth, ids):
+    """Subida directa: con storage local, presign devuelve mode=local y complete falla
+    si el objeto no está en storage (evita registrar archivos inexistentes)."""
+    h = auth("abogada.alfa")
+    sha = "a" * 64
+    payload = {"filename": "audiencia_grande.mp4", "sha256": sha, "size_bytes": 120 * 1024 * 1024,
+               "content_type": "video/mp4"}
+    r = client.post(f"/v1/cases/{ids['pago']}/uploads/presign", headers=h, json=payload)
+    assert r.status_code == 200, r.text
+    assert r.json()["mode"] == "local"  # la suite usa storage local
+
+    r2 = client.post(f"/v1/cases/{ids['pago']}/uploads/complete", headers=h,
+                     json={"filename": "audiencia_grande.mp4", "sha256": sha, "size_bytes": 120 * 1024 * 1024,
+                           "mime_type": "video/mp4"})
+    assert r2.status_code == 404, r2.text  # el objeto no llegó al storage
+
+    bad = client.post(f"/v1/cases/{ids['pago']}/uploads/presign", headers=h,
+                      json={"filename": "malware.exe", "sha256": sha, "size_bytes": 10})
+    assert bad.status_code == 415
