@@ -27,3 +27,13 @@ tests
 tests/
 *.md
 !README.md
+
+# Volcados de datos y credenciales (NUNCA deben entrar a la imagen)
+backup
+backup/
+*.dump
+*.tgz
+.env
+.env.*
+gcp-credentials.json
+*.gserviceaccount.json

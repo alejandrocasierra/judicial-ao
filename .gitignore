@@ -20,3 +20,5 @@ dist/
 11001310302120180036100/
 # Cachés locales varias
 .cache/
+# Volcados de datos (¡con datos reales!) — NUNCA versionar
+backup/
