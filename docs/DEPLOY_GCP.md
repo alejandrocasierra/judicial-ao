@@ -93,6 +93,9 @@ nano .env      # PUBLIC_DOMAIN, API_PUBLIC_URL, CORS_ALLOWED_ORIGINS, WEB_BASE_U
 
 # Despliegue completo: imágenes + up + migraciones + healthcheck
 bash scripts/deploy.sh
+
+# Crea SOLO el administrador (+ organización y agentes/skills de sistema), sin datos de demo:
+bash scripts/seed_admin.sh
 # (Para datos de demo: bash scripts/deploy.sh --seed — NO usar en producción real)
 ```
 `scripts/deploy.sh` hace: **pull** de las imágenes (si `REGISTRY_IMAGE` está definido) o **build** local,
