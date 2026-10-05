@@ -55,10 +55,24 @@ LLM_API_KEY=__SET_ME__
 EMBEDDING_PROVIDER=openai          # o sentence-transformers local
 EMBEDDING_MODEL=__SET_ME__         # debe devolver 1024 dims (coherente con EMBEDDING_DIMENSIONS)
 EMBEDDING_API_KEY=__SET_ME__
+# Storage = el MISMO GCS de local (bucket compartido). La credencial gcp-credentials.json
+# se monta en el contenedor; NO va al repo.
+STORAGE_BACKEND=gcs
+S3_ENDPOINT_URL=https://storage.googleapis.com
+S3_BUCKET=welladvisor
+S3_REGION=auto
+S3_PREFIX=judicial-ai/prod          # en local es judicial-ai/dev
+S3_SSE=
+GOOGLE_CLOUD_PROJECT=welladvisor    # OCR document_ai (opcional)
+GOOGLE_DOCUMENT_AI_PROCESSOR_ID=16e9ace786ea8124
 BOOTSTRAP_ADMIN_EMAIL=tucorreo@advisorlegal.co
 BOOTSTRAP_ADMIN_PASSWORD=UnaClaveFuerte#2026
 BOOTSTRAP_ADMIN_NAME=Administrador
 ```
+> **Credencial GCP**: copia `gcp-credentials.json` (service account `ocrdocumentai@welladvisor`)
+> junto al `docker-compose.yml` en el VPS (`scp gcp-credentials.json usuario@VPS:~/judicial-ao/`).
+> El compose ya la monta en `/srv/gcp-credentials.json` con `GOOGLE_APPLICATION_CREDENTIALS`.
+> Sirve tanto para GCS (storage / subida directa) como para Document AI.
 > `EMBEDDING_DIMENSIONS=1024` ya está fijado y **debe** coincidir con los vectores migrados. Si cambias de
 > modelo de embeddings, usa uno de 1024 dims o recrea la BD y reindexa.
 
