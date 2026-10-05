@@ -1,0 +1,21 @@
+# Secretos y entornos locales — NUNCA versionar
+.env
+.env.*
+!.env.example
+# Credenciales de Google Cloud (service account) — NUNCA versionar
+gcp-credentials.json
+*.gserviceaccount.json
+# Datos locales
+var/
+*.log
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+node_modules/
+dist/
+# Datos reales de expediente (grandes y confidenciales) — NUNCA versionar
+11001310302120180036100/
+# Cachés locales varias
+.cache/

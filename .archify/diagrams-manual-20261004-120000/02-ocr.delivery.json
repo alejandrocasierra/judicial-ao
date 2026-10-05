@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "ecc209b7-a645-4be5-9a78-bdf9222c68de",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\diagrams-manual-20261004-120000\\02-ocr.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\diagrams-manual-20261004-120000\\02-ocr.html",
+  "specification": {
+    "sha256": "ef05867dc14ca3841633bfed9c35a3cf8d5768ba824906686be0046a9f235d5c",
+    "bytes": 5637
+  },
+  "artifact": {
+    "sha256": "a86fa2422c00688e58545015c76942b769a0d068c8b1d60bc916a0b2ca23c378",
+    "bytes": 762633
+  }
+}

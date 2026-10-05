@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://judicial-ai.example/schemas/classify_document.v1.json",
+  "title": "ClassifyDocumentOutput",
+  "type": "object",
+  "required": ["document_type", "reason"],
+  "properties": {
+    "document_type": {
+      "type": "string",
+      "enum": [
+        "demand",
+        "payment_order",
+        "ruling",
+        "judgment",
+        "appeal",
+        "injunction",
+        "hearing_record",
+        "expert_report",
+        "policy",
+        "other/unknown"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 500
+    }
+  },
+  "additionalProperties": false
+}

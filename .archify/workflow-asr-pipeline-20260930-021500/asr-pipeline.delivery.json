@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "7dcd2104-44aa-4c3a-890c-7b26ae0b4266",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-asr-pipeline-20260930-021500\\candidate.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-asr-pipeline-20260930-021500\\asr-pipeline.html",
+  "specification": {
+    "sha256": "74355da9ac05783c159a4bb24b7b0a67dc901c4363b8ee229c31e4bdf12d4c41",
+    "bytes": 5699
+  },
+  "artifact": {
+    "sha256": "3fc9d9aa706d5a0606594bad50f85a70f9858fa13b05cc407be48b17539cd629",
+    "bytes": 762326
+  }
+}

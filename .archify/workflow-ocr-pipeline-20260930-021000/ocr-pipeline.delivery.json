@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "a34c2590-63a3-42e2-a603-c603578ab621",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-ocr-pipeline-20260930-021000\\candidate.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-ocr-pipeline-20260930-021000\\ocr-pipeline.html",
+  "specification": {
+    "sha256": "1fb737a8cf40a06c15b695c5477b080b9f5bfc6bae7a512794b7a3d89ab03c38",
+    "bytes": 4437
+  },
+  "artifact": {
+    "sha256": "24c194cf72becb96216f820ca0e597f46aa4dc0b331cd158bd4978821a8c39de",
+    "bytes": 762257
+  }
+}

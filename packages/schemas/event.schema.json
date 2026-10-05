@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/event.schema.json",
+  "title": "event",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "event_type": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "timeline_confidence": {
+      "enum": [
+        "source_backed",
+        "inferred",
+        "ambiguous"
+      ]
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1
+    }
+  },
+  "required": [
+    "id",
+    "event_type",
+    "description",
+    "timeline_confidence",
+    "sources"
+  ],
+  "additionalProperties": true
+}

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "ecafde86-dc3c-49f1-a132-bdd1dbbb9ba4",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-login-modulos-20260930-020000\\candidate.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-login-modulos-20260930-020000\\login-modulos.html",
+  "specification": {
+    "sha256": "30385e3d416ff0c3d4a50ff0515dda2ffb96572910360888e4d8099efa2d9f17",
+    "bytes": 5152
+  },
+  "artifact": {
+    "sha256": "6d8350749c566ae96d39343e8b66ca0e4b2d3f6e64502ac1a35e168f058ef658",
+    "bytes": 771030
+  }
+}

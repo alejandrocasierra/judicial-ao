@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Chat IA + Servidor MCP — cómo se conecta todo",
+    "output": ".archify/diagrams-manual-20261004-120000/04-chat-mcp.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "abogado", "type": "external", "label": "Abogado/a", "sublabel": "escribe en el chat", "pos": [40, 300], "size": [140, 60] },
+    { "id": "chat", "type": "frontend", "label": "Chat IA", "sublabel": "@ archivo · / agente", "pos": [280, 300], "size": [150, 60] },
+    { "id": "agente", "type": "backend", "label": "Agente jurídico", "sublabel": "elige herramientas", "pos": [540, 300], "size": [160, 60], "tag": "máx. 5 pasos" },
+    { "id": "herramientas", "type": "backend", "label": "Herramientas del caso", "sublabel": "buscar · leer · grafo · archivos", "pos": [540, 120], "size": [200, 60] },
+    { "id": "expediente", "type": "database", "label": "Expediente indexado", "sublabel": "OCR · ASR · pgvector · grafo", "pos": [820, 300], "size": [200, 60] },
+    { "id": "verif", "type": "security", "label": "Verificador anti-invención", "sublabel": "sin cita → se descarta", "pos": [820, 120], "size": [200, 60] },
+    { "id": "mcp", "type": "backend", "label": "Servidor MCP", "sublabel": "Claude Code · Cursor", "pos": [540, 480], "size": [200, 60] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Todo ocurre dentro del expediente: sin búsquedas en internet", "wraps": ["chat", "agente", "herramientas", "expediente", "verif", "mcp"] }
+  ],
+  "connections": [
+    { "id": "abogado-chat", "from": "abogado", "to": "chat", "label": "pregunta", "variant": "emphasis" },
+    { "id": "chat-agente", "from": "chat", "to": "agente", "label": "consulta" },
+    { "id": "agente-herramientas", "from": "agente", "to": "herramientas", "label": "usa", "fromSide": "top", "toSide": "bottom" },
+    { "id": "herramientas-expediente", "from": "herramientas", "to": "expediente", "label": "lee", "fromSide": "right", "toSide": "top" },
+    { "id": "expediente-verif", "from": "expediente", "to": "verif", "label": "evidencia", "fromSide": "top", "toSide": "bottom" },
+    { "id": "verif-agente", "from": "verif", "to": "agente", "label": "respuesta", "fromSide": "left", "toSide": "top" },
+    { "id": "agente-mcp", "from": "agente", "to": "mcp", "label": "corrección", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "id": "mcp-expediente", "from": "mcp", "to": "expediente", "label": "RLS", "variant": "dashed", "fromSide": "right", "toSide": "bottom" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Qué puede responder", "items": ["¿Qué dice el documento @? → lee el OCR y cita la página", "¿En qué minuto se dijo X? → cita el minuto y quién habló", "¿Quién es X? → personas, hechos y relaciones del grafo"] },
+    { "dot": "rose", "title": "Qué NO hace", "items": ["No busca en internet ni usa conocimiento externo", "No inventa leyes, fechas ni cifras", "No corrige el expediente sin tu confirmación"] },
+    { "dot": "cyan", "title": "Servidor MCP", "items": ["Otros programas (Claude, Cursor) usan las mismas herramientas", "Cada llamada respeta tus permisos y tu organización"] }
+  ]
+}

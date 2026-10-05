@@ -1,0 +1,27 @@
+# Overlay de PRODUCCIÓN: agrega un reverse proxy (Caddy) con TLS automático.
+# Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Requisitos:
+#   - En .env: PUBLIC_DOMAIN=app.tudominio.com, API_PUBLIC_URL=/v1
+#   - DNS del dominio apuntando a la IP pública del VPS
+#   - Puertos 80 y 443 abiertos en el firewall de GCP
+services:
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    env_file: .env
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
+      API_PORT: ${API_PORT}
+    volumes:
+      - ./infra/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api: {condition: service_started}
+      web: {condition: service_started}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

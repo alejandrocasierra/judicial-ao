@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/transcript.schema.json",
+  "title": "transcript",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "segment_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "speaker": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "start_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "end_ms": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "text": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "required": [
+    "segment_id",
+    "start_ms",
+    "end_ms",
+    "text"
+  ],
+  "additionalProperties": true
+}

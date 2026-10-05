@@ -1,0 +1,250 @@
+cases:
+  - id: g001
+    question: "¿Quién es JANNETH QUIJANO MORANT en el cuaderno de medidas cautelares?"
+    mode: person
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoMedidasCautelares2018-361.pdf"
+        page_number: 1
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "JANNETH QUIJANO MORANT"
+    notes: "Verificado manualmente en OCR de página 1 del cuaderno de medidas cautelares."
+
+  - id: g002
+    question: "¿Quién es el demandante JOSE RUEDA AVELLANEDA y quién el demandado JUAN CARLOS GARZON GUTIERREZ en el proceso ejecutivo singular?"
+    mode: person
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoMedidasCautelares2018-361.pdf"
+        page_number: 1
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "JOSE RUEDA AVELLANEDA"
+      - "JUAN CARLOS GARZON GUTIERREZ"
+    notes: "Verificado en página 1."
+
+  - id: g003
+    question: "¿Cuál es el número completo del proceso ejecutivo N 110013103-021-2018-0361-00 en el cuaderno de medidas cautelares?"
+    mode: document
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoMedidasCautelares2018-361.pdf"
+        page_number: 5
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "110013103-021-2018-0361-00"
+    notes: "Verificado en página 5."
+
+  - id: g004
+    question: "¿Qué dice el artículo 599 del Código General del Proceso en el auto de medidas cautelares?"
+    mode: legal_rule
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoMedidasCautelares2018-361.pdf"
+        page_number: 5
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "art. 599"
+    notes: "Verificado en página 5."
+
+  - id: g005
+    question: "¿A qué OFICINA DE TRANSITO Y TRANSPORTES se dirige el oficio número 2834 del cuaderno de medidas cautelares?"
+    mode: document
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoMedidasCautelares2018-361.pdf"
+        page_number: 7
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "OFICINA DE TRANSITO Y TRANSPORTES"
+    notes: "Verificado en página 7."
+
+  - id: g006
+    question: "¿A qué Registrador de INSTRUMENTOS PUBLICOS va dirigido el oficio número 2835 del cuaderno de medidas cautelares?"
+    mode: document
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoMedidasCautelares2018-361.pdf"
+        page_number: 8
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "Registrador"
+      - "INSTRUMENTOS PUBLICOS"
+    notes: "Verificado en página 8."
+
+  - id: g007
+    question: "¿A qué ciudad de GIRARDOT se envía el oficio número 2836 del cuaderno de medidas cautelares?"
+    mode: document
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoMedidasCautelares2018-361.pdf"
+        page_number: 10
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "GIRARDOT"
+    notes: "Verificado en página 10."
+
+  - id: g008
+    question: "¿Quién es la secretaria GLORIA STELLA MUNOZ RODRIGUEZ mencionada en el cuaderno de medidas cautelares?"
+    mode: person
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoMedidasCautelares2018-361.pdf"
+        page_number: 6
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "GLORIA STELLA MUNOZ"
+    notes: "Verificado en página 6 (OCR: MUNOZRÓDRÍGUEZ)."
+
+  - id: g009
+    question: "¿Cuál es la capital de Francia?"
+    mode: fact_lookup
+    strategy: rag
+    must_cite: []
+    must_abstain: true
+    forbidden_statements: []
+    expected_contains: []
+    notes: "Caso de abstención: no hay evidencia en el expediente sobre Francia."
+
+  - id: g010
+    question: "¿Cuánto pesaba el elefante que aparece en el expediente?"
+    mode: fact_lookup
+    strategy: rag
+    must_cite: []
+    must_abstain: true
+    forbidden_statements: []
+    expected_contains: []
+    notes: "Caso de abstención forzado: no hay elefantes en el expediente."
+
+  - id: g011
+    question: "¿Quién es JORGE HUMBERTO ROJAS MELO en el cuaderno demanda ejecutiva acumulada?"
+    mode: person
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoDemandaEjecutivaAcumulada2018-361.pdf"
+        page_number: 28
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "JORGE HUMBERTO ROJAS MELO"
+    notes: "Verificado en página 28."
+
+  - id: g012
+    question: "¿Qué papel juega INVERFAST S.A.S. como endosante en el expediente demanda acumulada?"
+    mode: person
+    strategy: rag
+    must_cite:
+      - filename_contains: "ExpedienteDemandaAcumulada2018-361.pdf"
+        page_number: 21
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "INVERFAST S.A.S."
+    notes: "Verificado en página 21."
+
+  - id: g013
+    question: "¿Cómo se verifica la validez de los documentos en www.snrbotondepago.gov.co en el expediente demanda acumulada?"
+    mode: document
+    strategy: rag
+    must_cite:
+      - filename_contains: "ExpedienteDemandaAcumulada2018-361.pdf"
+        page_number: 60
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "www.snrbotondepago.gov.co"
+    notes: "Verificado en página 60."
+
+  - id: g014
+    question: "¿Cuál es el NIT 900 521.606-3 de INVERFAST S.A.S. en el expediente demanda acumulada?"
+    mode: document
+    strategy: rag
+    must_cite:
+      - filename_contains: "ExpedienteDemandaAcumulada2018-361.pdf"
+        page_number: 25
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "900 521.606-3"
+    notes: "Verificado en página 25."
+
+  - id: g015
+    question: "¿Qué entidad es la OFICINA DE REGISTRO DE INSTRUMENTOS PUBLICOS DE BOGOTA en el expediente demanda acumulada?"
+    mode: document
+    strategy: rag
+    must_cite:
+      - filename_contains: "ExpedienteDemandaAcumulada2018-361.pdf"
+        page_number: 69
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "OFICINA DE REGISTRO DE INSTRUMENTOS PUBLICOS DE BOGOTA"
+    notes: "Verificado en página 69."
+
+  - id: g016
+    question: "¿Quién es el acreedor endoso en propiedad JORGE HUMBERTO ROJAS MELO según el cuaderno demanda ejecutiva acumulada?"
+    mode: person
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoDemandaEjecutivaAcumulada2018-361.pdf"
+        page_number: 28
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "JORGE HUMBERTO ROJAS MELO"
+    notes: "Verificado en página 28."
+
+  - id: g017
+    question: "¿Qué documento es el PAGARE en el expediente demanda acumulada?"
+    mode: document
+    strategy: rag
+    must_cite:
+      - filename_contains: "ExpedienteDemandaAcumulada2018-361.pdf"
+        page_number: 22
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "PAGARE"
+    notes: "Verificado en página 22."
+
+  - id: g018
+    question: "¿En qué ciudad Bogotá se firman las cláusulas adicionales del pagaré en el cuaderno demanda ejecutiva acumulada?"
+    mode: document
+    strategy: rag
+    must_cite:
+      - filename_contains: "CuadernoDemandaEjecutivaAcumulada2018-361.pdf"
+        page_number: 28
+    must_abstain: false
+    forbidden_statements: []
+    expected_contains:
+      - "Bogotá"
+    notes: "Verificado en página 28."
+
+  - id: g019
+    question: "¿Cuál es la receta tradicional del ajiaco santafereño?"
+    mode: fact_lookup
+    strategy: rag
+    must_cite: []
+    must_abstain: true
+    forbidden_statements: []
+    expected_contains: []
+    notes: "Caso de abstención: no hay recetas en el expediente."
+
+  - id: g020
+    question: "¿Quién ganó la Copa Mundial de la FIFA 2022?"
+    mode: fact_lookup
+    strategy: rag
+    must_cite: []
+    must_abstain: true
+    forbidden_statements: []
+    expected_contains: []
+    notes: "Caso de abstención: no hay información deportiva en el expediente."

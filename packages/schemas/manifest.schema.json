@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/manifest.schema.json",
+  "title": "manifest",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "package_version": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_files": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pages": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "media_files": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "media_hours": {
+      "type": "number",
+      "minimum": 0
+    },
+    "pipeline_version": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "package_version",
+    "case_id",
+    "created_at",
+    "pipeline_version",
+    "schema_version"
+  ],
+  "additionalProperties": true
+}

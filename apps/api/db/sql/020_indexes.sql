@@ -1,0 +1,31 @@
+-- SSD §119 índices mínimos + FTS/vector
+CREATE INDEX ix_users_org ON users(organization_id);
+CREATE INDEX ix_cases_org ON cases(organization_id);
+CREATE INDEX ix_case_members_user ON case_members(user_id);
+CREATE INDEX ix_parties_case ON parties(case_id);
+CREATE INDEX ix_documents_case ON documents(case_id);
+CREATE INDEX ix_documents_sha ON documents(sha256);
+CREATE INDEX ix_pages_document ON document_pages(document_id);
+CREATE INDEX ix_pages_tsv ON document_pages USING gin(tsv);
+CREATE INDEX ix_media_case ON media(case_id);
+CREATE INDEX ix_segments_media ON transcript_segments(media_id, start_ms);
+CREATE INDEX ix_segments_tsv ON transcript_segments USING gin(tsv);
+CREATE INDEX ix_claims_case ON claims(case_id);
+CREATE INDEX ix_claims_claimant ON claims(claimant_party_id);
+CREATE INDEX ix_facts_case ON facts(case_id);
+CREATE INDEX ix_evidence_case ON evidence(case_id);
+CREATE INDEX ix_citations_target ON citations(target_type, target_id);
+CREATE INDEX ix_events_case_date ON events(case_id, event_date);
+CREATE INDEX ix_contradictions_case ON contradictions(case_id);
+CREATE INDEX ix_jobs_case ON jobs(case_id, status);
+CREATE INDEX ix_audit_org_time ON audit_logs(organization_id, created_at);
+CREATE INDEX ix_chunks_case ON chunks(case_id);
+CREATE INDEX ix_chunks_tsv ON chunks USING gin(tsv);
+CREATE INDEX ix_chunks_embedding ON chunks USING hnsw (embedding vector_cosine_ops);
+
+CREATE INDEX ix_graph_nodes_case_type ON graph_nodes(case_id, node_type);
+CREATE INDEX ix_graph_nodes_source ON graph_nodes(case_id, source_table, source_id);
+CREATE INDEX ix_graph_edges_case ON graph_edges(case_id);
+CREATE INDEX ix_graph_edges_source ON graph_edges(source_node_id);
+CREATE INDEX ix_graph_edges_target ON graph_edges(target_node_id);
+CREATE INDEX ix_graph_edges_type ON graph_edges(case_id, edge_type);

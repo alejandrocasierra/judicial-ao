@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Plataforma Judicial IA — Visión general",
+    "output": ".archify/diagrams-manual-20261004-120000/01-arquitectura.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "abogado", "type": "external", "label": "Abogado/a", "sublabel": "navegador", "pos": [40, 300], "size": [130, 60] },
+    { "id": "web", "type": "frontend", "label": "Portal Web", "sublabel": "Next.js :3000", "pos": [260, 300], "size": [140, 60] },
+    { "id": "api", "type": "backend", "label": "Servidor API", "sublabel": "FastAPI :8000", "pos": [500, 300], "size": [150, 60] },
+    { "id": "pg", "type": "database", "label": "PostgreSQL + pgvector", "sublabel": "datos y búsqueda", "pos": [760, 300], "size": [200, 60] },
+    { "id": "ia", "type": "external", "label": "IA generativa", "sublabel": "Anthropic · OpenAI · Gemini · Kimi · DeepSeek", "pos": [1080, 300], "size": [200, 60], "tag": "API key propia" },
+    { "id": "mcp", "type": "backend", "label": "Servidor MCP", "sublabel": "Claude · Cursor", "pos": [500, 120], "size": [150, 60] },
+    { "id": "grafo", "type": "database", "label": "Grafo de conocimiento", "sublabel": "personas · hechos", "pos": [760, 120], "size": [200, 60] },
+    { "id": "worker", "type": "backend", "label": "Procesador OCR/ASR", "sublabel": "trabajos en cola", "pos": [760, 470], "size": [200, 60] },
+    { "id": "storage", "type": "cloud", "label": "Archivos originales", "sublabel": "PDF · imágenes · video", "pos": [500, 470], "size": [200, 60] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Servidor de la plataforma (Docker)", "wraps": ["web", "api", "mcp", "worker", "pg", "grafo", "storage"] }
+  ],
+  "connections": [
+    { "id": "abogado-web", "from": "abogado", "to": "web", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "web-api", "from": "web", "to": "api", "label": "JWT" },
+    { "id": "api-pg", "from": "api", "to": "pg", "label": "SQL" },
+    { "id": "api-grafo", "from": "api", "to": "grafo", "label": "relaciones", "fromSide": "top", "toSide": "bottom" },
+    { "id": "api-worker", "from": "api", "to": "worker", "label": "encola", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "id": "worker-storage", "from": "worker", "to": "storage", "label": "lee", "fromSide": "left", "toSide": "right" },
+    { "id": "worker-pg", "from": "worker", "to": "pg", "label": "indexa", "variant": "dashed", "fromSide": "top", "toSide": "bottom" },
+    { "id": "api-ia", "from": "api", "to": "ia", "label": "consulta", "variant": "emphasis" },
+    { "id": "mcp-grafo", "from": "mcp", "to": "grafo", "label": "RLS", "fromSide": "right", "toSide": "left" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Evidencia verificable", "items": ["Cada afirmación cita documento + página o video + minuto", "Nada se responde sin evidencia del expediente"] },
+    { "dot": "rose", "title": "Seguridad", "items": ["Aislamiento por organización en la base de datos", "Los originales no se borran ni se alteran", "Permisos por rol y por expediente"] },
+    { "dot": "cyan", "title": "IA intercambiable", "items": ["Proveedor y API key se eligen en el panel", "La URL del proveedor se cambia sin tocar código"] }
+  ]
+}

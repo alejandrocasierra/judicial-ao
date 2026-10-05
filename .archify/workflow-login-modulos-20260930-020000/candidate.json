@@ -1,0 +1,74 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Login y módulos del panel — Judicial AI",
+    "output": ".archify/workflow-login-modulos-20260930-020000/login-modulos.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "navegador", "label": "Navegador (Next.js 16)" },
+    { "id": "api", "label": "API FastAPI" },
+    { "id": "seguridad", "label": "Seguridad", "variant": "exception" },
+    { "id": "datos", "label": "PostgreSQL + Storage" }
+  ],
+  "phases": [
+    { "id": "ingreso", "label": "Ingreso", "fromCol": 0, "toCol": 1 },
+    { "id": "sesion", "label": "Sesión", "fromCol": 2, "toCol": 2, "variant": "emphasis" },
+    { "id": "modulos", "label": "Módulos", "fromCol": 3, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["usuario", "login_page", "dashboard", "mod_admin", "mod_exp", "chat_widget"],
+  "nodes": [
+    { "id": "usuario", "lane": "navegador", "col": 0, "type": "external", "label": "Usuario", "sublabel": "abogado / admin", "width": 100 },
+    { "id": "login_page", "lane": "navegador", "col": 1, "type": "frontend", "label": "Login", "sublabel": "email + password", "width": 110 },
+    { "id": "dashboard", "lane": "navegador", "col": 2, "type": "frontend", "label": "Dashboard", "sublabel": "sidebar 12 módulos", "width": 120 },
+    { "id": "mod_admin", "lane": "navegador", "col": 3, "type": "frontend", "label": "Gestión", "sublabel": "usuarios · roles · correos", "width": 130 },
+    { "id": "mod_exp", "lane": "navegador", "col": 4, "type": "frontend", "label": "Expediente", "sublabel": "PDFs · Videos · Chats", "width": 120 },
+    { "id": "chat_widget", "lane": "navegador", "col": 5, "type": "frontend", "label": "Chat IA", "sublabel": "botón flotante", "width": 110 },
+    { "id": "auth_login", "lane": "api", "col": 1, "type": "backend", "label": "POST /auth/login", "sublabel": "argon2 → tokens", "width": 130 },
+    { "id": "auth_me", "lane": "api", "col": 2, "type": "backend", "label": "GET /auth/me", "sublabel": "usuario + permisos", "width": 120 },
+    { "id": "admin_router", "lane": "api", "col": 3, "type": "backend", "label": "/v1/admin/*", "sublabel": "CRUD admin", "width": 130 },
+    { "id": "cases_router", "lane": "api", "col": 4, "type": "backend", "label": "/v1/cases/*", "sublabel": "docs · media · query", "width": 130 },
+    { "id": "mailer", "lane": "api", "col": 5, "type": "messagebus", "label": "mailer", "sublabel": "bienvenida + reset", "width": 120 },
+    { "id": "ratelimit", "lane": "seguridad", "col": 1, "type": "security", "label": "Rate limit", "sublabel": "login 10/min", "width": 120 },
+    { "id": "jwt_rbac", "lane": "seguridad", "col": 2, "type": "security", "label": "JWT + RBAC + RLS", "sublabel": "org ∩ case role", "tag": "cada request", "width": 150 },
+    { "id": "admin_tables", "lane": "datos", "col": 3, "type": "database", "label": "Tablas admin", "sublabel": "users · smtp · agents · backups", "width": 170 },
+    { "id": "case_tables", "lane": "datos", "col": 4, "type": "database", "label": "Tablas expediente", "sublabel": "cases · docs · media · chunks", "width": 170 }
+  ],
+  "edges": [
+    { "id": "u-login", "from": "usuario", "to": "login_page" },
+    { "id": "login-api", "from": "login_page", "to": "auth_login", "label": "email + password", "variant": "emphasis" },
+    { "id": "api-rl", "from": "auth_login", "to": "ratelimit", "variant": "security" },
+    { "id": "api-jwt", "from": "auth_login", "to": "jwt_rbac", "label": "emite JWT", "variant": "security" },
+    { "id": "login-dash", "from": "login_page", "to": "dashboard", "label": "guarda token y redirige", "variant": "emphasis" },
+    { "id": "dash-me", "from": "dashboard", "to": "auth_me", "label": "Bearer token" },
+    { "id": "me-rbac", "from": "auth_me", "to": "jwt_rbac", "label": "permisos", "variant": "security" },
+    { "id": "dash-admin", "from": "dashboard", "to": "mod_admin" },
+    { "id": "admin-exp", "from": "mod_admin", "to": "mod_exp" },
+    { "id": "exp-chat", "from": "mod_exp", "to": "chat_widget" },
+    { "id": "admin-api", "from": "mod_admin", "to": "admin_router", "label": "fetch" },
+    { "id": "exp-api", "from": "mod_exp", "to": "cases_router", "label": "fetch" },
+    { "id": "admin-mailer", "from": "admin_router", "to": "mailer", "label": "alta / reset", "variant": "dashed" },
+    { "id": "api-admin-db", "from": "admin_router", "to": "admin_tables" },
+    { "id": "api-case-db", "from": "cases_router", "to": "case_tables" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Flujo de acceso",
+      "items": [
+        "Login emite access + refresh token (argon2, anti-enumeración)",
+        "Cada request pasa por JWT + RBAC (org_role ∩ case_role) y RLS",
+        "Crear usuario envía correo de bienvenida con botón para definir contraseña"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Módulos del panel",
+      "items": [
+        "Gestión: usuarios, roles, correos SMTP, agentes, skills, modelos IA, backups, alertas",
+        "Expediente: PDFs con OCR editable, videos con transcript por minuto, chat con fuentes clickeables"
+      ]
+    }
+  ]
+}

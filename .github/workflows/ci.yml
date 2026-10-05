@@ -1,0 +1,29 @@
+name: ci
+on: [push, pull_request]
+permissions: {contents: read}
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: {POSTGRES_USER: postgres, POSTGRES_PASSWORD: ci-only-superuser}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements/dev.txt}
+      - run: pip install -r requirements/dev.txt
+      - name: Generar .env.test con secretos aleatorios
+        # CI no tiene Redis: rate limit en memoria (un solo proceso) y Celery en modo eager
+        run: python3 scripts/gen_env.py --out .env.test --set APP_ENV=test --set POSTGRES_DB=judicial_test
+             --set POSTGRES_SUPERUSER_PASSWORD=ci-only-superuser --set STORAGE_LOCAL_ROOT=var/test-storage
+             --set RATE_LIMIT_BACKEND=memory --set CELERY_TASK_ALWAYS_EAGER=true
+      - run: ruff check apps tests scripts
+      - run: bash scripts/run_tests.sh fast
+      - run: bash scripts/run_tests.sh all -p no:cacheprovider --junitxml=var/junit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: junit, path: var/junit.xml}

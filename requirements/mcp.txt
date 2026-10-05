@@ -1,0 +1,3 @@
+# Dependencias exclusivas del servidor MCP (Fase 2). Capa aparte para no
+# invalidar la instalación pesada de base.txt al actualizar el SDK.
+mcp==1.30.0

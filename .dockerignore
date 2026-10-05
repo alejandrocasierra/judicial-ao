@@ -1,0 +1,29 @@
+# Contexto de build limpio: sin datos del expediente, entornos ni artefactos.
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+node_modules
+var
+var/
+var/**
+tmp
+tmp/
+tmp*/
+*.out
+
+# Datos del expediente piloto (NUNCA se copian a imágenes)
+11001310302120180036100
+11001310302120180036100/
+
+# Docs y pruebas no son necesarios en runtime
+docs
+docs/
+tests
+tests/
+*.md
+!README.md

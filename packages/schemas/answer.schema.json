@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/answer.schema.json",
+  "title": "answer",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "answer": {
+      "type": "string"
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "citations"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "citation_id",
+          "source_type"
+        ]
+      }
+    },
+    "unsupported_claims": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "related_contradictions": {
+      "type": "array"
+    },
+    "knowledge_type": {
+      "enum": [
+        "case",
+        "external"
+      ]
+    },
+    "evidence_count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "answer",
+    "claims",
+    "citations",
+    "unsupported_claims",
+    "uncertainties",
+    "knowledge_type"
+  ],
+  "additionalProperties": true
+}

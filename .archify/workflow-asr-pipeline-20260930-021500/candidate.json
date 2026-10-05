@@ -1,0 +1,253 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Pipeline ASR — quién dijo, qué dijo y cuándo",
+    "output": ".archify/workflow-asr-pipeline-20260930-021500/asr-pipeline.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "entrada",
+      "label": "Cliente / API / Storage"
+    },
+    {
+      "id": "asr",
+      "label": "ASR (worker)"
+    },
+    {
+      "id": "diarizacion",
+      "label": "Diarización e identidad",
+      "variant": "exception"
+    },
+    {
+      "id": "persistencia",
+      "label": "Persistencia"
+    }
+  ],
+  "phases": [
+    {
+      "id": "ingesta",
+      "label": "Ingesta",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "transcribir",
+      "label": "Transcribir",
+      "fromCol": 2,
+      "toCol": 4,
+      "variant": "emphasis"
+    },
+    {
+      "id": "unir",
+      "label": "Unir y guardar",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "usuario",
+    "upload_media",
+    "worker",
+    "extract",
+    "vad",
+    "whisper",
+    "merge",
+    "transcript"
+  ],
+  "nodes": [
+    {
+      "id": "usuario",
+      "lane": "entrada",
+      "col": 0,
+      "type": "external",
+      "label": "Usuario",
+      "sublabel": "sube video / audio",
+      "width": 140
+    },
+    {
+      "id": "upload_media",
+      "lane": "entrada",
+      "col": 1,
+      "type": "backend",
+      "label": "POST /media",
+      "sublabel": "sniffing + sha256",
+      "width": 150
+    },
+    {
+      "id": "media_row",
+      "lane": "persistencia",
+      "col": 1,
+      "type": "database",
+      "label": "Media",
+      "sublabel": "original write-once",
+      "width": 140
+    },
+    {
+      "id": "worker",
+      "lane": "asr",
+      "col": 2,
+      "type": "messagebus",
+      "label": "Job media_asr",
+      "sublabel": "process_media",
+      "width": 150
+    },
+    {
+      "id": "extract",
+      "lane": "asr",
+      "col": 3,
+      "type": "backend",
+      "label": "Extraer audio",
+      "sublabel": "FFmpeg 16 kHz mono",
+      "width": 150
+    },
+    {
+      "id": "vad",
+      "lane": "asr",
+      "col": 4,
+      "type": "backend",
+      "label": "VAD",
+      "sublabel": "filtro configurable",
+      "width": 140
+    },
+    {
+      "id": "pyannote",
+      "lane": "diarizacion",
+      "col": 4,
+      "type": "backend",
+      "label": "Diarización",
+      "sublabel": "pyannote 3.1 · nombres visuales",
+      "width": 180
+    },
+    {
+      "id": "whisper",
+      "lane": "asr",
+      "col": 5,
+      "type": "backend",
+      "label": "ASR",
+      "sublabel": "faster-whisper large-v3",
+      "tag": "word timestamps",
+      "width": 170
+    },
+    {
+      "id": "merge",
+      "lane": "diarizacion",
+      "col": 5,
+      "type": "backend",
+      "label": "Unir",
+      "sublabel": "speaker por máximo solape",
+      "width": 170
+    },
+    {
+      "id": "speakers",
+      "lane": "persistencia",
+      "col": 4,
+      "type": "database",
+      "label": "speakers",
+      "sublabel": "SPK-xx → nombre",
+      "width": 150
+    },
+    {
+      "id": "transcript",
+      "lane": "persistencia",
+      "col": 5,
+      "type": "database",
+      "label": "transcript_segments",
+      "sublabel": "quién · qué · cuándo (ms)",
+      "width": 190
+    }
+  ],
+  "edges": [
+    {
+      "id": "u-media",
+      "from": "usuario",
+      "to": "upload_media"
+    },
+    {
+      "id": "media-store",
+      "from": "upload_media",
+      "to": "media_row",
+      "label": "guarda original",
+      "variant": "dashed"
+    },
+    {
+      "id": "media-worker",
+      "from": "upload_media",
+      "to": "worker",
+      "label": "encola job",
+      "variant": "emphasis"
+    },
+    {
+      "id": "worker-extract",
+      "from": "worker",
+      "to": "extract"
+    },
+    {
+      "id": "extract-vad",
+      "from": "extract",
+      "to": "vad"
+    },
+    {
+      "id": "vad-whisper",
+      "from": "vad",
+      "to": "whisper"
+    },
+    {
+      "id": "extract-pyannote",
+      "from": "extract",
+      "to": "pyannote",
+      "label": "en paralelo",
+      "variant": "dashed"
+    },
+    {
+      "id": "pyannote-merge",
+      "from": "pyannote",
+      "to": "merge"
+    },
+    {
+      "id": "whisper-merge",
+      "from": "whisper",
+      "to": "merge",
+      "label": "segmentos",
+      "variant": "emphasis"
+    },
+    {
+      "id": "merge-speakers",
+      "from": "merge",
+      "to": "speakers",
+      "label": "crea / mapea",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "merge-transcript",
+      "from": "merge",
+      "to": "transcript",
+      "fromSide": "right",
+      "toSide": "right"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Quién dijo, qué dijo, cuándo",
+      "items": [
+        "Quién: speakers.label / resolved_party_id, asignado por máximo solape temporal",
+        "Qué: transcript_segments.text (español)",
+        "Cuándo: start_ms y end_ms; el minuto = start_ms / 60000",
+        "Bajo ASR_CONFIDENCE_THRESHOLD el segmento se marca needs_review"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Diarización e identidad",
+      "items": [
+        "pyannote speaker-diarization-3.1 si hay HF_TOKEN; si no, fallback por energía/VAD",
+        "Los nombres visuales (OCR de la franja de Teams) mapean SPK-xx a nombre real",
+        "Reprocesar borra los segmentos previos: el transcript es un artefacto derivado"
+      ]
+    }
+  ]
+}

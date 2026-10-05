@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/claim.schema.json",
+  "title": "claim",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claim_type": {
+      "enum": [
+        "party_assertion",
+        "witness_statement",
+        "expert_opinion",
+        "documentary_statement",
+        "judicial_finding",
+        "procedural_fact",
+        "inference"
+      ]
+    },
+    "confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "review_status": {
+      "enum": [
+        "PENDING",
+        "ACCEPTED",
+        "EDITED",
+        "REJECTED",
+        "FLAGGED"
+      ]
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "id",
+    "text",
+    "claim_type",
+    "citations"
+  ],
+  "additionalProperties": true
+}

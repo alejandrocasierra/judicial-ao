@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/contradiction.schema.json",
+  "title": "contradiction",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "claim_a_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "claim_b_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "contradiction_type": {
+      "enum": [
+        "factual",
+        "temporal",
+        "numerical",
+        "identity",
+        "location",
+        "procedural",
+        "testimony",
+        "document_vs_testimony"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "human_review_required": {
+      "const": true
+    }
+  },
+  "required": [
+    "id",
+    "claim_a_id",
+    "claim_b_id",
+    "contradiction_type",
+    "severity",
+    "human_review_required"
+  ],
+  "additionalProperties": true
+}

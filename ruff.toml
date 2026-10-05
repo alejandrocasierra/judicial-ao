@@ -1,0 +1,9 @@
+line-length = 140
+target-version = "py312"
+[lint]
+select = ["E", "F", "B", "S"]
+ignore = ["E501", "S101", "S105", "S106", "S311", "S603", "S607", "B008",
+          "S608"]  # SQL con f-string sólo con identificadores en lista blanca: lo verifica tests/static (test_static_07)
+[lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+"apps/api/seeds/**" = ["S"]

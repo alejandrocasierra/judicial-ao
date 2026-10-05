@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "workflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-login-modulos-20260930-020000\\candidate.json",
+    "sha256": "30385e3d416ff0c3d4a50ff0515dda2ffb96572910360888e4d8099efa2d9f17",
+    "bytes": 5152
+  },
+  "artifact": {
+    "path": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-login-modulos-20260930-020000\\login-modulos.html",
+    "sha256": "6d8350749c566ae96d39343e8b66ca0e4b2d3f6e64502ac1a35e168f058ef658",
+    "bytes": 771030
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-login-modulos-20260930-020000\\login-modulos.finalize.json",
+    "summaryReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-login-modulos-20260930-020000\\login-modulos.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\workflow-login-modulos-20260930-020000\\login-modulos.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.0.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-09-30T00:01:32.316Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 6704,
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "routesOverSuggestedBends": 2,
+      "routesOverSuggestedStretch": 1
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [],
+      "detours": [
+        {
+          "relationship": {
+            "id": "admin-api",
+            "from": "mod_admin",
+            "to": "admin_router",
+            "label": "fetch",
+            "collectionIndex": 0,
+            "artifactIndex": 1
+          },
+          "bends": 3,
+          "stretch": 1.194
+        },
+        {
+          "relationship": {
+            "id": "exp-api",
+            "from": "mod_exp",
+            "to": "cases_router",
+            "label": "fetch",
+            "collectionIndex": 9,
+            "artifactIndex": 10
+          },
+          "bends": 4,
+          "stretch": 3.564
+        }
+      ],
+      "truncated": false
+    },
+    "hints": [
+      "mod_admin → admin_router needs 3 bends: move node mod_admin or admin_router so they share a row or column with matching centers, or sit diagonally with a clear corner.",
+      "mod_exp → cases_router needs 4 bends: move node mod_exp or cases_router so they share a row or column with matching centers, or sit diagonally with a clear corner."
+    ],
+    "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Pipeline OCR — de PDF a texto indexado",
+    "output": ".archify/workflow-ocr-pipeline-20260930-021000/ocr-pipeline.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "entrada", "label": "Cliente / API" },
+    { "id": "pipeline", "label": "Pipeline OCR (worker)" },
+    { "id": "proveedores", "label": "Proveedores OCR", "variant": "exception" },
+    { "id": "persistencia", "label": "Persistencia" }
+  ],
+  "phases": [
+    { "id": "ingesta", "label": "Ingesta", "fromCol": 0, "toCol": 1 },
+    { "id": "ocr", "label": "OCR", "fromCol": 2, "toCol": 4, "variant": "emphasis" },
+    { "id": "index", "label": "Indexar", "fromCol": 5, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["usuario", "upload", "worker", "rasterize", "docling", "folio_classify", "doc_pages"],
+  "nodes": [
+    { "id": "usuario", "lane": "entrada", "col": 0, "type": "external", "label": "Usuario", "sublabel": "sube PDF", "width": 100 },
+    { "id": "upload", "lane": "entrada", "col": 1, "type": "backend", "label": "POST /documents", "sublabel": "sniffing + sha256", "width": 130 },
+    { "id": "storage", "lane": "persistencia", "col": 1, "type": "database", "label": "Original", "sublabel": "write-once", "width": 105 },
+    { "id": "worker", "lane": "pipeline", "col": 2, "type": "messagebus", "label": "Job document_ocr", "sublabel": "process_document", "width": 140 },
+    { "id": "rasterize", "lane": "pipeline", "col": 3, "type": "backend", "label": "Rasterizar", "sublabel": "PyMuPDF 300 DPI", "width": 130 },
+    { "id": "preprocess", "lane": "proveedores", "col": 3, "type": "backend", "label": "Preprocesado", "sublabel": "deskew · denoise", "width": 120 },
+    { "id": "images", "lane": "persistencia", "col": 3, "type": "database", "label": "Imágenes", "sublabel": "para el visor", "width": 110 },
+    { "id": "docling", "lane": "proveedores", "col": 4, "type": "backend", "label": "Docling / RapidOCR", "sublabel": "ONNX local", "tag": "por defecto", "width": 150 },
+    { "id": "tesseract", "lane": "proveedores", "col": 5, "type": "backend", "label": "Tesseract", "sublabel": "lang=spa (ñ, tildes)", "width": 140 },
+    { "id": "folio_classify", "lane": "pipeline", "col": 5, "type": "backend", "label": "Folio + clasificación", "sublabel": "regex + LLM", "width": 150 },
+    { "id": "doc_pages", "lane": "persistencia", "col": 5, "type": "database", "label": "document_pages", "sublabel": "texto · folio · conf · tsv", "width": 160 }
+  ],
+  "edges": [
+    { "id": "u-upload", "from": "usuario", "to": "upload" },
+    { "id": "upload-storage", "from": "upload", "to": "storage", "label": "guarda original", "variant": "dashed" },
+    { "id": "upload-worker", "from": "upload", "to": "worker", "label": "encola job", "variant": "emphasis" },
+    { "id": "worker-raster", "from": "worker", "to": "rasterize" },
+    { "id": "raster-pre", "from": "rasterize", "to": "preprocess", "label": "opcional", "variant": "dashed", "role": "branch" },
+    { "id": "raster-img", "from": "rasterize", "to": "images", "variant": "dashed", "role": "branch" },
+    { "id": "raster-docling", "from": "rasterize", "to": "docling", "label": "si escaneada", "variant": "emphasis" },
+    { "id": "docling-tess", "from": "docling", "to": "tesseract", "label": "si RapidOCR falla", "variant": "dashed", "role": "error" },
+    { "id": "docling-folio", "from": "docling", "to": "folio_classify" },
+    { "id": "tess-folio", "from": "tesseract", "to": "folio_classify", "variant": "dashed" },
+    { "id": "folio-pages", "from": "folio_classify", "to": "doc_pages" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Tildes y ñ",
+      "items": [
+        "OCR_TESSERACT_LANG=spa: el modelo español reconoce ñ, á, é, í, ó, ú, ü",
+        "Docling/RapidOCR es multilingüe y conserva el texto con acentos",
+        "FTS_CONFIG=simple conserva el texto tal cual (sin stemming)",
+        "La normalización NFKD solo se usa para emparejar, nunca para guardar"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Proveedores y calidad",
+      "items": [
+        "Docling/RapidOCR local por defecto; fallback automático a Tesseract",
+        "Benchmark 50 pág: Tesseract 1.84s/pág (conf 0.76); Docling 4.02s/pág (conf 0.94)",
+        "Página bajo OCR_CONFIDENCE_THRESHOLD se marca needs_review, nunca se descarta"
+      ]
+    }
+  ]
+}

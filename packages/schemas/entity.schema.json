@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/entity.schema.json",
+  "title": "entity",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "entity_type": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "resolution_status": {
+      "enum": [
+        "MATCH",
+        "PROBABLE_MATCH",
+        "AMBIGUOUS",
+        "NO_MATCH"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "entity_type",
+    "name",
+    "resolution_status"
+  ],
+  "additionalProperties": true
+}

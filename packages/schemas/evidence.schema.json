@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/evidence.schema.json",
+  "title": "evidence",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "fact_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "evidence_id": {
+      "type": "string"
+    },
+    "evidence_type": {
+      "enum": [
+        "documentary",
+        "testimonial",
+        "expert",
+        "physical",
+        "digital",
+        "other"
+      ]
+    },
+    "stance": {
+      "enum": [
+        "supports",
+        "refutes",
+        "neutral"
+      ]
+    }
+  },
+  "required": [
+    "fact_id",
+    "evidence_id",
+    "evidence_type",
+    "stance"
+  ],
+  "additionalProperties": true
+}

@@ -1,0 +1,16 @@
+# Reverse proxy de producción: un solo dominio con TLS automático (Caddy).
+#  - /v1/*  y /health  -> API (FastAPI)
+#  - todo lo demás      -> Web (Next.js)
+# El frontend usa API_PUBLIC_URL=/v1 (mismo origen), así no hay CORS ni "localhost".
+{$PUBLIC_DOMAIN} {
+	encode gzip
+
+	@api path /v1/* /health
+	handle @api {
+		reverse_proxy api:{$API_PORT}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/fact.schema.json",
+  "title": "fact",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "proposition": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "ALLEGED",
+        "DISPUTED",
+        "SUPPORTED",
+        "CONTRADICTED",
+        "JUDICIALLY_DETERMINED",
+        "UNRESOLVED"
+      ]
+    },
+    "determined_by_decision_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "proposition",
+    "status"
+  ],
+  "additionalProperties": true,
+  "if": {
+    "properties": {
+      "status": {
+        "const": "JUDICIALLY_DETERMINED"
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "determined_by_decision_id": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "required": [
+      "determined_by_decision_id"
+    ]
+  }
+}

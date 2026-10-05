@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "verify_answer.schema.json",
+  "title": "Verdicts for semantic answer verification",
+  "type": "object",
+  "required": ["verdicts"],
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim", "status", "reason", "citations"],
+        "properties": {
+          "claim": {"type": "string"},
+          "status": {"enum": ["supported", "not_supported", "contradicted", "needs_review"]},
+          "reason": {"type": "string"},
+          "citations": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,156 @@
+# Entorno local completo. Todas las credenciales salen de .env (python3 scripts/gen_env.py).
+# Uso: docker compose --env-file .env up -d --build   |   luego: bash scripts/bootstrap.sh --docker
+name: judicial-ai
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+    ports: ["${POSTGRES_PORT}:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER}"]
+      interval: 5s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [miniodata:/data]
+    profiles: ["s3"]
+  clamav:
+    image: clamav/clamav:stable
+    ports: ["3310:3310"]
+    profiles: ["clamav"]
+  api:
+    image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
+    build: {context: ., dockerfile: infra/docker/api.Dockerfile}
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      API_HOST: 0.0.0.0
+      # Google Document AI: credenciales montadas como volumen.
+      GOOGLE_APPLICATION_CREDENTIALS: /srv/gcp-credentials.json
+    ports: ["${API_PORT}:${API_PORT}"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    # El almacenamiento local vive en el host (var/storage) para que el visor vea
+    # originales, páginas rasterizadas y media ya procesados. El volumen nombrado
+    # conserva cachés de modelos (HF/whisper) fuera de storage.
+    volumes:
+      - storage:/srv/var
+      - ./var/storage:/srv/var/storage
+      # Credenciales GCP: coloca tu service-account.json en ./gcp-credentials.json
+      - ./gcp-credentials.json:/srv/gcp-credentials.json:ro
+  worker:
+    image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
+    build: {context: ., dockerfile: infra/docker/api.Dockerfile}
+    env_file: .env
+    # --concurrency=1: cada proceso prefork carga torch+docling+faster-whisper
+    # (cientos de MB). Con varios procesos por CPU se agota la RAM del contenedor
+    # y el worker muere por OOM (SIGKILL) al procesar ASR pesado.
+    # --beat: el sweeper de jobs huérfanos (beat_schedule) corre dentro del worker;
+    # al escalar a más réplicas, mover beat a un proceso dedicado.
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--beat", "--concurrency=1", "--loglevel", "INFO"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      CELERY_TASK_ALWAYS_EAGER: "false"
+      # Fase 3 (ASR/diarización): GPU si Docker Desktop/WSL2 la expone; faster-whisper
+      # y pyannote caen a CPU automáticamente si CUDA no está disponible.
+      # Fase 3: whisper usa CPU int8 en este entorno porque ctranslate2 requiere
+      # libcublas.so.12 y torch en el contenedor usa CUDA 13. La diarización
+      # (pyannote) sigue usando GPU si está disponible.
+      ASR_DEVICE: cpu
+      ASR_COMPUTE_TYPE: int8
+      # En el contenedor se usa el FFmpeg del sistema (/usr/bin/ffmpeg), no la ruta Windows de .env
+      FFMPEG_PATH: ""
+      # Caché de modelos HF (pyannote) y whisper en volumen persistente.
+      HF_HOME: /srv/var/hf-cache
+      WHISPER_CACHE_DIR: /srv/var/whisper-cache
+      # Google Document AI: credenciales montadas como volumen.
+      GOOGLE_APPLICATION_CREDENTIALS: /srv/gcp-credentials.json
+    # GPU deshabilitada temporalmente por error de nvidia-container-cli.
+    # Si el host tiene toolkit NVIDIA funcionando, descomentar:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    volumes:
+      - storage:/srv/var
+      - ./var/storage:/srv/var/storage
+      # Credenciales GCP: coloca tu service-account.json en ./gcp-credentials.json
+      - ./gcp-credentials.json:/srv/gcp-credentials.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+  mcp:
+    image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
+    build: {context: ., dockerfile: infra/docker/api.Dockerfile}
+    env_file: .env
+    command: ["python", "-m", "mcp_server"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      CELERY_TASK_ALWAYS_EAGER: "false"
+      MCP_SERVER_HOST: 0.0.0.0
+      PYTHONPATH: /srv/apps:/srv/apps/api
+    ports: ["${MCP_SERVER_PORT}:${MCP_SERVER_PORT}"]
+    # El healthcheck de la imagen apunta al puerto de la API; aquí se comprueba el MCP.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; socket.create_connection(('127.0.0.1', ${MCP_SERVER_PORT}), 3).close()\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    volumes:
+      - storage:/srv/var
+      - ./var/storage:/srv/var/storage
+  web:
+    image: ${REGISTRY_IMAGE:-judicial-ai}/web:${IMAGE_TAG:-latest}
+    build: {context: ./apps/web, dockerfile: ../../infra/docker/web.Dockerfile}
+    environment:
+      # URL pública del API que ve el NAVEGADOR (no la red interna de Docker).
+      # Vacío = http://localhost:8000/v1 (desarrollo). En GCP: https://api.tudominio.com/v1
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-}
+    ports: ["3000:3000"]
+    depends_on:
+      api: {condition: service_started}
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://0.0.0.0:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+volumes: {pgdata: {}, miniodata: {}, storage: {}}

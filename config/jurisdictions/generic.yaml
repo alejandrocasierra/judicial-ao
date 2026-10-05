@@ -1,0 +1,7 @@
+code: generic
+name: {es: Genérica, en: Generic}
+country: null
+case_number_pattern: '^[A-Za-z0-9\-/\. ]{3,64}$'
+case_number_hint: {es: "3-64 caracteres alfanuméricos", en: "3-64 alphanumeric characters"}
+court_types: []
+citation_rules: []

@@ -1,0 +1,3 @@
+# Dependencias del backend Google Cloud Storage (Fase de almacenamiento). Capa
+# aparte para no invalidar la instalación pesada de base.txt.
+google-cloud-storage==3.16.0

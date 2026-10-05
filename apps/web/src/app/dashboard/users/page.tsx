@@ -1,0 +1,353 @@
+"use client";
+
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Search, Download, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
+
+interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  org_role: string;
+  locale: string;
+  is_active: boolean;
+  last_login_at: string | null;
+  created_at: string;
+  version: number;
+}
+
+interface UserUpdate {
+  id: string;
+  expected_version: number;
+  full_name?: string;
+  org_role?: string;
+  locale?: string;
+  is_active?: boolean;
+}
+
+const ROLES = [
+  { value: "ORG_ADMIN", label: "Administrador" },
+  { value: "CASE_MANAGER", label: "Gestor de casos" },
+  { value: "LAWYER", label: "Abogado" },
+  { value: "REVIEWER", label: "Revisor" },
+  { value: "ANALYST", label: "Analista" },
+  { value: "READ_ONLY", label: "Solo lectura" },
+];
+
+export default function UsersPage() {
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newRole, setNewRole] = useState("ANALYST");
+  const [newLocale, setNewLocale] = useState("es");
+  const queryClient = useQueryClient();
+
+  const { data: users = [], isLoading } = useQuery({
+    queryKey: ["admin", "users"],
+    queryFn: () => api.get<User[]>("/admin/users"),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: { email: string; full_name: string; org_role: string; locale: string }) =>
+      api.post("/admin/users", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      setDialogOpen(false);
+      setNewName("");
+      setNewEmail("");
+      toast.success("Usuario creado y correo de bienvenida enviado");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Error al crear usuario"),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...data }: UserUpdate) =>
+      api.patch(`/admin/users/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      setDialogOpen(false);
+      setEditingUser(null);
+      toast.success("Usuario actualizado");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Error al actualizar"),
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/admin/users/${id}/reset-password`),
+    onSuccess: () => toast.success("Correo de restablecimiento enviado"),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Error"),
+  });
+
+  const filtered = users.filter(
+    (u) =>
+      u.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      u.email.toLowerCase().includes(search.toLowerCase()),
+  );
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages = Math.ceil(filtered.length / pageSize);
+
+  function exportExcel() {
+    import("xlsx").then((xlsx) => {
+      const ws = xlsx.utils.json_to_sheet(
+        filtered.map((u) => ({
+          Nombre: u.full_name,
+          Email: u.email,
+          Rol: u.org_role,
+          Idioma: u.locale,
+          Activo: u.is_active ? "Sí" : "No",
+          "Último login": u.last_login_at ?? "Nunca",
+        })),
+      );
+      const wb = xlsx.utils.book_new();
+      xlsx.utils.book_append_sheet(wb, ws, "Usuarios");
+      xlsx.writeFile(wb, "usuarios.xlsx");
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Usuarios</h1>
+          <p className="text-muted-foreground">Gestión de usuarios de la organización</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={exportExcel}>
+            <Download className="mr-2 h-4 w-4" />
+            Exportar Excel
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => { setEditingUser(null); setNewName(""); setNewEmail(""); }}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo usuario
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingUser ? "Editar usuario" : "Crear usuario"}</DialogTitle>
+              </DialogHeader>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (editingUser) {
+                    updateMutation.mutate({
+                      id: editingUser.id,
+                      full_name: newName || editingUser.full_name,
+                      org_role: newRole,
+                      locale: newLocale,
+                      expected_version: editingUser.version,
+                    });
+                  } else {
+                    createMutation.mutate({
+                      email: newEmail,
+                      full_name: newName,
+                      org_role: newRole,
+                      locale: newLocale,
+                    });
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="text-sm font-medium">Nombre completo</label>
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Juan Pérez"
+                    required={!editingUser}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Email</label>
+                  <Input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="juan@ejemplo.com"
+                    required={!editingUser}
+                    disabled={!!editingUser}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Rol</label>
+                  <Select value={newRole} onValueChange={setNewRole}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROLES.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Idioma</label>
+                  <Select value={newLocale} onValueChange={setNewLocale}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="es">Español</SelectItem>
+                      <SelectItem value="en">English</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {editingUser && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => resetPasswordMutation.mutate(editingUser.id)}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Enviar correo de restablecimiento de contraseña
+                  </Button>
+                )}
+                <Button type="submit" className="w-full" disabled={createMutation.isPending || updateMutation.isPending}>
+                  {createMutation.isPending || updateMutation.isPending ? "Guardando..." : "Guardar"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre o email..."
+                className="pl-8"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              />
+            </div>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 / pág</SelectItem>
+                <SelectItem value="20">20 / pág</SelectItem>
+                <SelectItem value="50">50 / pág</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="p-3 text-left font-medium">Nombre</th>
+                  <th className="p-3 text-left font-medium">Email</th>
+                  <th className="p-3 text-left font-medium">Rol</th>
+                  <th className="p-3 text-left font-medium">Idioma</th>
+                  <th className="p-3 text-left font-medium">Activo</th>
+                  <th className="p-3 text-left font-medium">Último login</th>
+                  <th className="p-3 text-left font-medium">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                      Cargando...
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                      No se encontraron usuarios
+                    </td>
+                  </tr>
+                ) : (
+                  paginated.map((u) => (
+                    <tr key={u.id} className="border-b hover:bg-muted/50">
+                      <td className="p-3 font-medium">{u.full_name}</td>
+                      <td className="p-3">{u.email}</td>
+                      <td className="p-3">
+                        <Badge variant="outline">{ROLES.find((r) => r.value === u.org_role)?.label || u.org_role}</Badge>
+                      </td>
+                      <td className="p-3">{u.locale}</td>
+                      <td className="p-3">
+                        <Badge variant={u.is_active ? "default" : "destructive"}>
+                          {u.is_active ? "Sí" : "No"}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-muted-foreground">
+                        {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString("es-CO") : "Nunca"}
+                      </td>
+                      <td className="p-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingUser(u);
+                            setNewName(u.full_name);
+                            setNewEmail(u.email);
+                            setNewRole(u.org_role);
+                            setNewLocale(u.locale);
+                            setDialogOpen(true);
+                          }}
+                        >
+                          Editar
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Mostrando {paginated.length} de {filtered.length} usuarios
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+                Anterior
+              </Button>
+              <span className="flex items-center px-3 text-sm">
+                {page} / {totalPages || 1}
+              </span>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+                Siguiente
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

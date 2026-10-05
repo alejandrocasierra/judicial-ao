@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/case.schema.json",
+  "title": "case",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "jurisdiction": {
+      "type": "string"
+    },
+    "case_number": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3
+    },
+    "status": {
+      "enum": [
+        "CREATED",
+        "UPLOADING",
+        "INGESTING",
+        "PROCESSING",
+        "PARTIALLY_READY",
+        "READY_FOR_REVIEW",
+        "REVIEWING",
+        "READY",
+        "FAILED",
+        "ARCHIVED"
+      ]
+    },
+    "legal_hold": {
+      "type": "boolean"
+    },
+    "language": {
+      "enum": [
+        "es",
+        "en"
+      ]
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": [
+    "id",
+    "jurisdiction",
+    "case_number",
+    "title",
+    "status",
+    "legal_hold",
+    "language",
+    "version"
+  ],
+  "additionalProperties": true
+}

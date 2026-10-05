@@ -1,0 +1,45 @@
+# Política RBAC como código / RBAC policy as code.
+# Permiso efectivo en un expediente = permisos del rol de organización ∩ permisos del rol en el expediente.
+# ORG_ADMIN no requiere membresía del expediente, pero SIEMPRE está limitado a su organización (RLS).
+version: 1
+permissions:
+  - case.create
+  - case.read
+  - case.write
+  - case.members.manage
+  - document.read
+  - document.upload
+  - document.download
+  - media.read
+  - media.upload
+  - ai.query
+  - ai.graph
+  - ai.export
+  - review.write
+  - legal_hold.manage
+  - evidence.deletion_request
+  - audit.read
+  - user.manage
+  - job.run
+
+org_roles:
+  ORG_ADMIN: ["*"]
+  CASE_MANAGER: [case.create, case.read, case.write, case.members.manage, document.read, document.upload,
+                 document.download, media.read, media.upload, ai.query, ai.graph, ai.export, review.write, job.run]
+  LAWYER: [case.create, case.read, case.write, document.read, document.upload, document.download,
+           media.read, media.upload, ai.query, ai.graph, ai.export, review.write, job.run]
+  REVIEWER: [case.read, document.read, document.download, media.read, ai.query, ai.graph, review.write]
+  ANALYST: [case.read, document.read, media.read, ai.query, ai.graph]
+  READ_ONLY: [case.read, document.read, media.read]
+  SYSTEM: [case.read, document.read, media.read, job.run]
+
+case_roles:
+  OWNER: [case.read, case.write, case.members.manage, document.read, document.upload, document.download,
+          media.read, media.upload, ai.query, ai.graph, ai.export, review.write, job.run]
+  LAWYER: [case.read, case.write, document.read, document.upload, document.download, media.read,
+           media.upload, ai.query, ai.graph, ai.export, review.write, job.run]
+  REVIEWER: [case.read, document.read, document.download, media.read, ai.query, ai.graph, review.write]
+  VIEWER: [case.read, document.read, media.read]
+
+# Permisos que sólo existen a nivel de organización (no dependen de membresía de expediente)
+org_level_permissions: [case.create, legal_hold.manage, evidence.deletion_request, audit.read, user.manage]

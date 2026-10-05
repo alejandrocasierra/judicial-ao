@@ -1,0 +1,14 @@
+code: co
+name: {es: Colombia, en: Colombia}
+country: CO
+# Código General del Proceso: número único de radicación de 23 dígitos
+case_number_pattern: '^\d{23}$'
+case_number_hint: {es: "Radicado de 23 dígitos", en: "23-digit filing number"}
+court_types: [juzgado_municipal, juzgado_circuito, tribunal_superior, corte_suprema, consejo_estado, corte_constitucional]
+citation_rules:
+  - pattern: '(?i)art(?:[íi]culo|\.)?\s*(\d+)\s*(?:del\s+)?(?:c[óo]digo\s+civil|C\.\s?C\.?)'
+    code: codigo_civil
+  - pattern: '(?i)C\.\s?C\.?,?\s*art\.?\s*(\d+)'
+    code: codigo_civil
+  - pattern: '(?i)art(?:[íi]culo|\.)?\s*(\d+)\s*(?:del\s+)?(?:c[óo]digo\s+general\s+del\s+proceso|C\.\s?G\.\s?P\.?)'
+    code: codigo_general_proceso

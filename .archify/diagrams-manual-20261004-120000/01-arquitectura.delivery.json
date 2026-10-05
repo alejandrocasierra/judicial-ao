@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "21f649e0-c5bc-4a2c-9818-0cb07f97b54d",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\diagrams-manual-20261004-120000\\01-arquitectura.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\diagrams-manual-20261004-120000\\01-arquitectura.html",
+  "specification": {
+    "sha256": "e1f2c77527199a43c38ac763ce98602ffa6e27b8345b419c83b2b087545e4d0d",
+    "bytes": 3281
+  },
+  "artifact": {
+    "sha256": "09d972c2cffd0326b4595c852cd432ef94d92a61e8be14c271f15fb3a7c50919",
+    "bytes": 762661
+  }
+}

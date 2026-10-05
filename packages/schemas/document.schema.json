@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/document.schema.json",
+  "title": "document",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "mime_type": {
+      "type": "string"
+    },
+    "filename": {
+      "type": "string"
+    },
+    "document_type": {
+      "type": "string"
+    },
+    "processing_status": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "sha256",
+    "size_bytes",
+    "mime_type",
+    "filename"
+  ],
+  "additionalProperties": true
+}

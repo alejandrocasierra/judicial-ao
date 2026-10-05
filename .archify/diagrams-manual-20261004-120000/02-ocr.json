@@ -1,0 +1,252 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Cómo se procesa un documento (OCR)",
+    "output": ".archify/diagrams-manual-20261004-120000/02-ocr.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "entrada",
+      "label": "Entrada"
+    },
+    {
+      "id": "proceso",
+      "label": "Procesamiento automático"
+    },
+    {
+      "id": "verificacion",
+      "label": "Verificación humana",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "recepcion",
+      "label": "Recepción",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "lectura",
+      "label": "Lectura (OCR)",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "publicacion",
+      "label": "Publicación",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "motores",
+      "label": "Uno de los dos motores",
+      "lane": "proceso",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "huella",
+      "label": "Huella del documento",
+      "lane": "proceso",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "subir",
+    "validar",
+    "encolar",
+    "ocr",
+    "folio",
+    "indexar",
+    "revisar"
+  ],
+  "nodes": [
+    {
+      "id": "subir",
+      "lane": "entrada",
+      "col": 0,
+      "type": "external",
+      "label": "Subir el PDF",
+      "sublabel": "individual o masivo",
+      "width": 140
+    },
+    {
+      "id": "validar",
+      "lane": "entrada",
+      "col": 1,
+      "type": "security",
+      "label": "Validar y guardar",
+      "sublabel": "tipo, tamaño, sha256",
+      "tag": "el original no se modifica",
+      "width": 150
+    },
+    {
+      "id": "encolar",
+      "lane": "proceso",
+      "col": 1,
+      "type": "messagebus",
+      "label": "Encolar trabajo",
+      "sublabel": "sin bloquear el portal",
+      "width": 140
+    },
+    {
+      "id": "ocr",
+      "lane": "proceso",
+      "col": 2,
+      "type": "backend",
+      "label": "Leer texto (OCR)",
+      "sublabel": "Básico o Document AI",
+      "tag": "% de confianza por página",
+      "width": 150
+    },
+    {
+      "id": "folio",
+      "lane": "proceso",
+      "col": 3,
+      "type": "backend",
+      "label": "Folio y campos",
+      "sublabel": "número de hoja, formularios",
+      "width": 150
+    },
+    {
+      "id": "indexar",
+      "lane": "proceso",
+      "col": 4,
+      "type": "database",
+      "label": "Indexar búsqueda",
+      "sublabel": "pgvector + grafo",
+      "tag": "texto y relaciones",
+      "width": 145
+    },
+    {
+      "id": "revisar",
+      "lane": "verificacion",
+      "col": 5,
+      "type": "security",
+      "label": "Revisar y corregir",
+      "sublabel": "páginas de baja confianza",
+      "tag": "la corrección reindexa",
+      "width": 150
+    },
+    {
+      "id": "corregir",
+      "lane": "verificacion",
+      "col": 4,
+      "type": "frontend",
+      "label": "Corregir a mano",
+      "sublabel": "visor OCR por hoja",
+      "width": 140
+    },
+    {
+      "id": "reprocesar",
+      "lane": "verificacion",
+      "col": 3,
+      "type": "messagebus",
+      "label": "Reprocesar",
+      "sublabel": "con el otro motor",
+      "width": 140
+    }
+  ],
+  "edges": [
+    {
+      "id": "subir-validar",
+      "from": "subir",
+      "to": "validar",
+      "variant": "emphasis"
+    },
+    {
+      "id": "validar-encolar",
+      "from": "validar",
+      "to": "encolar",
+      "label": "si todo está correcto",
+      "variant": "emphasis"
+    },
+    {
+      "id": "encolar-ocr",
+      "from": "encolar",
+      "to": "ocr",
+      "label": "toma el trabajo",
+      "variant": "default"
+    },
+    {
+      "id": "ocr-folio",
+      "from": "ocr",
+      "to": "folio",
+      "variant": "default"
+    },
+    {
+      "id": "folio-indexar",
+      "from": "folio",
+      "to": "indexar",
+      "variant": "emphasis"
+    },
+    {
+      "id": "indexar-revisar",
+      "from": "indexar",
+      "to": "revisar",
+      "variant": "emphasis"
+    },
+    {
+      "id": "revisar-corregir",
+      "from": "revisar",
+      "to": "corregir",
+      "label": "si algo está mal",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "id": "corregir-indexar",
+      "from": "corregir",
+      "to": "indexar",
+      "label": "reindexa",
+      "variant": "dashed",
+      "role": "return"
+    },
+    {
+      "id": "revisar-reprocesar",
+      "from": "revisar",
+      "to": "reprocesar",
+      "label": "mala calidad",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "reprocesar-ocr",
+      "from": "reprocesar",
+      "to": "ocr",
+      "label": "otra vez",
+      "variant": "dashed",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Nunca se inventa texto",
+      "items": [
+        "El OCR solo transcribe lo que ve en la imagen",
+        "Los números y nombres salen del documento, no del modelo",
+        "Cada página guarda su % de confianza"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Dos motores",
+      "items": [
+        "Básico: lectura local (no envía el documento a internet)",
+        "Document AI: motor de Google para escaneos difíciles",
+        "Ambos alimentan la misma búsqueda y el grafo"
+      ]
+    }
+  ]
+}

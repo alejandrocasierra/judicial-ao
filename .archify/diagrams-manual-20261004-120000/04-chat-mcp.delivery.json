@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "2e65195f-90cb-461a-af59-c4973afc48c3",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\diagrams-manual-20261004-120000\\04-chat-mcp.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\diagrams-manual-20261004-120000\\04-chat-mcp.html",
+  "specification": {
+    "sha256": "002dd2d0eac2117df8e3d85acb62481a9c0a841e2bf45f89b0922b9d162fa4d4",
+    "bytes": 3233
+  },
+  "artifact": {
+    "sha256": "7aa9e9ced2f04f932a75d12e0b6aa0a0dfea1b62ea2dbe2fb8a3da494555468b",
+    "bytes": 760603
+  }
+}

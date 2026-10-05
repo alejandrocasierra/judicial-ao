@@ -1,0 +1,203 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Cómo se procesa un video o audio (ASR)",
+    "output": ".archify/diagrams-manual-20261004-120000/03-asr.html",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {
+      "id": "entrada",
+      "label": "Entrada"
+    },
+    {
+      "id": "proceso",
+      "label": "Procesamiento automático"
+    },
+    {
+      "id": "revision",
+      "label": "Revisión humana",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "recepcion",
+      "label": "Recepción",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "transcripcion",
+      "label": "Transcripción",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "publicacion",
+      "label": "Publicación",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "voces",
+      "label": "Quién habla",
+      "lane": "proceso",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "subir",
+    "audio",
+    "transcribir",
+    "diarizar",
+    "segmentos",
+    "indexar"
+  ],
+  "nodes": [
+    {
+      "id": "subir",
+      "lane": "entrada",
+      "col": 0,
+      "type": "external",
+      "label": "Subir video/audio",
+      "sublabel": "MP4, WAV…",
+      "width": 150
+    },
+    {
+      "id": "audio",
+      "lane": "proceso",
+      "col": 1,
+      "type": "backend",
+      "label": "Extraer el audio",
+      "sublabel": "FFmpeg",
+      "tag": "el original no se toca",
+      "width": 150
+    },
+    {
+      "id": "transcribir",
+      "lane": "proceso",
+      "col": 2,
+      "type": "backend",
+      "label": "Transcribir (ASR)",
+      "sublabel": "faster-whisper",
+      "tag": "con marcas de tiempo",
+      "width": 155
+    },
+    {
+      "id": "diarizar",
+      "lane": "proceso",
+      "col": 3,
+      "type": "backend",
+      "label": "Separar voces",
+      "sublabel": "pyannote",
+      "tag": "cuántas personas hablan",
+      "width": 155
+    },
+    {
+      "id": "segmentos",
+      "lane": "proceso",
+      "col": 4,
+      "type": "database",
+      "label": "Segmentos + hablante",
+      "sublabel": "quién dijo qué y en qué minuto",
+      "width": 175
+    },
+    {
+      "id": "indexar",
+      "lane": "proceso",
+      "col": 5,
+      "type": "database",
+      "label": "Indexar búsqueda",
+      "sublabel": "pgvector + grafo",
+      "width": 150
+    },
+    {
+      "id": "revisar",
+      "lane": "revision",
+      "col": 5,
+      "type": "security",
+      "label": "Revisar y corregir",
+      "sublabel": "segmentos dudosos",
+      "tag": "la corrección reindexa",
+      "width": 175
+    }
+  ],
+  "edges": [
+    {
+      "id": "subir-audio",
+      "from": "subir",
+      "to": "audio",
+      "variant": "emphasis"
+    },
+    {
+      "id": "audio-transcribir",
+      "from": "audio",
+      "to": "transcribir",
+      "variant": "emphasis"
+    },
+    {
+      "id": "transcribir-diarizar",
+      "from": "transcribir",
+      "to": "diarizar",
+      "variant": "default"
+    },
+    {
+      "id": "diarizar-segmentos",
+      "from": "diarizar",
+      "to": "segmentos",
+      "label": "asigna hablante",
+      "variant": "emphasis"
+    },
+    {
+      "id": "segmentos-indexar",
+      "from": "segmentos",
+      "to": "indexar",
+      "variant": "emphasis"
+    },
+    {
+      "id": "indexar-revisar",
+      "from": "indexar",
+      "to": "revisar",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "revisar-segmentos",
+      "from": "revisar",
+      "to": "segmentos",
+      "label": "corrige",
+      "variant": "dashed",
+      "role": "return",
+      "fromSide": "left",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Nunca se inventan palabras",
+      "items": [
+        "La transcripción reproduce lo que se oye",
+        "Si una palabra es dudosa, baja la confianza y se marca",
+        "El texto corregido vuelve al índice y al grafo"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Preguntas por minuto",
+      "items": [
+        "Cada frase guarda su minuto exacto (mm:ss)",
+        "El chat responde en qué minuto se dijo algo y quién lo dijo"
+      ]
+    }
+  ]
+}
