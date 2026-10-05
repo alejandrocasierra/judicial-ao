@@ -30,16 +30,20 @@ def strong_password(n: int = 20) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=".env")
+    ap.add_argument("--template", default=".env.example", help="plantilla de origen (default .env.example)")
     ap.add_argument("--set", action="append", default=[], help="KEY=VALUE overrides")
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
     out = ROOT / a.out
+    template = ROOT / a.template
+    if not template.exists():
+        raise SystemExit(f"[gen_env] no existe la plantilla {template}")
     if out.exists() and not a.force:
         print(f"[gen_env] {out.name} already exists; use --force to regenerate")
         return
     overrides = dict(kv.split("=", 1) for kv in a.set)
     lines = []
-    for line in (ROOT / ".env.example").read_text(encoding="utf-8").splitlines():
+    for line in template.read_text(encoding="utf-8").splitlines():
         if "=" in line and not line.lstrip().startswith("#"):
             k, rest = line.split("=", 1)
             val, _, comment = rest.partition(" #")

@@ -82,17 +82,27 @@ Genera secretos con `python3 scripts/gen_env.py` (o edítalos a mano) — no reu
 
 ## 4) Levantar en el VPS
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+cp .env.production.example .env
 
-# Migraciones (desde el host, apuntando al Postgres del compose) y datos iniciales
-bash scripts/db_migrate.sh up        # o: docker compose exec api alembic -c alembic.ini upgrade head
-# Admin de acceso rápido (opcional, definido en .env con BOOTSTRAP_ADMIN_*)
+# Rellena los __GENERATE__ con secretos aleatorios (JWT, passwords, S3…):
+python3 scripts/gen_env.py --template .env.production.example --force --out .env
+
+# Edita dominios, proveedores de IA y (opcional) el registry:
+nano .env      # PUBLIC_DOMAIN, API_PUBLIC_URL, CORS_ALLOWED_ORIGINS, WEB_BASE_URL,
+               # LLM_MODEL/LLM_API_KEY, EMBEDDING_MODEL/EMBEDDING_API_KEY, REGISTRY_IMAGE, BOOTSTRAP_ADMIN_*
+
+# Despliegue completo: imágenes + up + migraciones + healthcheck
+bash scripts/deploy.sh
+# (Para datos de demo: bash scripts/deploy.sh --seed — NO usar en producción real)
 ```
+`scripts/deploy.sh` hace: **pull** de las imágenes (si `REGISTRY_IMAGE` está definido) o **build** local,
+`up -d`, aplica **migraciones** dentro del contenedor `api` y verifica `/health`.
+
 Comprobaciones:
 - `https://app.tudominio.com` → login.
 - `https://app.tudominio.com/health` → `{"status":"ok"}`.
 - El navegador debe llamar a `/v1/...` (mismo dominio). Si ves errores de red, revisa
-  `API_PUBLIC_URL` y reinicia `web`.
+  `API_PUBLIC_URL` y reinicia `web` (`docker compose restart web`).
 
 ## 5) Firewall GCP
 Abre solo **80 y 443** (Caddy). PostgreSQL/Redis/API/web quedan en la red interna de Docker.

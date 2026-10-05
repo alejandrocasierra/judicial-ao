@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 # Credenciales de Google Cloud (service account) — NUNCA versionar
 gcp-credentials.json
 *.gserviceaccount.json
