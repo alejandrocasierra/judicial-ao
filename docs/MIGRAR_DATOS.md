@@ -60,10 +60,27 @@ Formas correctas de dejar un VPS nuevo con los datos:
 3. **Auto-seed en el primer arranque sin hornear datos:** montar el dump como **volumen** y un entrypoint que,
    si la BD está vacía, ejecute `import_data.sh`. La imagen queda limpia; el dato vive en el volumen privado.
 
-## Alternativa: solo un expediente (no toda la instancia)
-`export_data.sh` migra **toda** la base. Si más adelante quieres pasar **un único expediente** entre dos
-instancias que ya tienen datos, se necesita un export/import por caso (documentos + páginas + media + segmentos +
-chunks + grafo + citas, preservando FK). Es más delicado; dime y lo implemento como `export_case.py`/`import_case.py`.
+## Atajo con bucket de GCS (un comando en el VPS)
+Si subes el volcado a un bucket privado:
+```bash
+gsutil -m cp -r backup/judicial-<fecha> gs://mi-bucket/judicial
+# y en el VPS:
+bash scripts/fetch_and_import.sh gs://mi-bucket/judicial
+```
+Descarga e importa automáticamente (requiere el Google Cloud SDK y permiso de lectura al bucket).
+
+## Alternativa: mover SOLO un expediente (sin reemplazar la BD)
+Si el destino ya tiene datos y quieres traer un único proceso:
+```bash
+# Origen: exporta el caso + sus archivos
+python scripts/export_case.py --case-id <uuid> --org-id <uuid-origen> --out casos/<id>
+# Destino: importa (por defecto a la MISMA org, o remapeado a tu org de producción)
+python scripts/import_case.py --in casos/<id> --org-id <uuid-org-destino>
+```
+`import_case.py` **remapea la organización** del caso y de los usuarios referenciados, reutiliza usuarios
+existentes por email, y rellena las tablas en orden de FK (funciona con pgvector y grafo). Probado con un
+expediente real: ~70 000 filas (documentos, páginas, OCR, chunks, grafo, citas, chats). Requiere el
+superusuario de la BD (como `pg_restore`). No reemplaza el resto de la base.
 
 ## Notas
 - Mantén el mismo `STORAGE_BACKEND` (por defecto `local`) y `EMBEDDING_DIMENSIONS` entre origen y destino.

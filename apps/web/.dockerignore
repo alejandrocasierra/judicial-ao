@@ -1,0 +1,13 @@
+# Contexto de build de la web: sin dependencias locales, builds previos ni secretos.
+node_modules
+.next
+out
+build
+.env
+.env.*
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+.git
+.gitignore
+Dockerfile
