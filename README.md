@@ -83,6 +83,8 @@ bash scripts/seed_admin.sh   # crea SOLO el admin (+ org y agentes/skills), sin 
 ```
 El reverse proxy (Caddy) y el TLS se activan con `docker-compose.prod.yml`. Abre solo **80/443** en el firewall.
 En el VPS, coloca `gcp-credentials.json` si usas Document AI (lo monta el compose).
+¿Ya tienes datos reales en otra instancia? Migra la BD + originales con **[`docs/MIGRAR_DATOS.md`](docs/MIGRAR_DATOS.md)**
+(`scripts/export_data.sh` / `scripts/import_data.sh`).
 
 ### Cargar datos (procesos, modelos, agentes, skills)
 - **Procesos / expedientes**: créalos en el dashboard y sube archivos, o importa en bloque:
