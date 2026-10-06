@@ -336,6 +336,7 @@ NUEVE DIEZ ONCE DOCE QUINCE VEINTE TREINTA CUARENTA CINCUENTA SESENTA SETENTA OC
 DOSCIENTOS TRESCIENTOS CUATROCIENTOS QUINIENTOS SEISCIENTOS SETECIENTOS OCHOCIENTOS NOVECIENTOS MIL
 MILLONES BILLONES PESOS PESO CENTAVOS CENTAVO DOLAR DÓLAR DOLARES DÓLARES MCTE INTERESES CAPITAL
 QUIROGRAFARIO DENTRO ACUMULADO GARANTIA GARANTÍA REAL EFECTIVIDAD
+HACE SABER TIPO LEY APLICA LINK SOLICITUD RESPETADA RESPETADO RESPETABLE SRA DRA CIU CTO BOG SIENDO
 """.split())
 
 _NAME_RE = re.compile(
@@ -359,6 +360,11 @@ def _name_candidates(text: str) -> list[str]:
 def _strip_accents(s: str) -> str:
     import unicodedata
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+
+
+def _name_tokens(name: str) -> set[str]:
+    """Tokens significativos del nombre (≥3 letras, sin acentos, en mayúsculas) para agrupar variantes OCR."""
+    return {t for t in re.split(r"[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+", _strip_accents(name).upper()) if len(t) >= 3}
 
 
 def _role_signature_matches(text: str, keywords: tuple[str, ...]) -> list[tuple[str, str]]:
@@ -405,18 +411,39 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
     best: dict[str, tuple[str, str, str, int, str | None]] = {}
     for pg in pages:
         for name, snippet in _role_signature_matches(pg["text"] or "", keywords):
-            key = _strip_accents(re.sub(r"\s+", " ", name)).upper()
+            key = re.sub(r"[^A-Z]", "", _strip_accents(name).upper())  # une variantes de OCR (espacios/puntos)
+            if not key:
+                continue
             counts[key] += 1
             display.setdefault(key, name)
             best.setdefault(key, (snippet, str(pg["document_id"]), pg["filename"], pg["page_number"], pg["folio"]))
+    # Agrupa VARIANTES OCR del mismo nombre por solape de tokens (p. ej. 'ALBA LUCY COCK ALVAREZ'
+    # vs 'ALBA LUCY COCK ALVARE' vs 'ALBA KUCY COCK ÁLVAREZ') y suma sus menciones.
+    groups: list[dict[str, Any]] = []
+    for key, n in counts.most_common():
+        toks = _name_tokens(display[key])
+        for g in groups:
+            inter = toks & g["tokens"]
+            union = toks | g["tokens"]
+            if toks and g["tokens"] and inter and (len(inter) / len(union) >= 0.5
+                                                   or toks <= g["tokens"] or g["tokens"] <= toks):
+                g["n"] += n
+                if n > g["best_n"]:
+                    g["best_n"], g["display"] = n, display[key]
+                break
+        else:
+            snippet, did, fn, pn, folio = best[key]
+            groups.append({"display": display[key], "tokens": toks, "n": n, "best_n": n,
+                           "snippet": snippet, "did": did, "fn": fn, "pn": pn, "folio": folio})
+    groups.sort(key=lambda g: g["n"], reverse=True)
+
     items: list[dict[str, Any]] = []
-    for key, n in counts.most_common(k):
-        snippet, did, fn, pn, folio = best[key]
+    for g in groups[:k]:
         # Nombre y conteo van en el texto para que la respuesta final pueda citarlos y verificarlos.
-        text = f"{snippet} ⟦{role_key}: {display[key]} · {n} menciones⟧"
-        items.append(evidence_item("PER", "document_page", text, document_id=did, filename=fn,
-                                   page_number=pn, folio=folio, person_name=display[key],
-                                   role=role_key, mentions=n))
+        text = f"{g['snippet']} ⟦{role_key}: {g['display']} · {g['n']} menciones⟧"
+        items.append(evidence_item("PER", "document_page", text, document_id=g["did"], filename=g["fn"],
+                                   page_number=g["pn"], folio=g["folio"], person_name=g["display"],
+                                   role=role_key, mentions=g["n"]))
     return items
 
 

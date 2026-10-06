@@ -44,10 +44,11 @@ _ROLE_QUESTION = re.compile(
     re.IGNORECASE,
 )
 _ROLE_HINT = (
-    "Esta es una pregunta de ROL/AGREGACIÓN: usa list_people_by_role con el rol pedido (juez, apoderado, "
-    "testigo, perito, secretario, fiscal, parte). Devuelve los nombres CANDIDATOS con su número de menciones "
-    "y su cita; cuenta los candidatos distintos y cita cada uno. Es heurístico (puede traer ruido): dilo y "
-    "verifica. NO la respondas con un solo fragmento de transcripción."
+    "Esta es una pregunta de ROL/AGREGACIÓN: el sistema adjunta una LISTA DETERMINISTA de candidatos "
+    "(calculada con list_people_by_role) del rol pedido, la misma para cualquier modelo. Responde con ESA "
+    "lista tal cual: enumera los nombres DISTINTOS, indica el total y cita cada uno (documento/página). NO "
+    "añadas personas que no estén en la lista ni la respondas con un fragmento de transcripción. Aclara que es "
+    "un resultado heurístico (firmas) y que conviene verificarlo."
 )
 
 
@@ -55,6 +56,30 @@ def merge(*hints: str | None) -> list[str] | None:
     """Une varias pistas descartando las vacías."""
     out = [h for h in hints if h]
     return out or None
+
+
+# --- Detección de rol para la respuesta determinista (ver role_answer.authoritative_hint) ---
+_ROLE_WORDS: dict[str, tuple[str, ...]] = {
+    "juez": ("juez", "jueces", "jueza", "juezas"),
+    "apoderado": ("apoderado", "apoderados", "apoderada", "apoderadas",
+                  "abogado", "abogados", "abogada", "abogadas"),
+    "testigo": ("testigo", "testigos"),
+    "perito": ("perito", "peritos"),
+    "secretario": ("secretario", "secretarios", "secretaria", "secretarias"),
+    "fiscal": ("fiscal", "fiscales"),
+    "parte": ("demandante", "demandantes", "demandado", "demandados"),
+}
+
+
+def role_from_text(text: str | None) -> str | None:
+    """Devuelve el rol canónico si la pregunta es de rol/agregación (juez, apoderado, …)."""
+    t = (text or "").lower()
+    if not _ROLE_QUESTION.search(t):
+        return None
+    for role, words in _ROLE_WORDS.items():
+        if any(re.search(rf"\b{w}\b", t) for w in words):
+            return role
+    return None
 
 
 # --- Localización: «¿dónde se habla de X?», «¿en qué archivos/páginas aparece X?» ---

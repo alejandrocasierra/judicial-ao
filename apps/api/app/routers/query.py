@@ -15,7 +15,7 @@ from app.core.i18n import negotiate, t
 from app.providers.llm import get_llm
 from app.schemas import QueryIn
 from app.security.deps import Principal, case_access, current_principal
-from app.services import agent, answering, audit, case_tools, metrics, query_hints, ratelimit
+from app.services import agent, answering, audit, case_tools, metrics, query_hints, ratelimit, role_answer
 
 router = APIRouter(prefix="/cases/{case_id}", tags=["ai"])
 
@@ -71,7 +71,8 @@ def query(case_id: UUID, body: QueryIn, request: Request, p: Principal = Depends
     locale = negotiate(request.headers.get("accept-language"), p.locale)
 
     with metrics.track_stage("query_total", p.org_id):
-        hints = query_hints.merge(query_hints.hint(body.question))
+        hints = query_hints.merge(query_hints.hint(body.question),
+                                  role_answer.authoritative_hint(p.org_id, p.user_id, str(case_id), body.question))
         return _run_query(case_id, body, request, p, locale, case, s, hints=hints)
 
 

@@ -20,7 +20,7 @@ from app.core.errors import AppError
 from app.core.i18n import negotiate, t
 from app.schemas import ChatMessageIn, ChatSessionIn, QueryIn
 from app.security.deps import Principal, case_access, current_principal
-from app.services import audit, case_tools, correction, query_hints, ratelimit
+from app.services import audit, case_tools, correction, query_hints, ratelimit, role_answer
 from app.services.case_tools import ToolContext
 from app.services.case_tools.read import _content_term
 from app.routers.query import _attachment_file_cards, _run_query
@@ -233,7 +233,8 @@ def send_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: 
                                     answer=t("messages.correction_none", locale), request=request)
     # Pista general (todas las fuentes) + corrección de OCR/ASR.
     hints = query_hints.merge(correction.hint(body.content, bool(body.attachments)),
-                              query_hints.hint(body.content))
+                              query_hints.hint(body.content),
+                              role_answer.authoritative_hint(p.org_id, p.user_id, str(case_id), body.content))
     query_body = QueryIn(question=body.content, strategy=body.strategy,
                          agent_id=session["agent_id"], model_id=session["model_id"],
                          attachments=body.attachments)
