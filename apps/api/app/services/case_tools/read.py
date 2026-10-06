@@ -434,8 +434,129 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
                     resolved_party_id=str(sp["resolved_party_id"]) if sp["resolved_party_id"] else None)
                 for sp in confirmed[:k]]
 
-    # 2) Respaldo HEURÍSTICO (firmas/encabezados) si aún no hay roles confirmados.
+    # 2) Roles INSTITUCIONALES (juez/fiscal/secretario): sus "personas" reales son las
+    #    AUTORIDADES judiciales que actuaron (juzgados, tribunales, salas), no las firmas.
+    if role_key in _AUTHORITY_ROLES:
+        auth = _authority_candidates(conn, case_id, role_key, k)
+        if auth:
+            return auth
+
+    # 3) Respaldo HEURÍSTICO (firmas/encabezados) si aún no hay roles confirmados.
     return _role_candidates_heuristic(conn, case_id, role_key, keywords, k)
+
+
+# --- Autoridades judiciales (juez/fiscal/secretario) ---
+_AUTHORITY_ROLES = {"juez", "fiscal", "secretario"}
+_AUTHORITY_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "juez": ("juez", "jueza", "juzgado", "tribunal", "corte", "magistrad", "sala"),
+    "fiscal": ("fiscal", "fiscalia"),
+    "secretario": ("secretaria",),
+}
+_NUM_WORDS = {
+    "PRIMERO": "1", "PRIMER": "1", "SEGUNDO": "2", "TERCERO": "3", "CUARTO": "4", "QUINTO": "5",
+    "SEXTO": "6", "SEPTIMO": "7", "OCTAVO": "8", "NOVENO": "9", "DECIMO": "10", "ONCE": "11",
+    "DOCE": "12", "TRECE": "13", "CATORCE": "14", "QUINCE": "15", "DIECISEIS": "16", "DIECISIETE": "17",
+    "DIECIOCHO": "18", "DIECINUEVE": "19", "VEINTE": "20", "VEINTIUNO": "21", "VEINTIUN": "21",
+    "VEINTIDOS": "22", "VEINTITRES": "23", "VEINTICUATRO": "24", "VEINTICINCO": "25",
+    "VEINTISEIS": "26", "VEINTISIETE": "27", "VEINTIOCHO": "28", "VEINTINUEVE": "29", "TREINTA": "30",
+    "TREINTAIDOS": "32", "TREINTAYTRES": "33", "CUARENTA": "40",
+}
+_AUTHORITY_DROP = {"DE", "DEL", "LA", "EL", "LOS", "LAS", "D", "C", "DC", "NO", "N", "NUMERO"}
+_CLASS_TOKENS = {"CIVIL", "MUNICIPAL", "CIRCUITO", "EJECUCION", "SENTENCIAS", "LABORAL", "FAMILIA",
+                 "PENAL", "PROMISCUO", "PEQUENAS", "CAUSAS", "COMPETENCIA", "MULTIPLE", "CONSTITUCIONAL",
+                 "CASACION", "SUPERIOR", "ADMINISTRATIVO", "JUSTICIA", "SUPREMA", "REPARTO"}
+
+
+_TENS = {"VEINTE": 20, "TREINTA": 30, "CUARENTA": 40, "CINCUENTA": 50, "SESENTA": 60,
+         "SETENTA": 70, "OCHENTA": 80, "NOVENTA": 90}
+_UNITS = {"UNO": 1, "DOS": 2, "TRES": 3, "CUATRO": 4, "CINCO": 5, "SEIS": 6, "SIETE": 7,
+          "OCHO": 8, "NUEVE": 9}
+
+
+def _authority_signature(name: str) -> str:
+    """Firma canónica de una autoridad para agrupar variantes OCR: tipo + número + clase.
+
+    'Juzgado 21 Civil del Circuito de Bogotá' = 'Juzgado Veintiuno (21) Civil del
+    Circuito … D.C.' = 'JUZGADO 021 Civil del Circuito' → misma firma.
+    """
+    raw: list[str] = []
+    for t in re.split(r"[^A-Z0-9]+", _strip_accents(name or "").upper()):
+        if t and t not in _AUTHORITY_DROP:
+            raw.append(t)
+    # Combina decenas + unidades ANTES de mapear a dígitos: "CUARENTA","Y","CINCO" → "45".
+    merged: list[str] = []
+    i = 0
+    while i < len(raw):
+        base = _TENS.get(raw[i])
+        if base and i + 2 < len(raw) and raw[i + 1] in ("Y", "I"):
+            unit = _UNITS.get(raw[i + 2])
+            if unit:
+                merged.append(str(base + unit))
+                i += 3
+                continue
+        merged.append(raw[i])
+        i += 1
+    toks: list[str] = []
+    for t in merged:
+        t = _NUM_WORDS.get(t, t)
+        if t.isdigit():
+            t = str(int(t))
+        toks.append(t)
+    if any(t in ("JUZGADO", "JUEZ", "JUEZA", "JUECES") for t in toks):
+        kind = "JUZGADO"
+    elif "TRIBUNAL" in toks:
+        kind = "TRIBUNAL"
+    elif "CORTE" in toks:
+        kind = "CORTE"
+    elif any(t.startswith("FISCAL") for t in toks):
+        kind = "FISCALIA"
+    elif any(t.startswith("SECRETAR") for t in toks):
+        kind = "SECRETARIA"
+    else:
+        kind = "OTRO"
+    number = next((t for t in toks if t.isdigit()), "")
+    classes = sorted({t for t in toks if t in _CLASS_TOKENS})
+    return f"{kind}|{number}|{','.join(classes)}"
+
+
+def _authority_candidates(conn: Connection, case_id: str, role_key: str, k: int) -> list[dict[str, Any]]:
+    """Autoridades judiciales del expediente (línea de tiempo + entidades), normalizadas."""
+    keywords = _AUTHORITY_KEYWORDS.get(role_key)
+    if not keywords:
+        return []
+    pats = "{" + ",".join(f"%{kw}%" for kw in keywords) + "}"
+    ev = rows(conn, """
+        SELECT e.authority AS name, count(*) AS n,
+               (array_agg(e.document_id ORDER BY e.event_date NULLS LAST))[1] AS document_id,
+               (array_agg(e.page_number ORDER BY e.event_date NULLS LAST))[1] AS page_number
+        FROM events e
+        WHERE e.case_id = :c AND e.kind = 'procedural' AND e.authority IS NOT NULL
+          AND btrim(e.authority) <> '' AND e.authority ILIKE ANY(CAST(:pats AS text[]))
+        GROUP BY e.authority""", c=case_id, pats=pats)
+    en = rows(conn, """
+        SELECT ent.name AS name, count(*) AS n, NULL::uuid AS document_id, NULL::int AS page_number
+        FROM entities ent
+        WHERE ent.case_id = :c AND ent.entity_type IN ('authority', 'organization')
+          AND ent.name ILIKE ANY(CAST(:pats AS text[]))
+        GROUP BY ent.name""", c=case_id, pats=pats)
+    agg: dict[str, dict[str, Any]] = {}
+    for r in list(ev) + list(en):
+        key = _authority_signature(r["name"])
+        if key.startswith("OTRO|") or key.endswith("|") or "||" in key:  # sin número ni clase → ruido
+            continue
+        g = agg.setdefault(key, {"display": r["name"], "best": 0, "n": 0,
+                                 "document_id": None, "page_number": None})
+        g["n"] += int(r["n"])
+        if int(r["n"]) > g["best"]:
+            g["best"], g["display"] = int(r["n"]), r["name"]
+        if r["document_id"] and not g["document_id"]:
+            g["document_id"], g["page_number"] = r["document_id"], r["page_number"]
+    out: list[dict[str, Any]] = []
+    for g in sorted(agg.values(), key=lambda g: g["n"], reverse=True)[:k]:
+        out.append(evidence_item("AUT", "authority", f"{g['display']} · {g['n']} actuaciones",
+                                 authority=g["display"], person_name=g["display"], role=role_key,
+                                 mentions=g["n"], document_id=g["document_id"], page_number=g["page_number"]))
+    return out
 
 
 def _role_candidates_heuristic(conn: Connection, case_id: str, role_key: str,

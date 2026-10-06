@@ -208,6 +208,21 @@ def test_ut_ct_12_suggest_reprocess_diagnostic(monkeypatch):
     assert out[0]["requires_confirmation"] is True
 
 
+def test_ut_ct_authority_signature_groups_ocr_variants():
+    """La firma de autoridad agrupa variantes OCR del MISMO juzgado y separa los distintos."""
+    from app.services.case_tools.read import _authority_signature as sig
+    same = [
+        sig("Juzgado 21 Civil del Circuito de Bogotá"),
+        sig("Juzgado Veintiuno (21) Civil del Circuito de Bogotá D.C."),
+        sig("JUZGADO 021 Civil del Circuito"),
+    ]
+    assert len(set(same)) == 1
+    assert sig("Juzgado Cuarto Civil del Circuito de Bogotá") == sig("Juzgado 04 Civil del Circuito de Bogotá D.C.")
+    assert sig("Juzgado Cuarenta y Cinco Civil del Circuito") == sig("JUZGADO 45 CIVIL DEL CIRCUITO")
+    # Autoridades distintas NO se fusionan
+    assert sig("Juzgado 21 Civil Municipal de Bogotá") != sig("Juzgado 21 Civil del Circuito de Bogotá")
+
+
 def test_ut_ct_14_name_candidates_filters_roles_and_numbers():
     """`_name_candidates` extrae nombres propios y descarta cargos/números en letras."""
     out = ct_read._name_candidates(

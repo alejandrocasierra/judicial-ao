@@ -24,11 +24,14 @@ def authoritative_hint(org_id: str, user_id: str | None, case_id: str, question:
         return None
     names: list[str] = []
     confirmed = any(it.get("confirmed") for it in items)
+    authorities = bool(items) and all(it.get("authority") for it in items)
     for it in items:
         n = it.get("person_name") or it.get("display_name") or it.get("label")
         if not n:
             continue
-        if it.get("confirmed"):
+        if it.get("authority"):
+            names.append(f"- {n} — {it.get('mentions') or 0} actuaciones")
+        elif it.get("confirmed"):
             extra = it.get("speaker_role") or ""
             party = f" · parte: {it.get('party_name')}" if it.get("party_name") else ""
             names.append(f"- {n}" + (f" ({extra})" if extra else "") + party + f" — {it.get('segments') or 0} segmentos")
@@ -36,7 +39,12 @@ def authoritative_hint(org_id: str, user_id: str | None, case_id: str, question:
             names.append(f"- {n} — {it.get('mentions')} menciones; {it.get('filename')} p.{it.get('page_number')}")
     if not names:
         return None
-    if confirmed:
+    if authorities:
+        header = (f"LISTA de autoridades judiciales detectadas en el proceso para «{role}» (normalizadas; "
+                  f"{len(names)} despachos detectados; puede haber variantes de OCR). Responde enumerando estas "
+                  "autoridades (destaca la principal por nº de actuaciones) y aclara que el total es aproximado; "
+                  "no contestes con un fragmento de transcripción.")
+    elif confirmed:
         header = (f"LISTA OFICIAL de «{role}» (roles CONFIRMADOS por el usuario; TOTAL={len(names)}). "
                   "Responde con EXACTAMENTE estos nombres y este total (con su parte si la tienen). No añadas ni "
                   "quites personas ni la contestes con un fragmento de transcripción.")
