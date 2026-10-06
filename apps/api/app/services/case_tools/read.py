@@ -415,24 +415,34 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
     # 1) Roles CONFIRMADOS por el usuario (speakers.speaker_role) → conteo EXACTO (no heurístico).
     confirmed = rows(conn, """
         SELECT sp.id, sp.label, sp.display_name, sp.speaker_role, sp.resolved_party_id, pt.name AS party_name,
-               (SELECT count(*) FROM transcript_segments t WHERE t.speaker_id = sp.id) AS segments
-        FROM speakers sp LEFT JOIN parties pt ON pt.id = sp.resolved_party_id
+               (SELECT count(*) FROM transcript_segments t WHERE t.speaker_id = sp.id) AS segments,
+               seg.media_id, seg.start_ms, seg.segment_id
+        FROM speakers sp
+        LEFT JOIN parties pt ON pt.id = sp.resolved_party_id
+        LEFT JOIN LATERAL (
+            SELECT t.media_id, t.start_ms, t.id AS segment_id FROM transcript_segments t
+            WHERE t.speaker_id = sp.id ORDER BY t.start_ms LIMIT 1) seg ON true
         WHERE sp.case_id = :c AND sp.speaker_role IS NOT NULL AND btrim(sp.speaker_role) <> ''
           AND lower(sp.speaker_role) LIKE ANY(CAST(:pats AS text[]))
         ORDER BY segments DESC, sp.label
     """, c=case_id, pats=cpats)
     if confirmed:
-        return [evidence_item(
-                    "PER", "speaker",
-                    f"{sp['display_name'] or sp['label']}"
-                    + (f" — {sp['speaker_role']}" if sp["speaker_role"] else "")
-                    + (f" ({sp['party_name']})" if sp["party_name"] else ""),
-                    speaker_id=str(sp["id"]), label=sp["label"], display_name=sp["display_name"],
-                    person_name=sp["display_name"] or sp["label"], role=role_key,
-                    speaker_role=sp["speaker_role"], segments=sp["segments"], confirmed=True,
-                    party_name=sp["party_name"],
-                    resolved_party_id=str(sp["resolved_party_id"]) if sp["resolved_party_id"] else None)
-                for sp in confirmed[:k]]
+        # source_type transcript_segment cuando hay un segmento representativo: así el
+        # conteo por rol confirmado es evidencia PRIMARIA (citable) y no una nota.
+        items: list[dict[str, Any]] = []
+        for sp in confirmed[:k]:
+            name = sp["display_name"] or sp["label"]
+            items.append(evidence_item(
+                "PER", "transcript_segment" if sp["media_id"] else "speaker",
+                f"{name}"
+                + (f" — {sp['speaker_role']}" if sp["speaker_role"] else "")
+                + (f" ({sp['party_name']})" if sp["party_name"] else ""),
+                speaker_id=str(sp["id"]), label=sp["label"], display_name=sp["display_name"],
+                person_name=name, role=role_key, speaker_role=sp["speaker_role"], segments=sp["segments"],
+                confirmed=True, party_name=sp["party_name"],
+                media_id=sp["media_id"], start_ms=sp["start_ms"], segment_id=sp["segment_id"],
+                resolved_party_id=str(sp["resolved_party_id"]) if sp["resolved_party_id"] else None))
+        return items
 
     # 2) Roles INSTITUCIONALES (juez/fiscal/secretario): sus "personas" reales son las
     #    AUTORIDADES judiciales que actuaron (juzgados, tribunales, salas), no las firmas.
@@ -528,13 +538,15 @@ def _authority_candidates(conn: Connection, case_id: str, role_key: str, k: int)
     ev = rows(conn, """
         SELECT e.authority AS name, count(*) AS n,
                (array_agg(e.document_id ORDER BY e.event_date NULLS LAST))[1] AS document_id,
-               (array_agg(e.page_number ORDER BY e.event_date NULLS LAST))[1] AS page_number
-        FROM events e
+               (array_agg(e.page_number ORDER BY e.event_date NULLS LAST))[1] AS page_number,
+               (array_agg(d.filename ORDER BY e.event_date NULLS LAST))[1] AS filename
+        FROM events e LEFT JOIN documents d ON d.id = e.document_id
         WHERE e.case_id = :c AND e.kind = 'procedural' AND e.authority IS NOT NULL
           AND btrim(e.authority) <> '' AND e.authority ILIKE ANY(CAST(:pats AS text[]))
         GROUP BY e.authority""", c=case_id, pats=pats)
     en = rows(conn, """
-        SELECT ent.name AS name, count(*) AS n, NULL::uuid AS document_id, NULL::int AS page_number
+        SELECT ent.name AS name, count(*) AS n, NULL::uuid AS document_id, NULL::int AS page_number,
+               NULL::text AS filename
         FROM entities ent
         WHERE ent.case_id = :c AND ent.entity_type IN ('authority', 'organization')
           AND ent.name ILIKE ANY(CAST(:pats AS text[]))
@@ -545,17 +557,20 @@ def _authority_candidates(conn: Connection, case_id: str, role_key: str, k: int)
         if key.startswith("OTRO|") or key.endswith("|") or "||" in key:  # sin número ni clase → ruido
             continue
         g = agg.setdefault(key, {"display": r["name"], "best": 0, "n": 0,
-                                 "document_id": None, "page_number": None})
+                                 "document_id": None, "page_number": None, "filename": None})
         g["n"] += int(r["n"])
         if int(r["n"]) > g["best"]:
             g["best"], g["display"] = int(r["n"]), r["name"]
         if r["document_id"] and not g["document_id"]:
-            g["document_id"], g["page_number"] = r["document_id"], r["page_number"]
+            g["document_id"], g["page_number"], g["filename"] = r["document_id"], r["page_number"], r["filename"]
     out: list[dict[str, Any]] = []
     for g in sorted(agg.values(), key=lambda g: g["n"], reverse=True)[:k]:
-        out.append(evidence_item("AUT", "authority", f"{g['display']} · {g['n']} actuaciones",
-                                 authority=g["display"], person_name=g["display"], role=role_key,
-                                 mentions=g["n"], document_id=g["document_id"], page_number=g["page_number"]))
+        # source_type document_page: las autoridades se citan por la página de sus
+        # actuaciones (así cuentan como evidencia primaria citable, no como nota).
+        out.append(evidence_item("AUT", "document_page", f"{g['display']} · {g['n']} actuaciones",
+                                 document_id=g["document_id"], filename=g["filename"],
+                                 page_number=g["page_number"] or 1,
+                                 authority=g["display"], person_name=g["display"], role=role_key, mentions=g["n"]))
     return out
 
 
