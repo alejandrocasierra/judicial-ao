@@ -494,15 +494,41 @@ def _all_role_candidates(conn: Connection, case_id: str, k: int = 12) -> list[di
             name = it.get("person_name") or ""
             entries.append({"role": role_key, "name": name, "tokens": _name_tokens(name),
                             "mentions": it.get("mentions", 0), "filename": it.get("filename"),
-                            "page_number": it.get("page_number")})
+                            "page_number": it.get("page_number"),
+                            "snippet": (it.get("text") or "").split("⟦")[0].strip()})
     return entries
 
 
+_PARTY_SIDE_RE = re.compile(r"(?i)\b(demandante|demandado|denunciante|denunciado|ejecutante|ejecutado)\b")
+
+
+def _party_side(snippet: str) -> str | None:
+    m = _PARTY_SIDE_RE.search(snippet or "")
+    return m.group(1).lower() if m else None
+
+
+def _match_party(toks: set[str], side: str | None, parties: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Empareja la parte por nombre/alias (solape de tokens) o, si no, por el lado (rol de la parte)."""
+    for p in parties:
+        al = p.get("aliases") or []
+        al_s = " ".join(al) if isinstance(al, (list, tuple)) else str(al)
+        ptoks = _name_tokens(p["name"]) | _name_tokens(al_s)
+        inter, union = toks & ptoks, toks | ptoks
+        if toks and ptoks and inter and (len(inter) / len(union) >= 0.5 or toks <= ptoks or ptoks <= toks):
+            return p
+    if side:
+        for p in parties:
+            if side in (p.get("role") or "").lower():
+                return p
+    return None
+
+
 def role_suggestions(conn: Connection, case_id: str) -> list[dict[str, Any]]:
-    """Sugiere un rol a cada hablante comparando su nombre con los candidatos heurísticos de firmas."""
+    """Sugiere, por hablante: rol (heurística de firmas) y parte (por nombre o por el lado demandante/demandado)."""
     entries = _all_role_candidates(conn, case_id)
-    sps = rows(conn, "SELECT id, label, display_name, speaker_role FROM speakers WHERE case_id = :c ORDER BY label",
-               c=case_id)
+    parties = rows(conn, "SELECT id, name, role, aliases FROM parties WHERE case_id = :c ORDER BY name", c=case_id)
+    sps = rows(conn, "SELECT id, label, display_name, speaker_role, resolved_party_id FROM speakers "
+                     "WHERE case_id = :c ORDER BY label", c=case_id)
     out: list[dict[str, Any]] = []
     for sp in sps:
         toks = _name_tokens(sp["display_name"] or "")
@@ -516,10 +542,21 @@ def role_suggestions(conn: Connection, case_id: str) -> list[dict[str, Any]]:
                                                    or toks <= e["tokens"] or e["tokens"] <= toks):
                 if best is None or e["mentions"] > best["mentions"]:
                     best = e
+        side = _party_side(best["snippet"]) if best and best["role"] in ("apoderado", "parte") else None
+        party = _match_party(toks, side, parties)
+        if not best and not party:
+            continue
+        item: dict[str, Any] = {"speaker_id": str(sp["id"]), "label": sp["label"],
+                                "display_name": sp["display_name"], "current_role": sp["speaker_role"],
+                                "current_party_id": str(sp["resolved_party_id"]) if sp["resolved_party_id"] else None}
         if best:
-            out.append({"speaker_id": str(sp["id"]), "label": sp["label"], "display_name": sp["display_name"],
-                        "current_role": sp["speaker_role"], "suggested_role": best["role"],
-                        "mentions": best["mentions"], "filename": best["filename"], "page_number": best["page_number"]})
+            item.update(suggested_role=best["role"], mentions=best["mentions"],
+                        filename=best["filename"], page_number=best["page_number"])
+        if party:
+            item.update(suggested_party_id=str(party["id"]), suggested_party_name=party["name"])
+        if side:
+            item["suggested_party_side"] = side
+        out.append(item)
     return out
 
 

@@ -47,10 +47,14 @@ interface RoleSuggestion {
   label: string;
   display_name?: string | null;
   current_role?: string | null;
+  current_party_id?: string | null;
   suggested_role: string;
   mentions: number;
   filename?: string | null;
   page_number?: number | null;
+  suggested_party_id?: string | null;
+  suggested_party_name?: string | null;
+  suggested_party_side?: string | null;
 }
 
 function normTokens(s: string): string[] {
@@ -153,6 +157,7 @@ export function SpeakerTags({
         assignments: suggestions.map((s) => ({
           speaker_id: s.speaker_id,
           speaker_role: ROLE_KEY_LABEL[s.suggested_role] || s.suggested_role,
+          resolved_party_id: s.suggested_party_id || null,
         })),
       }),
     onSuccess: () => {
@@ -178,7 +183,7 @@ export function SpeakerTags({
     setName(nm);
     setRole(r ? (STANDARD_ROLES.includes(r) ? r : CUSTOM) : (sugLabel || NONE));
     setCustomRole(r && !STANDARD_ROLES.includes(r) ? r : "");
-    setPartyId(spk.resolved_party_id || NONE);
+    setPartyId(spk.resolved_party_id || sug?.suggested_party_id || NONE);
     setFormOpen(true);
   }
 
@@ -271,6 +276,16 @@ export function SpeakerTags({
                   {parties.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {suggestion?.suggested_party_id && (
+                <p className="text-[11px] text-muted-foreground">
+                  Sugerido: <b>{suggestion.suggested_party_name}</b> para este hablante.
+                </p>
+              )}
+              {!suggestion?.suggested_party_id && suggestion?.suggested_party_side && (
+                <p className="text-[11px] text-muted-foreground">
+                  Parte probable: <b>{suggestion.suggested_party_side}</b> (aún no hay partes cargadas).
+                </p>
+              )}
             </div>
           </div>
           <div className="flex justify-end gap-2">
