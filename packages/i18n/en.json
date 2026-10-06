@@ -14,6 +14,7 @@
     "CITATION_NOT_FOUND": "Citation not found.",
     "ENTITY_NOT_FOUND": "Entity not found.",
     "USER_NOT_FOUND": "User not found.",
+    "PASSWORD_WEAK": "The password does not meet the policy: minimum length, uppercase, lowercase, number and symbol.",
     "SPEAKER_NOT_FOUND": "Speaker not found in the case.",
     "VALIDATION_ERROR": "The submitted data is invalid.",
     "CASE_NUMBER_INVALID": "The case number does not match the jurisdiction format.",

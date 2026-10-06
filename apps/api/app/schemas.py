@@ -233,6 +233,8 @@ class AdminUserCreate(Strict):
     full_name: str = Field(min_length=2, max_length=200)
     org_role: Literal["ORG_ADMIN", "CASE_MANAGER", "LAWYER", "REVIEWER", "ANALYST", "READ_ONLY"]
     locale: Literal["es", "en"] = "es"
+    # Opcional: si el administrador la define, se asigna directo (sin correo de bienvenida).
+    password: str | None = Field(default=None, min_length=1, max_length=256)
 
     _e = field_validator("email")(_email)
     _n = field_validator("full_name")(_no_control)
@@ -244,6 +246,8 @@ class AdminUserPatch(Strict):
     org_role: Literal["ORG_ADMIN", "CASE_MANAGER", "LAWYER", "REVIEWER", "ANALYST", "READ_ONLY"] | None = None
     locale: Literal["es", "en"] | None = None
     is_active: bool | None = None
+    # Opcional: nueva contraseña asignada por el administrador.
+    password: str | None = Field(default=None, min_length=1, max_length=256)
 
     _n = field_validator("full_name")(_no_control)
 

@@ -23,6 +23,7 @@ CREATE TABLE users (
   failed_login_attempts int NOT NULL DEFAULT 0,
   locked_until timestamptz,
   last_login_at timestamptz,
+  version integer NOT NULL DEFAULT 1,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (email)

@@ -14,6 +14,7 @@
     "CITATION_NOT_FOUND": "Cita no encontrada.",
     "ENTITY_NOT_FOUND": "Entidad no encontrada.",
     "USER_NOT_FOUND": "Usuario no encontrado.",
+    "PASSWORD_WEAK": "La contraseña no cumple la política: longitud mínima, mayúscula, minúscula, número y símbolo.",
     "SPEAKER_NOT_FOUND": "Hablante no encontrado en el expediente.",
     "VALIDATION_ERROR": "Los datos enviados no son válidos.",
     "CASE_NUMBER_INVALID": "El número de radicado no cumple el formato de la jurisdicción.",

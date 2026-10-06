@@ -15,11 +15,18 @@ from app.core.errors import AppError
 from app.schemas import (AdminUserCreate, AdminUserPatch, AgentIn, AgentPatch, AiModelIn, AiModelPatch,
                          ModelCatalogIn, RoleIn, RolePatch, SkillIn, SkillPatch, SmtpSettingsPatch)
 from app.security.deps import Principal, require_org
-from app.security.passwords import hash_password
+from app.security.passwords import hash_password, password_policy_ok
 from app.services import alerts, audit, backup, builtin_agents, mailer, model_catalog, roles as roles_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 log = logging.getLogger(__name__)
+
+
+def _validate_password(pw: str) -> None:
+    """Contraseña fijada por el administrador: debe cumplir la política
+    (longitud mínima + mayúscula + minúscula + dígito + símbolo)."""
+    if not password_policy_ok(pw):
+        raise AppError("PASSWORD_WEAK", 422)
 
 # Catálogo de modelos por proveedor. Se mantiene actualizado en código; el
 # usuario puede escribir cualquier otro nombre (incluidos lanzamientos nuevos).
@@ -42,15 +49,19 @@ MODEL_CATALOG = {
 def list_users(p: Principal = Depends(require_org("user.manage"))):
     with tx(p.org_id, p.user_id) as c:
         items = rows(c, """SELECT id, email, full_name, org_role, locale, is_active,
-                              last_login_at, created_at
+                              last_login_at, created_at, version
                        FROM users ORDER BY created_at DESC""")
     return items
 
 
 @router.post("/users")
 def create_user(body: AdminUserCreate, request: Request, p: Principal = Depends(require_org("user.manage"))):
-    # Contraseña temporal aleatoria — el usuario la cambia con el enlace de bienvenida.
-    temp_pw = secrets.token_urlsafe(16)
+    # Si el administrador define la contraseña, se asigna de una vez (no se envía
+    # correo de bienvenida). Si no, se genera una temporal y se envía el enlace.
+    provided = bool(body.password)
+    if provided:
+        _validate_password(body.password or "")
+    temp_pw = body.password or secrets.token_urlsafe(16)
     try:
         with tx(p.org_id, p.user_id) as c:
             u = one(c, """INSERT INTO users (organization_id, email, full_name, password_hash, org_role, locale)
@@ -58,10 +69,13 @@ def create_user(body: AdminUserCreate, request: Request, p: Principal = Depends(
                     o=p.org_id, e=body.email, n=body.full_name, h=hash_password(temp_pw),
                     r=body.org_role, l=body.locale)
             audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="admin.user_created",
-                         entity_type="user", entity_id=str(u["id"]), after={"email": u["email"], "org_role": u["org_role"]},
+                         entity_type="user", entity_id=str(u["id"]),
+                         after={"email": u["email"], "org_role": u["org_role"], "password_set_by_admin": provided},
                          request=request)
     except IntegrityError:
         raise AppError("CASE_DUPLICATE", 409) from None
+    if provided:
+        return {**u, "invite_sent": False}
     # Enlace de bienvenida para definir contraseña
     s = get_settings()
     token = mailer.create_invite_token(str(u["id"]))
@@ -91,6 +105,10 @@ def patch_user(user_id: UUID, body: AdminUserPatch, request: Request, p: Princip
         if body.is_active is not None:
             fields.append("is_active = :a")
             params["a"] = body.is_active
+        if body.password is not None:
+            _validate_password(body.password)
+            fields.append("password_hash = :h")
+            params["h"] = hash_password(body.password)
         if not fields:
             raise AppError("NOTHING_TO_UPDATE", 422)
         params["v"] = body.expected_version
@@ -101,6 +119,10 @@ def patch_user(user_id: UUID, body: AdminUserPatch, request: Request, p: Princip
         updated = one(c, base.replace("/*SET_CLAUSE*/", set_clause), **params)
         if not updated:
             raise AppError("CONFLICT", 409)
+        if body.password is not None:
+            # Al cambiar la contraseña se revocan las sesiones activas del usuario.
+            c.execute(text("UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = :u AND revoked_at IS NULL"),
+                      {"u": str(user_id)})
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="admin.user_updated",
                      entity_type="user", entity_id=str(user_id), after=body.model_dump(exclude_none=True),
                      request=request)

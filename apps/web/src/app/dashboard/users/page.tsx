@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Download, RefreshCw } from "lucide-react";
+import { Plus, Search, Download, RefreshCw, Eye, EyeOff, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 
 interface User {
@@ -43,6 +43,7 @@ interface UserUpdate {
   org_role?: string;
   locale?: string;
   is_active?: boolean;
+  password?: string;
 }
 
 const ROLES = [
@@ -54,6 +55,19 @@ const ROLES = [
   { value: "READ_ONLY", label: "Solo lectura" },
 ];
 
+/** Contraseña aleatoria que cumple la política (mayúscula, minúscula, número y símbolo). */
+function genPassword(len = 16): string {
+  const lower = "abcdefghijkmnpqrstuvwxyz";
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const digit = "23456789";
+  const sym = "!@#$%&*?";
+  const all = lower + upper + digit + sym;
+  const pick = (s: string) => s[Math.floor(Math.random() * s.length)];
+  const out = [pick(lower), pick(upper), pick(digit), pick(sym)];
+  for (let i = out.length; i < len; i++) out.push(pick(all));
+  return out.sort(() => Math.random() - 0.5).join("");
+}
+
 export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -64,6 +78,8 @@ export default function UsersPage() {
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState("ANALYST");
   const [newLocale, setNewLocale] = useState("es");
+  const [newPassword, setNewPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: users = [], isLoading } = useQuery({
@@ -72,14 +88,17 @@ export default function UsersPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: { email: string; full_name: string; org_role: string; locale: string }) =>
-      api.post("/admin/users", data),
-    onSuccess: () => {
+    mutationFn: (data: { email: string; full_name: string; org_role: string; locale: string; password?: string }) =>
+      api.post<{ invite_sent?: boolean }>("/admin/users", data),
+    onSuccess: (r) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
       setDialogOpen(false);
       setNewName("");
       setNewEmail("");
-      toast.success("Usuario creado y correo de bienvenida enviado");
+      setNewPassword("");
+      toast.success(r?.invite_sent
+        ? "Usuario creado y correo de bienvenida enviado"
+        : "Usuario creado con la contraseña asignada");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error al crear usuario"),
   });
@@ -91,6 +110,7 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
       setDialogOpen(false);
       setEditingUser(null);
+      setNewPassword("");
       toast.success("Usuario actualizado");
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error al actualizar"),
@@ -142,7 +162,7 @@ export default function UsersPage() {
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => { setEditingUser(null); setNewName(""); setNewEmail(""); }}>
+              <Button onClick={() => { setEditingUser(null); setNewName(""); setNewEmail(""); setNewPassword(""); setShowPw(false); }}>
                 <Plus className="mr-2 h-4 w-4" />
                 Nuevo usuario
               </Button>
@@ -161,6 +181,7 @@ export default function UsersPage() {
                       org_role: newRole,
                       locale: newLocale,
                       expected_version: editingUser.version,
+                      ...(newPassword ? { password: newPassword } : {}),
                     });
                   } else {
                     createMutation.mutate({
@@ -168,6 +189,7 @@ export default function UsersPage() {
                       full_name: newName,
                       org_role: newRole,
                       locale: newLocale,
+                      ...(newPassword ? { password: newPassword } : {}),
                     });
                   }
                 }}
@@ -219,6 +241,44 @@ export default function UsersPage() {
                       <SelectItem value="en">English</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">
+                    {editingUser ? "Nueva contraseña (opcional)" : "Contraseña (opcional)"}
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        type={showPw ? "text" : "password"}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        autoComplete="new-password"
+                        placeholder={editingUser
+                          ? "Dejar en blanco para no cambiarla"
+                          : "Vacío = se envía correo de bienvenida"}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPw((v) => !v)}
+                        className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+                        title={showPw ? "Ocultar" : "Mostrar"}
+                      >
+                        {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      title="Generar contraseña segura"
+                      onClick={() => { setNewPassword(genPassword()); setShowPw(true); }}
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Solo el administrador puede asignarla. Debe tener mín. mayúscula, minúscula, número y símbolo.
+                  </p>
                 </div>
                 {editingUser && (
                   <Button
@@ -318,6 +378,8 @@ export default function UsersPage() {
                             setNewEmail(u.email);
                             setNewRole(u.org_role);
                             setNewLocale(u.locale);
+                            setNewPassword("");
+                            setShowPw(false);
                             setDialogOpen(true);
                           }}
                         >
