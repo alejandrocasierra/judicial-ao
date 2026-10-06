@@ -66,6 +66,27 @@ interface PageLayout {
 
 type ViewMode = "split" | "pdf" | "text";
 
+/** Palabras (letras/dígitos), igual que el backend (ocr_confidence.words). */
+function ocrWords(t: string): string[] {
+  return (t || "").match(/[^\W_]+/gu) ?? [];
+}
+/** Palabras cambiadas = max(n_old, n_new) − coincidencia (LCS). Sustituciones cuentan 1. */
+function changedWords(a: string[], b: string[]): number {
+  const n = a.length, m = b.length;
+  if (!n) return m;
+  if (!m) return n;
+  const dp = new Array(m + 1).fill(0);
+  for (let i = n - 1; i >= 0; i--) {
+    let prev = 0;
+    for (let j = m - 1; j >= 0; j--) {
+      const tmp = dp[j];
+      dp[j] = a[i] === b[j] ? prev + 1 : Math.max(dp[j], dp[j + 1]);
+      prev = tmp;
+    }
+  }
+  return Math.max(n, m) - dp[0];
+}
+
 export function DocumentOcrViewer({
   caseId,
   documentId,
@@ -154,6 +175,17 @@ export function DocumentOcrViewer({
 
   // El texto mostrado es un borrador del usuario o, si no editó, el de la página.
   const text = textDraft ?? pageData?.text ?? "";
+  // Métricas transparentes + confianza en vivo (mismo modelo que el backend).
+  const origWords = ocrWords(pageData?.text ?? "");
+  const newWords = ocrWords(text);
+  const baseConf = pageData?.ocr_confidence ?? 1;
+  const sameWords = origWords.length === newWords.length && origWords.every((w, i) => w === newWords[i]);
+  const changedCount = sameWords ? 0 : changedWords(origWords, newWords);
+  const totalWords = Math.max(origWords.length, newWords.length);
+  const dirty = !sameWords;
+  const previewConf = !dirty ? baseConf
+    : (origWords.length === 0 ? 0 : Math.max(0, baseConf - changedCount / Math.max(totalWords, 1)));
+  const pct = (v: number) => (Math.round(v * 1000) / 10).toFixed(1);
   const [prevPageData, setPrevPageData] = useState(pageData);
   if (pageData !== prevPageData) { setPrevPageData(pageData); setTextDraft(null); }
 
@@ -218,14 +250,16 @@ export function DocumentOcrViewer({
     mutationFn: () => {
       // El modo editado es el que se está viendo: una versión concreta o el modo actual del documento.
       const mode = viewOcrMode === "current" ? docInfo?.ocr_mode ?? null : viewOcrMode;
-      return api.patch<{ confidence?: number }>(
+      return api.patch<{ confidence?: number; words_total?: number; words_changed?: number }>(
         `/cases/${caseId}/documents/${documentId}/pages/${page}`,
         mode ? { text, mode } : { text },
       );
     },
     onSuccess: (data) => {
-      const pct = typeof data?.confidence === "number" ? ` Confianza del modo: ${Math.round(data.confidence * 100)}%.` : "";
-      toast.success(`OCR corregido: diccionario actualizado, vector reindexado y grafo encolado.${pct}`);
+      const extra = typeof data?.confidence === "number"
+        ? ` ${data.words_changed ?? 0} de ${data.words_total ?? 0} palabras editadas → confianza ${Math.round(data.confidence * 1000) / 10}%.`
+        : "";
+      toast.success(`OCR corregido: diccionario actualizado, vector reindexado y grafo encolado.${extra}`);
       qc.invalidateQueries({ queryKey: ["pages", caseId, documentId] });
       qc.invalidateQueries({ queryKey: ["ocr-versions", caseId, documentId] });
       refetchPage();
@@ -316,8 +350,8 @@ export function DocumentOcrViewer({
             <span className="text-xs text-muted-foreground">de {pages?.length ?? 1}</span>
             <Button variant="outline" size="icon" onClick={() => setPage((p) => Math.min(pages?.length ?? 1, p + 1))}><ChevronRight className="h-4 w-4" /></Button>
             {pageData?.ocr_confidence != null && (
-              <Badge variant={pageData.ocr_confidence >= 0.999 ? "secondary" : pageData.ocr_confidence >= 0.8 ? "default" : "destructive"}>
-                Confianza {Math.round(pageData.ocr_confidence * 100)}%
+              <Badge variant={(dirty ? previewConf : baseConf) >= 0.999 ? "secondary" : (dirty ? previewConf : baseConf) >= 0.8 ? "default" : "destructive"}>
+                Confianza {pct(dirty ? previewConf : baseConf)}%{dirty ? " (borrador)" : ""}
               </Badge>
             )}
             {docInfo?.ocr_mode && (
@@ -380,8 +414,17 @@ export function DocumentOcrViewer({
             <div className="space-y-2">
               <Textarea value={text} onChange={(e) => setTextDraft(e.target.value)}
                 rows={viewMode === "text" ? 26 : 18} className="font-mono text-xs leading-relaxed" />
-              <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Bot className="h-3.5 w-3.5" />Al guardar, la corrección alimenta el diccionario y reindexa el vector y el grafo.
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                <Bot className="h-3.5 w-3.5" />
+                <span>
+                  Palabras: <b>{newWords.length}</b> · editadas: <b>{changedCount}</b>
+                  {dirty
+                    ? <> → confianza <b>{pct(previewConf)}%</b> (sin guardar)</>
+                    : <> → confianza <b>{pct(baseConf)}%</b></>}
+                </span>
+                <span className="text-[11px]">
+                  (confianza = 100% − palabras editadas ÷ palabras totales; al guardar se reindexa vector y grafo)
+                </span>
               </p>
             </div>
           )}

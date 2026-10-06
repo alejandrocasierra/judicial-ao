@@ -248,6 +248,7 @@ def update_page(case_id: UUID, document_id: UUID, page_number: int, body: Docume
         if not prev:
             raise AppError("DOCUMENT_NOT_FOUND", 404)
         new_conf = ocr_confidence.confidence_after_edit(prev["ocr_confidence"], prev["text"], body.text)
+        metrics = ocr_confidence.edit_metrics(prev["text"], body.text)
 
         def _upsert_version(mode: str) -> None:
             one(c, """INSERT INTO document_ocr_versions
@@ -291,7 +292,8 @@ def update_page(case_id: UUID, document_id: UUID, page_number: int, body: Docume
         log.exception("no se pudo encolar graph_build tras corregir la página %s del documento %s",
                       page_number, document_id)
     return {"document_id": str(document_id), "page_number": page_number, "mode": effective_mode,
-            "confidence": new_conf, "learned_terms": learned, "reindexed": True,
+            "confidence": new_conf, "words_total": metrics["total"], "words_changed": metrics["changed"],
+            "letters": metrics["letters"], "learned_terms": learned, "reindexed": True,
             "graph_refresh_scheduled": True}
 
 
