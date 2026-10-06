@@ -586,7 +586,7 @@ def list_low_confidence_pages(conn: Connection, case_id: str, ctx: ToolContext,
         JOIN documents d ON d.id = v.document_id
         LEFT JOIN document_pages p ON p.document_id = v.document_id AND p.page_number = v.page_number
         WHERE d.case_id = :c AND v.ocr_confidence <= :mc
-          AND (:mode IS NULL OR v.mode = :mode)
+          AND (CAST(:mode AS text) IS NULL OR v.mode = :mode)
         ORDER BY v.ocr_confidence ASC, d.filename, v.page_number
         LIMIT :k""", **params)
     return [evidence_item("PG", "document_page",

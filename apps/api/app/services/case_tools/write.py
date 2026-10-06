@@ -385,10 +385,85 @@ def _media_diagnostic(conn: Connection, case_id: str, ctx: ToolContext, media_id
                           media_id=mid, filename=media["filename"], job_enqueued=True)]
 
 
+@register("reprocess_low_confidence",
+          "Reprocesa en LOTE las páginas con MENOR confianza usando el OTRO motor OCR. "
+          "Úsala cuando el usuario diga 'reprocesa las páginas de baja confianza' o 'mejora las peores hojas'. "
+          "Sin confirm muestra el plan (páginas, documentos y motor destino); con confirm=true encola el "
+          "reproceso de esos documentos. OJO: 'document_ai' usa Google y tiene costo.",
+          {"limit": {"type": "integer", "default": 20, "description": "Máximo de páginas a considerar"},
+           "max_confidence": {"type": "number", "default": 0.9, "description": "Umbral 0..1 (confianza ≤ este valor)"},
+           "mode": {"type": "string", "enum": ["basico", "document_ai"], "description": "Filtrar por motor actual"},
+           "target_mode": {"type": "string", "enum": ["basico", "document_ai"],
+                           "description": "Motor destino (por defecto, el otro respecto al actual)"},
+           "reason": {"type": "string"},
+           "confirm": {"type": "boolean", "default": False}},
+          kind="write")
+def reprocess_low_confidence(conn: Connection, case_id: str, ctx: ToolContext, limit: int = 20,
+                             max_confidence: float = 0.9, mode: str | None = None,
+                             target_mode: str | None = None, reason: str = "",
+                             confirm: bool = False) -> list[dict[str, Any]]:
+    mc = min(1.0, max(0.0, float(max_confidence if max_confidence is not None else 0.9)))
+    params: dict[str, Any] = {"c": case_id, "k": max(1, min(int(limit or 20), 200)), "mc": mc,
+                              "mode": mode if mode in ("basico", "document_ai") else None}
+    pages = rows(conn, """
+        SELECT d.id AS document_id, d.filename, d.ocr_mode, v.page_number, v.mode, v.ocr_confidence
+        FROM document_ocr_versions v
+        JOIN documents d ON d.id = v.document_id
+        WHERE d.case_id = :c AND v.ocr_confidence <= :mc
+          AND (CAST(:mode AS text) IS NULL OR v.mode = :mode)
+        ORDER BY v.ocr_confidence ASC, d.filename, v.page_number
+        LIMIT :k""", **params)
+    if not pages:
+        return [evidence_item("PG", "corpus_summary",
+                              f"No hay páginas con confianza ≤ {round(mc * 100)}% en este expediente.")]
+
+    by_doc: dict[str, dict[str, Any]] = {}
+    for r in pages:
+        did = str(r["document_id"])
+        d = by_doc.setdefault(did, {"filename": r["filename"], "pages": 0, "modes": set(),
+                                    "current": r["ocr_mode"] or "basico"})
+        d["pages"] += 1
+        d["modes"].add(r["mode"])
+
+    plan: list[dict[str, Any]] = []
+    for did, d in by_doc.items():
+        if target_mode in ("basico", "document_ai"):
+            tgt = target_mode
+        else:
+            base = sorted(d["modes"])[0] if len(d["modes"]) == 1 else d["current"]
+            tgt = "document_ai" if base == "basico" else "basico"
+        plan.append({"document_id": did, "filename": d["filename"], "pages": d["pages"], "target_mode": tgt})
+
+    detail = ", ".join(f"{p['filename']} → {p['target_mode']} ({p['pages']}p)" for p in plan[:8])
+    head = (f"{len(pages)} página(s) con confianza ≤ {round(mc * 100)}% en {len(plan)} documento(s). "
+            f"Se reprocesarán con: {detail}" + (" …" if len(plan) > 8 else ""))
+    if not confirm:
+        return _preview(head + " Llama a esta tool con confirm=true para encolarlo.",
+                        pages=len(pages), documents=len(plan),
+                        plan=[{k: p[k] for k in ("document_id", "filename", "target_mode", "pages")} for p in plan])
+    identity_error = _need_identity(ctx)
+    if identity_error:
+        return identity_error
+    enqueued = 0
+    for p in plan:
+        ok, msg = _enqueue_reprocess(conn, ctx, case_id, p["document_id"], p["target_mode"])
+        if ok:
+            enqueued += 1
+        else:
+            log.warning("no se pudo encolar el reproceso de %s: %s", p["document_id"], msg)
+    audit.record(conn, org_id=ctx.org_id, actor_id=ctx.actor_id, action="document.reprocess_batch",
+                 entity_type="case", entity_id=case_id,
+                 after={"documents": enqueued, "pages": len(pages), "max_confidence": mc, "via": "chat_tool"})
+    return [evidence_item("W", "correction_result",
+                          f"✅ Reproceso programado para {enqueued} documento(s) "
+                          f"({len(pages)} páginas con confianza ≤ {round(mc * 100)}%). "
+                          "Al terminar se actualizan BD, pgvector y el grafo.",
+                          documents=enqueued, pages=len(pages), job_enqueued=True)]
+
+
 # ---------------------------------------------------------------------------
 # Propagación (fuera de la transacción del loop; tolerante a fallos)
 # ---------------------------------------------------------------------------
-
 def _reindex_document(ctx: ToolContext, case_id: str, doc_id: str) -> bool:
     try:
         with tx(ctx.org_id, ctx.actor_id) as c:
