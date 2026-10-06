@@ -94,10 +94,13 @@ export default function ProcesoDetallePage() {
     if (!caseId || savingCkp) return;
     setSavingCkp(true);
     try {
-      const r = await api.post<{ snapshot: string; files: number; bytes: number; prefix: string }>(
+      const r = await api.post<{ snapshot: string; files: number; bytes: number; prefix: string; uri?: string }>(
         `/cases/${caseId}/ckp/persist`);
       const mb = (r.bytes / 1048576).toFixed(1);
-      toast.success(`CKP guardado en storage: ${r.files} archivos (${mb} MB) · ${r.prefix}`);
+      const where = r.uri || r.prefix;
+      toast.success(
+        `CKP guardado en el storage (no se descarga): ${r.files} archivos · ${mb} MB`,
+        { description: where, duration: 10000 });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo guardar el CKP en storage");
     } finally {
@@ -315,8 +318,9 @@ export default function ProcesoDetallePage() {
           <Button variant="outline" onClick={downloadCkp} disabled={exporting}>
             <Download className="mr-2 h-4 w-4" />{exporting ? "Exportando…" : "Exportar CKP"}
           </Button>
-          <Button variant="outline" onClick={persistCkp} disabled={savingCkp}>
-            <Database className="mr-2 h-4 w-4" />{savingCkp ? "Guardando…" : "Guardar CKP"}
+          <Button variant="outline" onClick={persistCkp} disabled={savingCkp}
+            title="Guarda el paquete como archivos en el storage del servidor (no descarga nada)">
+            <Database className="mr-2 h-4 w-4" />{savingCkp ? "Guardando…" : "Guardar en storage"}
           </Button>
           <input
             ref={fileInput} type="file" multiple accept={ACCEPT} className="hidden"
