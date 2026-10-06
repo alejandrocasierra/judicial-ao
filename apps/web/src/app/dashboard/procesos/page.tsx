@@ -306,14 +306,14 @@ export default function ProcesosPage() {
               <span className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary" />Línea de tiempo procesal</span>
               <span className="mr-6 flex items-center gap-2">
                 <Button size="sm" variant="outline" className="h-7 gap-1" disabled={buildGraph.isPending}
-                  title="Recalcular relaciones por reglas, resolver eventos referenciados y marcar duplicados/inconsistencias"
+                  title="Recalcula por reglas los vínculos entre actuaciones (causa/precede/apela/responde), resuelve las citadas y marca duplicados/inconsistencias. Instantáneo y sin IA."
                   onClick={() => buildGraph.mutate()}>
-                  <GitBranch className="h-3.5 w-3.5" />{buildGraph.isPending ? "Construyendo…" : "Relacionar y revisar"}
+                  <GitBranch className="h-3.5 w-3.5" />{buildGraph.isPending ? "Analizando…" : "Analizar vínculos"}
                 </Button>
                 <Button size="sm" variant="outline" className="h-7 gap-1" disabled={buildGraphAi.isPending}
-                  title="Segundo pase con IA: propone relaciones causales (usa el modelo de la organización, p. ej. Gemini)"
+                  title="Lo mismo que Analizar vínculos y ADEMÁS un segundo pase con IA que propone relaciones causales (usa el modelo de la organización; consume tokens)."
                   onClick={() => buildGraphAi.mutate()}>
-                  <Sparkles className="h-3.5 w-3.5" />{buildGraphAi.isPending ? "IA…" : "IA: causas"}
+                  <Sparkles className="h-3.5 w-3.5" />{buildGraphAi.isPending ? "IA…" : "Causas con IA"}
                 </Button>
               </span>
             </DialogTitle>
@@ -340,6 +340,21 @@ export default function ProcesosPage() {
               </Button>
             ))}
           </div>
+          <details className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            <summary className="cursor-pointer select-none font-medium">¿Qué significan los vínculos y las marcas?</summary>
+            <div className="mt-2 space-y-1">
+              <p><b className="text-foreground">→ causa / ← causa</b>: relación causal — una actuación provocó/ordenó la otra (la detecta la IA o las reglas).</p>
+              <p><b className="text-foreground">→ precede / ← precede</b>: orden temporal entre actuaciones (la anterior y la siguiente).</p>
+              <p><b className="text-foreground">refiere a</b>: actuación que estaba citada dentro de otra y se resolvió a la actuación real.</p>
+              <p><b className="text-foreground">apela a / responde a</b>: recurso o escrito que apela/responde a un auto o sentencia previos.</p>
+              <p><b className="text-rose-600">duplicado</b>: dos actuaciones casi idénticas (posible doble extracción). Otras marcas: <i>fecha_inconsistente</i>, <i>sin_fuente_real</i>, <i>sin_fecha</i>.</p>
+              <p><b className="text-foreground">Chip 📄 al final</b>: documento y página de origen (clic para abrir la evidencia).</p>
+              <p className="pt-1">
+                <b className="text-foreground">Analizar vínculos</b> = recalcula por reglas (instantáneo, sin IA).
+                <b className="text-foreground"> Causas con IA</b> = además propone relaciones causales con el modelo de IA (más lento, consume tokens).
+              </p>
+            </div>
+          </details>
           <div className="max-h-[60vh] overflow-y-auto pr-1">
             {timelineLoading ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
