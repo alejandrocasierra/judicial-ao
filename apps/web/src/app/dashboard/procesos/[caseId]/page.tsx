@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -16,7 +16,7 @@ import { useChatStore } from "@/lib/chat-store";
 import {
   Folder, FolderOpen, FolderPlus, Upload, ChevronRight, ArrowLeft,
   FileText, FileSpreadsheet, FileImage, Video, File as FileIcon,
-  Download, Pencil, Trash2, Eye, MessageSquare, Database,
+  Download, Pencil, Trash2, Eye, MessageSquare, Database, Search, X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,6 +27,9 @@ interface FileItem {
   id: string; filename: string; title?: string | null; mime_type: string;
   size_bytes: number; page_count?: number | null; processing_status?: string | null; created_at: string;
 }
+interface SearchFolder { id: string; name: string; parent_id: string | null; path: string }
+interface SearchItem extends FileItem { folder_id: string | null; folder_path: string }
+interface SearchResults { query: string; folders: SearchFolder[]; items: SearchItem[] }
 interface UploadResult { filename: string; status: string; kind?: string; code?: string; processing?: string; ocr_mode?: string | null; }
 
 const ACCEPT = ".xlsx,.docx,.pdf,.jpg,.jpeg,.png,.svg,.mp4";
@@ -125,6 +128,21 @@ export default function ProcesoDetallePage() {
       (query.state.data?.items ?? []).some((i) => ACTIVE_STATUSES.includes(i.processing_status ?? "")) ? 4000 : false,
   });
   const items = filesData?.items ?? [];
+
+  // Buscador del proceso: filtra carpetas, archivos, documentos y videos en TODAS
+  // las subcarpetas (debounce 300 ms).
+  const [searchQ, setSearchQ] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTerm(searchQ.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchQ]);
+  const searchActive = searchTerm.length >= 2;
+  const { data: searchData, isFetching: searching } = useQuery({
+    queryKey: ["search", caseId, searchTerm],
+    queryFn: () => api.get<SearchResults>(`/cases/${caseId}/search`, { q: searchTerm }),
+    enabled: !!caseId && searchActive,
+  });
 
   // Subcarpetas de la carpeta actual y ruta de migas de pan.
   const subfolders = useMemo(
@@ -274,6 +292,15 @@ export default function ProcesoDetallePage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo solicitar la eliminación"),
   });
 
+  // Videos/audios: igual que los PDFs, la evidencia no se borra directo; se registra
+  // una solicitud (bloqueada si el caso tiene medida de conservación / legal hold).
+  const requestMediaDeletion = useMutation({
+    mutationFn: (args: { id: string; reason: string }) =>
+      api.post(`/cases/${caseId}/media/${args.id}/deletion-request`, { reason: args.reason }),
+    onSuccess: () => { invalidate(); toast.success("Solicitud de eliminación registrada"); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo solicitar la eliminación"),
+  });
+
   async function download(item: FileItem) {
     const path =
       item.kind === "file" ? `/cases/${caseId}/files/${item.id}/download`
@@ -345,6 +372,90 @@ export default function ProcesoDetallePage() {
         ))}
       </nav>
 
+      <div className="relative max-w-md">
+        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={searchQ}
+          onChange={(e) => setSearchQ(e.target.value)}
+          placeholder="Buscar carpetas, archivos, documentos y videos…"
+          className="pl-9 pr-9"
+        />
+        {searchQ && (
+          <button type="button" onClick={() => setSearchQ("")} title="Limpiar búsqueda"
+            className="absolute right-2 top-2 text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {searchActive ? (
+        <Card>
+          <CardContent className="space-y-4 p-4">
+            {searching && !searchData ? (
+              <p className="text-muted-foreground">Buscando…</p>
+            ) : (
+              <>
+                {(searchData?.folders.length ?? 0) > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Carpetas ({searchData!.folders.length})
+                    </p>
+                    <div className="space-y-1">
+                      {searchData!.folders.map((f) => (
+                        <button key={f.id} type="button"
+                          onClick={() => { setCurrentFolder(f.id); setSearchQ(""); }}
+                          className="flex w-full items-center gap-2 rounded-md border p-2 text-left text-sm hover:bg-muted/50">
+                          <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
+                          <span className="truncate font-medium">{f.name}</span>
+                          <span className="ml-auto truncate text-xs text-muted-foreground">{f.path}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(searchData?.items.length ?? 0) > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Archivos ({searchData!.items.length})
+                    </p>
+                    <div className="space-y-1">
+                      {searchData!.items.map((it) => {
+                        const Icon = fileIcon(it.mime_type);
+                        return (
+                          <div key={`${it.kind}-${it.id}`}
+                            className="flex items-center gap-2 rounded-md border p-2 text-sm hover:bg-muted/50">
+                            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <Badge variant="outline" className="shrink-0">{typeLabel(it.mime_type)}</Badge>
+                            <span className="truncate">{it.title || it.filename}</span>
+                            <span className="ml-auto truncate text-xs text-muted-foreground">{it.folder_path}</span>
+                            {it.kind === "document" && (
+                              <Button variant="ghost" size="icon" title="Ver OCR" onClick={() => setViewerDoc(it)}>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {it.kind === "media" && (
+                              <Button variant="ghost" size="icon" title="Ver transcripción" onClick={() => setViewerMedia(it)}>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" title="Descargar" onClick={() => download(it)}>
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {searchData && searchData.folders.length === 0 && searchData.items.length === 0 && (
+                  <p className="text-sm text-muted-foreground">Sin resultados para «{searchTerm}».</p>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <>
       {subfolders.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {subfolders.map((f) => (
@@ -445,10 +556,22 @@ export default function ProcesoDetallePage() {
                         </>
                       )}
                       {it.kind === "media" && (
-                        <Button variant="ghost" size="icon" title="Ver transcripción"
-                          onClick={() => setViewerMedia(it)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <>
+                          <Button variant="ghost" size="icon" title="Ver transcripción"
+                            onClick={() => setViewerMedia(it)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" title="Solicitar eliminación"
+                            onClick={() => {
+                              const reason = window.prompt(
+                                `Motivo de la solicitud de eliminación de "${it.filename}"\n` +
+                                "(la evidencia no se borra directamente; queda marcada para eliminación):");
+                              if (reason && reason.trim())
+                                requestMediaDeletion.mutate({ id: it.id, reason: reason.trim() });
+                            }}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
                       )}
                       <Button variant="outline" size="sm" onClick={() => download(it)}>
                         <Download className="mr-2 h-4 w-4" />Descargar
@@ -461,6 +584,8 @@ export default function ProcesoDetallePage() {
           )}
         </CardContent>
       </Card>
+        </>
+      )}
 
       <Dialog open={folderDialog !== null} onOpenChange={(o) => { if (!o) setFolderDialog(null); }}>
         <DialogContent>

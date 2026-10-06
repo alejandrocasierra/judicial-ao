@@ -552,3 +552,20 @@ def deletion_request(case_id: UUID, document_id: UUID, body: DeletionRequestIn, 
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="document.deletion_requested", entity_type="document",
                      entity_id=str(document_id), after={"reason": body.reason}, request=request)
     return {"document_id": str(document_id), "status": "deletion_requested"}
+
+
+@router.post("/media/{media_id}/deletion-request", status_code=202)
+def media_deletion_request(case_id: UUID, media_id: UUID, body: DeletionRequestIn, request: Request,
+                           p: Principal = Depends(require_org("evidence.deletion_request"))):
+    """Solicita la eliminación de un video/audio (no se borra directo; respeta legal hold)."""
+    case = case_access(p, case_id, "case.read")
+    if case["legal_hold"]:
+        raise AppError("LEGAL_HOLD_ACTIVE", 409)
+    with tx(p.org_id, p.user_id) as c:
+        r = c.execute(text("UPDATE media SET deletion_requested_at = now(), deletion_requested_by = :u, deletion_reason = :r "
+                           "WHERE id = :m AND case_id = :c"), {"u": p.user_id, "r": body.reason, "m": str(media_id), "c": str(case_id)})
+        if r.rowcount == 0:
+            raise AppError("MEDIA_NOT_FOUND", 404)
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="media.deletion_requested", entity_type="media",
+                     entity_id=str(media_id), after={"reason": body.reason}, request=request)
+    return {"media_id": str(media_id), "status": "deletion_requested"}

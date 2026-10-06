@@ -10,6 +10,7 @@
     "NOT_FOUND": "Resource not found.",
     "CASE_NOT_FOUND": "Case not found.",
     "DOCUMENT_NOT_FOUND": "Document not found.",
+    "MEDIA_NOT_FOUND": "Video/audio not found.",
     "CITATION_NOT_FOUND": "Citation not found.",
     "ENTITY_NOT_FOUND": "Entity not found.",
     "USER_NOT_FOUND": "User not found.",

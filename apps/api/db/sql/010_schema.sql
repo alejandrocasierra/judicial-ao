@@ -143,6 +143,9 @@ CREATE TABLE media (
   codec text,
   processing_status text NOT NULL DEFAULT 'UPLOADED',
   uploaded_by uuid REFERENCES users(id),
+  deletion_requested_at timestamptz,
+  deletion_requested_by uuid REFERENCES users(id),
+  deletion_reason text,
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (case_id, sha256)
 );

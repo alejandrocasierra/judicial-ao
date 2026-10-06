@@ -61,6 +61,24 @@ def _folder_param(folder_id: str | None) -> str | None:
     return folder_id
 
 
+def _folder_paths(c, case_id: str) -> dict[str, str]:
+    """Mapa {folder_id: 'A / B / C'} de todo el árbol de carpetas del expediente."""
+    fs = rows(c, "SELECT id, parent_id, name FROM case_folders WHERE case_id = :c", c=case_id)
+    by_id = {str(f["id"]): f for f in fs}
+    out: dict[str, str] = {}
+    for fid in by_id:
+        parts: list[str] = []
+        cur: str | None = fid
+        seen: set[str] = set()
+        while cur and cur in by_id and cur not in seen:
+            seen.add(cur)
+            parts.append(by_id[cur]["name"])
+            parent = by_id[cur]["parent_id"]
+            cur = str(parent) if parent else None
+        out[fid] = " / ".join(reversed(parts))
+    return out
+
+
 # ---------------------------------------------------------------- carpetas
 
 
@@ -160,6 +178,43 @@ def list_files(case_id: UUID, folder_id: str | None = Query(default=None),
                   FROM media m WHERE m.case_id = :c AND m.folder_id IS NOT DISTINCT FROM :f
             ) u ORDER BY u.filename""", c=str(case_id), f=fid)
     return {"folder_id": fid, "items": items}
+
+
+@router.get("/search")
+def search_process(case_id: UUID, q: str = Query(..., min_length=1), limit: int = 100,
+                   p: Principal = Depends(current_principal)):
+    """Busca carpetas, archivos, documentos (PDF) y videos en TODO el proceso.
+
+    Incluye subcarpetas: cada resultado indica su `folder_path`. La búsqueda es por
+    nombre (sin distinguir mayúsculas)."""
+    case_access(p, case_id, "document.read")
+    term = q.strip()
+    if not term:
+        return {"query": q, "folders": [], "items": []}
+    like = f"%{term}%"
+    with tx(p.org_id, p.user_id) as c:
+        paths = _folder_paths(c, str(case_id))
+        folders = rows(c, """SELECT id, name, parent_id FROM case_folders
+                             WHERE case_id = :c AND name ILIKE :p
+                             ORDER BY name LIMIT :l""", c=str(case_id), p=like, l=limit)
+        for f in folders:
+            f["path"] = paths.get(str(f["id"]), f["name"])
+        items = rows(c, """SELECT * FROM (
+                SELECT 'file' AS kind, cf.id, cf.filename, NULL::text AS title, cf.mime_type, cf.size_bytes,
+                       NULL::int AS page_count, NULL::text AS processing_status, cf.folder_id, cf.created_at
+                  FROM case_files cf WHERE cf.case_id = :c AND cf.filename ILIKE :p
+                UNION ALL
+                SELECT 'document', d.id, d.filename, NULL, d.mime_type, d.size_bytes, d.page_count,
+                       d.processing_status, d.folder_id, d.created_at
+                  FROM documents d WHERE d.case_id = :c AND d.filename ILIKE :p
+                UNION ALL
+                SELECT 'media', m.id, m.filename, m.title, m.mime_type, m.size_bytes, NULL,
+                       m.processing_status, m.folder_id, m.created_at
+                  FROM media m WHERE m.case_id = :c AND (m.filename ILIKE :p OR m.title ILIKE :p)
+            ) u ORDER BY u.filename LIMIT :l""", c=str(case_id), p=like, l=limit)
+        for it in items:
+            it["folder_path"] = paths.get(str(it["folder_id"])) if it["folder_id"] else "Raíz del proceso"
+    return {"query": term, "folders": folders, "items": items}
 
 
 def _sniff_svg(data: bytes) -> bool:
