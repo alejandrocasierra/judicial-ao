@@ -221,7 +221,21 @@ CREATE TABLE events (
   description text NOT NULL,
   timeline_confidence text NOT NULL CHECK (timeline_confidence IN ('source_backed','inferred','ambiguous')),
   confidence numeric(4,3),
-  participants uuid[] NOT NULL DEFAULT '{}'
+  participants uuid[] NOT NULL DEFAULT '{}',
+  duplicate_of uuid REFERENCES events(id),
+  review_flags jsonb NOT NULL DEFAULT '[]'
+);
+
+CREATE TABLE event_relationships (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  case_id uuid NOT NULL REFERENCES cases(id),
+  source_event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  target_event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  relationship text NOT NULL,
+  confidence numeric(4,3),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (source_event_id, target_event_id, relationship)
 );
 
 CREATE TABLE claims (

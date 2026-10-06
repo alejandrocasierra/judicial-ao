@@ -16,7 +16,7 @@ DO $$
 DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['users','refresh_tokens','cases','case_members','parties','documents','document_pages','media',
-    'speakers','transcript_segments','entities','decisions','events','claims','facts','fact_claims','evidence','evidence_links',
+    'speakers','transcript_segments','entities','decisions','events','event_relationships','claims','facts','fact_claims','evidence','evidence_links',
     'citations','contradictions','legal_rules','issues','jobs','model_runs','reviews','chunks','graph_nodes','graph_edges'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);

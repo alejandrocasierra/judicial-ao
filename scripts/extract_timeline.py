@@ -39,6 +39,8 @@ def main() -> int:
     ap.add_argument("--user-id", default=None)
     ap.add_argument("--limit", type=int, default=0, help="Máximo de documentos a procesar (0 = todos)")
     ap.add_argument("--only-missing", action="store_true", help="Solo documentos sin actuaciones extraídas")
+    ap.add_argument("--link", action="store_true", help="Construir el Process Graph (relaciones + revisión) al terminar")
+    ap.add_argument("--link-only", action="store_true", help="Solo construir el Process Graph (sin extraer)")
     a = ap.parse_args()
 
     if not a.user_id:
@@ -61,6 +63,8 @@ def main() -> int:
         docs = [d for d in docs if str(d["id"]) not in have]
     if a.limit:
         docs = docs[:a.limit]
+    if a.link_only:
+        docs = []
 
     total = 0
     for d in docs:
@@ -74,6 +78,13 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             print(f"  ERROR {str(d['filename'])[:50]}: {exc}")
     print(f"\n[OK] documentos={len(docs)} actuaciones={total}")
+    if a.link or a.link_only:
+        from app.services import procedural_graph  # noqa: E402
+
+        with tx(a.org_id, a.user_id) as c:
+            linked = procedural_graph.link_events(c, a.org_id, a.case_id)
+            reviewed = procedural_graph.review_events(c, a.org_id, a.case_id)
+        print(f"[OK] Process Graph: relaciones={linked['relationships']} marcas={reviewed['flagged']}")
     return 0
 
 

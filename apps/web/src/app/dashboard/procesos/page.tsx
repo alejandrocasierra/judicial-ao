@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FolderKanban, Plus, ChevronRight, Pencil, Trash2, AlertTriangle, Activity, FileText, Video } from "lucide-react";
+import { FolderKanban, Plus, ChevronRight, Pencil, Trash2, AlertTriangle, Activity, FileText, Video, GitBranch } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
@@ -26,6 +26,7 @@ interface TimelineEvent {
   kind?: string | null; subtype?: string | null; instance?: string | null; actor?: string | null;
   authority?: string | null; date_type?: string | null; procedural_effect?: string | null;
   document_id?: string | null; page_number?: number | null; document_filename?: string | null;
+  duplicate_of?: string | null; review_flags?: string[] | null;
 }
 
 const INSTANCE_ES: Record<string, string> = {
@@ -58,6 +59,10 @@ const SUBTYPE_ES: Record<string, string> = {
   liquidacion_credito: "Liquidación del crédito", avaluo: "Avalúo", otro: "Otro",
 };
 const INSTANCE_ORDER = ["primera", "segunda", "casacion", "tutela", "incidente", "cautelar", "ejecucion", "otro", "generico"];
+const FLAG_ES: Record<string, string> = {
+  duplicado: "duplicado", fecha_inconsistente: "fecha inconsistente",
+  sin_fuente_real: "sin fuente real", sin_fecha: "sin fecha",
+};
 
 function mmss(ms: number) {
   const s = Math.floor((ms || 0) / 1000);
@@ -102,6 +107,16 @@ export default function ProcesosPage() {
   const tlGroups = INSTANCE_ORDER
     .map((k) => [k, timeline.filter((e) => (e.instance || (e.kind === "procedural" ? "otro" : "generico")) === k)] as const)
     .filter(([, list]) => list.length > 0);
+
+  const buildGraph = useMutation({
+    mutationFn: () => api.post<{ linked?: { relationships?: number }; reviewed?: { flagged?: number } }>(
+      `/cases/${timelineCase!.id}/timeline/build`, {}),
+    onSuccess: (r: { linked?: { relationships?: number }; reviewed?: { flagged?: number } }) => {
+      toast.success(`Process Graph: ${r?.linked?.relationships ?? 0} relaciones · ${r?.reviewed?.flagged ?? 0} marcas`);
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo construir el grafo"),
+  });
 
   const create = useMutation({
     mutationFn: () => {
@@ -270,7 +285,14 @@ export default function ProcesosPage() {
       <Dialog open={timelineCase !== null} onOpenChange={(o) => { if (!o) setTimelineCase(null); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary" />Línea de tiempo procesal</DialogTitle>
+            <DialogTitle className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary" />Línea de tiempo procesal</span>
+              <Button size="sm" variant="outline" className="mr-6 h-7 gap-1" disabled={buildGraph.isPending}
+                title="Recalcular relaciones (precede/responde/apela), resolver eventos referenciados y marcar duplicados/inconsistencias"
+                onClick={() => buildGraph.mutate()}>
+                <GitBranch className="h-3.5 w-3.5" />{buildGraph.isPending ? "Construyendo…" : "Relacionar y revisar"}
+              </Button>
+            </DialogTitle>
           </DialogHeader>
           <p className="-mt-2 text-sm text-muted-foreground">
             {timelineCase?.title} · <span className="font-mono">{timelineCase?.case_number}</span>
@@ -323,6 +345,11 @@ export default function ProcesosPage() {
                           {ev.date_type === "referenciada" && (
                             <Badge variant="outline" className="border-amber-500 text-[10px] text-amber-600">referenciada</Badge>
                           )}
+                          {(ev.review_flags ?? []).map((f) => (
+                            <Badge key={f} variant="outline" className="border-rose-500 text-[10px] text-rose-600">
+                              {FLAG_ES[f] || f}
+                            </Badge>
+                          ))}
                           {ev.timeline_confidence && ev.timeline_confidence !== "source_backed" && (
                             <Badge variant="outline" className="text-[10px]">{ev.timeline_confidence}</Badge>
                           )}

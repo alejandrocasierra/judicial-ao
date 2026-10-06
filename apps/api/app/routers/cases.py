@@ -18,7 +18,7 @@ from app.schemas import (CaseCreate, CasePatch, LegalHoldIn, MemberIn, PartyBulk
                          SpeakerMergeIn, SpeakerPatch, SpeakerRoleAssign)
 from app.security import rbac
 from app.security.deps import Principal, case_access, current_principal, require_org
-from app.services import audit, export, indexing, party_extraction, purge
+from app.services import audit, export, indexing, party_extraction, procedural_graph, purge
 from app.services import speakers as speakers_service
 from app.services.case_tools import read as ct_read
 from app.workers.dispatcher import enqueue_job
@@ -498,6 +498,7 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
             SELECT e.id, e.kind, e.event_date, e.date_precision, e.event_type, e.subtype, e.instance,
                    e.actor, e.authority, e.date_type, e.procedural_effect, e.description,
                    e.timeline_confidence, e.confidence, e.document_id, e.page_number,
+                   e.duplicate_of, e.review_flags,
                    d.filename AS document_filename,
                    (SELECT coalesce(json_agg(json_build_object('citation_id', ci.id, 'source_type', ci.source_type,
                         'document_id', ci.document_id, 'page', ci.page_number, 'media_id', ci.media_id,
@@ -515,6 +516,21 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
               AND (CAST(:actor AS text) IS NULL OR e.actor = :actor)
             ORDER BY e.event_date NULLS LAST, e.kind""",
             c=str(case_id), kind=kind, instance=instance, actor=actor)
+
+
+@router.post("/{case_id}/timeline/build")
+def build_timeline(case_id: UUID, request: Request, p: Principal = Depends(current_principal)):
+    """Recalcula el Process Graph: relaciones entre actuaciones, resolución de eventos referenciados
+    y marcas de revisión (duplicados / inconsistencias de fecha / sin fuente)."""
+    case = case_access(p, case_id, "media.upload")
+    if case["status"] == "ARCHIVED":
+        raise AppError("INVALID_STATE_TRANSITION", 409)
+    with tx(p.org_id, p.user_id) as c:
+        linked = procedural_graph.link_events(c, p.org_id, str(case_id))
+        reviewed = procedural_graph.review_events(c, p.org_id, str(case_id))
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="timeline.built", entity_type="case",
+                     entity_id=str(case_id), after={"linked": linked, "reviewed": reviewed}, request=request)
+    return {"linked": linked, "reviewed": reviewed}
 
 
 @router.get("/{case_id}/entities")
