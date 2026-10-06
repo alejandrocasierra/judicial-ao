@@ -40,6 +40,7 @@ export function SpeakerTags({
   const qc = useQueryClient();
   const [form, setForm] = useState<FormTarget | null>(null);
   const [reassignFrom, setReassignFrom] = useState<string | null>(null);
+  const [reassignOpen, setReassignOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [keepId, setKeepId] = useState<string | undefined>(undefined);
   const [mergeId, setMergeId] = useState<string | undefined>(undefined);
@@ -127,7 +128,7 @@ export function SpeakerTags({
       {unidentifiedId && unidentifiedCount > 0 && (
         <Button size="sm" variant="outline" className="h-7 gap-1"
           title="Poner nombre a las citas de «Sin identificar» (se reasignan todas)"
-          onClick={() => { setReassignFrom(unidentifiedId); setForm({}); }}>
+          onClick={() => setReassignOpen(true)}>
           <UserPlus className="h-3.5 w-3.5" />Sin identificar ({unidentifiedCount})
         </Button>
       )}
@@ -174,6 +175,29 @@ export function SpeakerTags({
           onSaved={onSaved}
         />
       )}
+
+      <Dialog open={reassignOpen} onOpenChange={setReassignOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Reasignar «Sin identificar» ({unidentifiedCount})</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Elige un hablante existente o crea uno nuevo. Se reasignan <b>todas</b> las citas de «Sin identificar».
+          </p>
+          <Select value={undefined}
+            onValueChange={(v) => {
+              setReassignOpen(false);
+              if (v === "__new__") { setReassignFrom(unidentifiedId ?? null); setForm({}); }
+              else if (unidentifiedId) { merge.mutate({ keep: v, merge: unidentifiedId }); }
+            }}>
+            <SelectTrigger className="h-9"><SelectValue placeholder="Reasignar a…" /></SelectTrigger>
+            <SelectContent>
+              {speakers.map((spk) => (
+                <SelectItem key={spk.id} value={spk.id}>{spk.display_name || spk.label}</SelectItem>
+              ))}
+              <SelectItem value="__new__">➕ Nuevo hablante…</SelectItem>
+            </SelectContent>
+          </Select>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
         <DialogContent className="max-w-md">
