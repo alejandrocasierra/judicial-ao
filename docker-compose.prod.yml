@@ -10,7 +10,7 @@ services:
     image: caddy:2
     restart: unless-stopped
     ports: ["80:80", "443:443"]
-    env_file: .env
+    env_file: ${ENV_FILE:-.env}
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
       API_PORT: ${API_PORT}

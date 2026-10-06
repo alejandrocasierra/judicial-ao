@@ -23,7 +23,7 @@
 	encode gzip
 	@api path /v1/* /health
 	handle @api {
-		reverse_proxy develop-api:8000
+		reverse_proxy develop-api:8001
 	}
 	handle {
 		reverse_proxy develop-web:3000
@@ -34,7 +34,7 @@
 	encode gzip
 	@api path /v1/* /health
 	handle @api {
-		reverse_proxy quality-api:8000
+		reverse_proxy quality-api:8002
 	}
 	handle {
 		reverse_proxy quality-web:3000

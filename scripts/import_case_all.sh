@@ -47,7 +47,7 @@ env_for() {
 }
 
 resolve_org() { # env-file -> uuid de la primera organización
-  docker compose --env-file "$1" exec -T api python -c '
+  ENV_FILE="$1" docker compose --env-file "$1" exec -T api python -c '
 import sys
 sys.path.insert(0, "/srv/scripts")
 import case_transfer as ct
@@ -77,18 +77,18 @@ for inst in $INSTANCES; do
   fi
   echo "  org destino: $org"
   echo "  copiando expediente al contenedor..."
-  docker compose --env-file "$E" cp "$EXPORT_DIR" api:/tmp/case-export >/dev/null
+  ENV_FILE="$E" docker compose --env-file "$E" cp "$EXPORT_DIR" api:/tmp/case-export >/dev/null
   args=(--in /tmp/case-export --org-id "$org")
   [ "$NO_FILES" = "1" ] && args+=(--no-files)
-  docker compose --env-file "$E" exec -T api python /srv/scripts/import_case.py "${args[@]}"
+  ENV_FILE="$E" docker compose --env-file "$E" exec -T api python /srv/scripts/import_case.py "${args[@]}"
   # Extrae y crea las PARTES (demandante/demandado/…) desde los encabezados de los autos.
   CASEID="$(sed -n 's/.*"case_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$EXPORT_DIR/manifest.json" | head -1)"
   if [ -n "$CASEID" ]; then
     echo "  extrayendo partes del expediente..."
-    docker compose --env-file "$E" exec -T api \
+    ENV_FILE="$E" docker compose --env-file "$E" exec -T api \
       python /srv/scripts/extract_parties.py --case-id "$CASEID" --org-id "$org" --confirm || true
   fi
-  docker compose --env-file "$E" exec -T api rm -rf /tmp/case-export || true
+  ENV_FILE="$E" docker compose --env-file "$E" exec -T api rm -rf /tmp/case-export || true
 done
 
 echo

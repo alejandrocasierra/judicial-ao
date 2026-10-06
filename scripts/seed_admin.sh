@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ENV_FILE="${ENV_FILE:-.env}"
+export ENV_FILE="${ENV_FILE:-.env}"   # compose lo usa en env_file: ${ENV_FILE:-.env}
 FILES=(-f docker-compose.yml)
 [ -f docker-compose.prod.yml ] && FILES+=(-f docker-compose.prod.yml)
 

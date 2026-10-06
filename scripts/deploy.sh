@@ -16,7 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ENV_FILE="${ENV_FILE:-.env}"
+export ENV_FILE="${ENV_FILE:-.env}"   # compose lo usa en env_file: ${ENV_FILE:-.env}
 SEED=0
 SHARED=0
 NO_PROXY=0
