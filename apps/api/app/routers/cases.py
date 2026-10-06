@@ -594,6 +594,41 @@ def create_speaker(case_id: UUID, body: SpeakerCreate, request: Request, p: Prin
     return spk
 
 
+@router.delete("/{case_id}/speakers/{speaker_id}")
+def delete_speaker(case_id: UUID, speaker_id: UUID, request: Request, p: Principal = Depends(current_principal)):
+    """Elimina un hablante: sus segmentos quedan SIN hablante (la cita se conserva) y se reindexa/grafo."""
+    case = case_access(p, case_id, "media.upload")
+    if case["status"] == "ARCHIVED":
+        raise AppError("INVALID_STATE_TRANSITION", 409)
+    with tx(p.org_id, p.user_id) as c:
+        spk = one(c, "SELECT id, label, display_name FROM speakers WHERE id = :i AND case_id = :c",
+                  i=str(speaker_id), c=str(case_id))
+        if not spk:
+            raise AppError("NOT_FOUND", 404)
+        media_ids = [str(r["media_id"]) for r in rows(
+            c, "SELECT DISTINCT media_id FROM transcript_segments WHERE speaker_id = :s", s=str(speaker_id))]
+        moved = one(c, "SELECT count(*) AS n FROM transcript_segments WHERE speaker_id = :s",
+                    s=str(speaker_id))["n"]
+        c.execute(text("UPDATE transcript_segments SET speaker_id = NULL WHERE speaker_id = :s"),
+                  {"s": str(speaker_id)})
+        c.execute(text("DELETE FROM speakers WHERE id = :i"), {"i": str(speaker_id)})
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="speaker.deleted", entity_type="speaker",
+                     entity_id=str(speaker_id),
+                     after={"label": spk["label"], "display_name": spk["display_name"],
+                            "segments_unassigned": moved}, request=request)
+    for mid in media_ids:
+        try:
+            with tx(p.org_id, p.user_id) as c:
+                indexing.index_media(c, p.org_id, str(case_id), mid, actor_id=p.user_id)
+        except Exception:  # noqa: BLE001
+            log.exception("no se pudo reindexar el media %s tras borrar el hablante", mid)
+    try:
+        enqueue_graph_refresh(p.org_id, str(case_id), p.user_id)
+    except Exception:  # noqa: BLE001
+        log.exception("no se pudo encolar el grafo tras borrar el hablante (caso %s)", case_id)
+    return {"deleted": str(speaker_id), "segments_unassigned": moved, "media_affected": len(media_ids)}
+
+
 def _valid_party(c, case_id: UUID, party_id) -> str | None:
     """Valida que la parte pertenezca al caso y devuelve su id (o None)."""
     if party_id is None:

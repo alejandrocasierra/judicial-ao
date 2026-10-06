@@ -396,3 +396,25 @@ def test_it_acr_16_parties_extract_and_create(client, auth, ids):
 
     names = {p["name"] for p in client.get(f"/v1/cases/{case}/parties", headers=h).json()}
     assert {"Demandante Prueba S.A.S", "Demandado Prueba"} <= names
+
+
+def test_it_acr_17_delete_speaker_unassigns_segments(client, auth, ids):
+    """Borrar un hablante deja sus segmentos SIN hablante (la cita se conserva)."""
+    h = auth("abogada.alfa")
+    case = ids["pago"]
+    mid = _first_media(client, h, case)
+    segs = client.get(f"/v1/cases/{case}/media/{mid}/segments", headers=h).json()["segments"]
+    sid, orig = segs[0]["id"], segs[0]["speaker_id"]
+    spk = client.post(f"/v1/cases/{case}/speakers", headers=h, json={"display_name": "Para Borrar"}).json()
+    try:
+        client.patch(f"/v1/cases/{case}/media/{mid}/segments/{sid}", headers=h, json={"speaker_id": spk["id"]})
+        r = client.delete(f"/v1/cases/{case}/speakers/{spk['id']}", headers=h)
+        assert r.status_code == 200, r.text
+        assert r.json()["segments_unassigned"] >= 1
+        after = client.get(f"/v1/cases/{case}/media/{mid}/segments", headers=h).json()
+        seg = next(s for s in after["segments"] if s["id"] == sid)
+        assert seg["speaker_id"] is None                      # la cita sigue, sin hablante
+        assert not any(x["id"] == spk["id"] for x in after["speakers"])
+    finally:
+        if orig:
+            client.patch(f"/v1/cases/{case}/media/{mid}/segments/{sid}", headers=h, json={"speaker_id": orig})

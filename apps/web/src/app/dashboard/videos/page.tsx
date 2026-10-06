@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SpeakerTags, type Speaker } from "@/components/speaker-tags";
+import { SpeakerFormDialog } from "@/components/speaker-form-dialog";
 import { Pagination } from "@/components/pagination";
 import { Video, Search, Save, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,7 +36,7 @@ export default function VideosPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editSpeakerId, setEditSpeakerId] = useState("none");
-  const [newSpeakerName, setNewSpeakerName] = useState("");
+  const [newSpeakerOpen, setNewSpeakerOpen] = useState(false);
   const [currentMs, setCurrentMs] = useState(0);
   const [listPage, setListPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(20);
@@ -84,19 +85,11 @@ export default function VideosPage() {
   }, [activeId]);
 
   const save = useMutation({
-    mutationFn: async (segId: string) => {
-      let speakerId: string | null = editSpeakerId === "none" ? null : editSpeakerId;
-      if (editSpeakerId === "__new__") {
-        const name = newSpeakerName.trim();
-        if (!name) throw new Error("Escribe el nombre del nuevo hablante");
-        const spk = await api.post<{ id: string }>(`/cases/${activeCaseId}/speakers`, { display_name: name });
-        speakerId = spk.id;
-      }
-      await api.patch(`/cases/${activeCaseId}/media/${media!.id}/segments/${segId}`, {
+    mutationFn: (segId: string) =>
+      api.patch(`/cases/${activeCaseId}/media/${media!.id}/segments/${segId}`, {
         text: editText,
-        speaker_id: speakerId,
-      });
-    },
+        speaker_id: editSpeakerId === "none" ? null : editSpeakerId,
+      }),
     onSuccess: () => {
       toast.success("Transcripción corregida y reindexada");
       setEditingId(null);
@@ -105,6 +98,16 @@ export default function VideosPage() {
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error"),
   });
+
+  async function onNewSpeaker(spk: { id: string }) {
+    if (!editingId || !media) return;
+    await api.patch(`/cases/${activeCaseId}/media/${media.id}/segments/${editingId}`,
+      { text: editText, speaker_id: spk.id });
+    toast.success("Hablante creado y asignado a la cita");
+    qc.invalidateQueries({ queryKey: ["segments", activeCaseId, media.id] });
+    refetch();
+    setEditingId(null);
+  }
 
   function openMedia(m: Media) { setMedia(m); setCurrentMs(0); setOpen(true); }
   function seekTo(ms: number) {
@@ -203,11 +206,12 @@ export default function VideosPage() {
                       <span className={cn("text-xs font-medium", active ? "text-primary" : "text-muted-foreground")}>
                         {mmss(s.start_ms)}–{mmss(s.end_ms)} · <span className="font-semibold text-foreground">{s.speaker_name || s.speaker_label || "Sin identificar"}</span> {s.needs_review && <Badge variant="destructive" className="ml-2">Revisar</Badge>}
                       </span>
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditingId(s.id); setEditText(s.text); setEditSpeakerId(s.speaker_id ?? "none"); setNewSpeakerName(""); }}>Editar</Button>
+                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditingId(s.id); setEditText(s.text); setEditSpeakerId(s.speaker_id ?? "none"); }}>Editar</Button>
                     </div>
                     {editingId === s.id ? (
                       <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                        <Select value={editSpeakerId} onValueChange={setEditSpeakerId}>
+                        <Select value={editSpeakerId}
+                          onValueChange={(v) => { if (v === "__new__") setNewSpeakerOpen(true); else setEditSpeakerId(v); }}>
                           <SelectTrigger className="h-9"><SelectValue placeholder="¿Quién lo dijo?" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">Sin identificar</SelectItem>
@@ -217,10 +221,6 @@ export default function VideosPage() {
                             <SelectItem value="__new__">➕ Nuevo hablante…</SelectItem>
                           </SelectContent>
                         </Select>
-                        {editSpeakerId === "__new__" && (
-                          <Input autoFocus className="h-9" placeholder="Nombre del nuevo hablante"
-                            value={newSpeakerName} onChange={(e) => setNewSpeakerName(e.target.value)} />
-                        )}
                         <Textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} />
                         <div className="flex gap-2">
                           <Button size="sm" onClick={() => save.mutate(s.id)} disabled={save.isPending}><Save className="mr-1 h-4 w-4" />Guardar</Button>
@@ -235,6 +235,13 @@ export default function VideosPage() {
             </div>
           </div>
         </DialogContent>
+        <SpeakerFormDialog
+          caseId={activeCaseId}
+          open={newSpeakerOpen}
+          onOpenChange={setNewSpeakerOpen}
+          initialName=""
+          onSaved={onNewSpeaker}
+        />
       </Dialog>
     </div>
   );

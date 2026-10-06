@@ -9,11 +9,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, streamUrl } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SpeakerTags, type Speaker } from "@/components/speaker-tags";
+import { SpeakerFormDialog } from "@/components/speaker-form-dialog";
 import { Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -56,7 +56,7 @@ export function MediaTranscriptViewer({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editSpeakerId, setEditSpeakerId] = useState("none");
-  const [newSpeakerName, setNewSpeakerName] = useState("");
+  const [newSpeakerOpen, setNewSpeakerOpen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const segRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -106,19 +106,11 @@ export function MediaTranscriptViewer({
   }, [activeId]);
 
   const save = useMutation({
-    mutationFn: async (segId: string) => {
-      let speakerId: string | null = editSpeakerId === "none" ? null : editSpeakerId;
-      if (editSpeakerId === "__new__") {
-        const name = newSpeakerName.trim();
-        if (!name) throw new Error("Escribe el nombre del nuevo hablante");
-        const spk = await api.post<{ id: string }>(`/cases/${caseId}/speakers`, { display_name: name });
-        speakerId = spk.id;
-      }
-      await api.patch(`/cases/${caseId}/media/${mediaId}/segments/${segId}`, {
+    mutationFn: (segId: string) =>
+      api.patch(`/cases/${caseId}/media/${mediaId}/segments/${segId}`, {
         text: editText,
-        speaker_id: speakerId,
-      });
-    },
+        speaker_id: editSpeakerId === "none" ? null : editSpeakerId,
+      }),
     onSuccess: () => {
       toast.success("Transcripción corregida y reindexada");
       setEditingId(null);
@@ -126,6 +118,15 @@ export function MediaTranscriptViewer({
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error al guardar"),
   });
+
+  async function onNewSpeaker(spk: { id: string }) {
+    if (!editingId) return;
+    await api.patch(`/cases/${caseId}/media/${mediaId}/segments/${editingId}`,
+      { text: editText, speaker_id: spk.id });
+    toast.success("Hablante creado y asignado a la cita");
+    qc.invalidateQueries({ queryKey: ["segments", caseId, mediaId] });
+    setEditingId(null);
+  }
 
   function seekTo(ms: number) {
     const v = videoRef.current;
@@ -185,14 +186,14 @@ export function MediaTranscriptViewer({
                         setEditingId(s.id);
                         setEditText(s.text);
                         setEditSpeakerId(s.speaker_id ?? "none");
-                        setNewSpeakerName("");
                       }}>
                       Editar
                     </Button>
                   </div>
                   {editingId === s.id ? (
                     <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                      <Select value={editSpeakerId} onValueChange={setEditSpeakerId}>
+                      <Select value={editSpeakerId}
+                        onValueChange={(v) => { if (v === "__new__") setNewSpeakerOpen(true); else setEditSpeakerId(v); }}>
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder="¿Quién lo dijo?" />
                         </SelectTrigger>
@@ -206,15 +207,6 @@ export function MediaTranscriptViewer({
                           <SelectItem value="__new__">➕ Nuevo hablante…</SelectItem>
                         </SelectContent>
                       </Select>
-                      {editSpeakerId === "__new__" && (
-                        <Input
-                          autoFocus
-                          className="h-9"
-                          placeholder="Nombre del nuevo hablante"
-                          value={newSpeakerName}
-                          onChange={(e) => setNewSpeakerName(e.target.value)}
-                        />
-                      )}
                       <Textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} />
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => save.mutate(s.id)} disabled={save.isPending}>
@@ -230,6 +222,13 @@ export function MediaTranscriptViewer({
             </div>
           </div>
         </div>
+        <SpeakerFormDialog
+          caseId={caseId}
+          open={newSpeakerOpen}
+          onOpenChange={setNewSpeakerOpen}
+          initialName=""
+          onSaved={onNewSpeaker}
+        />
       </DialogContent>
     </Dialog>
   );
