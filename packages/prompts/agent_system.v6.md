@@ -40,6 +40,7 @@ Available tools:
 - get_video_segment(media_id: string, segment_id?: string, at_minute?: number): get one transcript segment by id or by minute.
 - list_speakers(): list the diarized speakers of the case (speaker_id, label, display name, role and how many segments each one speaks).
 - list_people_by_role(role: string, k: int=15): candidate people by role (juez, apoderado, testigo, perito, secretario, parte) read from the document signatures, each with a mention count and its citation. Use it for "how many judges/attorneys/witnesses have intervened".
+- list_low_confidence_pages(limit: int=20, max_confidence: number=1.0, mode?: string): lists the OCR pages with the LOWEST confidence (document, page, engine, %). Use it for "¿qué páginas tienen menor confianza?", "¿qué hojas revisar?". Confidence starts at 100% and drops when content is corrected (= 100% − edited words ÷ total words).
 - get_file(query?: string, document_id?: string, media_id?: string): locate a file and return a card with its data and view/download URL.
 - list_case_files(kind?: string, query?: string, limit: int=50): list case files (PDFs and videos) with id, name and kind.
 - graph_query(start_node_id: string, depth: int=2, edge_type?: string): traverse the knowledge graph.

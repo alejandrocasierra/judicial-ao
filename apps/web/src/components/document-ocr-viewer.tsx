@@ -359,6 +359,12 @@ export function DocumentOcrViewer({
                 {docInfo.ocr_mode === "document_ai" ? "Document AI" : "OCR Básico"}
               </Badge>
             )}
+            {ocrVersions?.versions.map((v) => (
+              <Badge key={v.mode} variant="outline" className="gap-1 font-normal">
+                {v.mode === "document_ai" ? "Document AI" : "Básico"}
+                <b>{v.confidence_avg != null ? `${(v.confidence_avg * 100).toFixed(1)}%` : "—"}</b>
+              </Badge>
+            ))}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {ocrVersions && ocrVersions.versions.length > 0 && (

@@ -562,6 +562,41 @@ def role_suggestions(conn: Connection, case_id: str) -> list[dict[str, Any]]:
 
 
 
+@register("list_low_confidence_pages",
+          "Lista las páginas OCR con MENOR confianza del expediente (documento, página, motor y %). "
+          "Úsala para '¿qué páginas tienen menor confianza?', '¿qué hojas revisar?' o '¿dónde está peor el OCR?'. "
+          "La confianza arranca en 100% y baja al corregir contenido "
+          "(= 100% − palabras editadas ÷ palabras totales).",
+          {"limit": {"type": "integer", "default": 20, "description": "Máximo de páginas a devolver"},
+           "max_confidence": {"type": "number", "default": 1.0, "description": "Umbral 0..1 (por defecto 1 = todas)"},
+           "mode": {"type": "string", "enum": ["basico", "document_ai"],
+                    "description": "Opcional: filtrar por motor OCR"}})
+def list_low_confidence_pages(conn: Connection, case_id: str, ctx: ToolContext,
+                              limit: int = 20, max_confidence: float = 1.0,
+                              mode: str | None = None) -> list[dict[str, Any]]:
+    params: dict[str, Any] = {
+        "c": case_id, "k": max(1, min(int(limit or 20), 200)),
+        "mc": min(1.0, max(0.0, float(max_confidence if max_confidence is not None else 1.0))),
+        "mode": mode if mode in ("basico", "document_ai") else None,
+    }
+    pages = rows(conn, """
+        SELECT d.id AS document_id, d.filename, v.page_number, v.mode, v.ocr_confidence,
+               p.folio, left(coalesce(v.text, p.text, ''), 220) AS snippet
+        FROM document_ocr_versions v
+        JOIN documents d ON d.id = v.document_id
+        LEFT JOIN document_pages p ON p.document_id = v.document_id AND p.page_number = v.page_number
+        WHERE d.case_id = :c AND v.ocr_confidence <= :mc
+          AND (:mode IS NULL OR v.mode = :mode)
+        ORDER BY v.ocr_confidence ASC, d.filename, v.page_number
+        LIMIT :k""", **params)
+    return [evidence_item("PG", "document_page",
+                          f"{r['filename']} p.{r['page_number']} · {r['mode']} · "
+                          f"confianza {round(float(r['ocr_confidence']) * 1000) / 10}% — {(r['snippet'] or '').strip()[:180]}",
+                          document_id=str(r["document_id"]), filename=r["filename"], page_number=r["page_number"],
+                          folio=r["folio"], mode=r["mode"], confidence=float(r["ocr_confidence"]),
+                          role=None) for r in pages]
+
+
 @register("search_transcripts",
           "Busca texto en las transcripciones de audio/video del expediente (con hablante y minuto).",
           {"query": {"type": "string"}, "k": {"type": "integer", "default": 5},
