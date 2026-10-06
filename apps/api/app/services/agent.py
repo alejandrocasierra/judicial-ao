@@ -108,7 +108,8 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                     attachments: list[dict[str, Any]] | None = None,
                     org_id: str | None = None, actor_id: str | None = None,
                     history_turns: list[dict[str, Any]] | None = None,
-                    hints: list[str] | None = None) -> dict[str, Any]:
+                    hints: list[str] | None = None,
+                    seed_evidence: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Ejecuta el agente: tool loop → síntesis → verificación semántica.
 
     `agent_prompt` permite que un agente configurado en el panel dirija la consulta
@@ -146,7 +147,7 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
             history += (f"<attached_files>\n{html.escape(lines, quote=False)}\n</attached_files>\n"
                         "The user attached the files above with @; prefer reading them directly "
                         "(read_document / get_file / search_case with their ids).\n")
-        evidence: list[dict[str, Any]] = []
+        evidence: list[dict[str, Any]] = list(seed_evidence or [])
         corrections_pending: list[dict[str, Any]] = []
         corrections_done: list[dict[str, Any]] = []
         llm = llm or get_llm()

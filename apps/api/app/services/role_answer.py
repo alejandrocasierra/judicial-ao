@@ -1,7 +1,10 @@
 """Respuesta DETERMINISTA para preguntas de rol/agregación («¿cuántos jueces han intervenido?»).
 
 El agente redacta la respuesta; para que NO varíe según el modelo, aquí calculamos una vez la
-lista de candidatos por rol (list_people_by_role) y se la damos al modelo como fuente fija.
+lista de candidatos por rol (list_people_by_role). Se entrega de DOS formas:
+- `authoritative_evidence`: los ítems ya citables, que se INYECTAN como evidencia del agente
+  (así no abstiene aunque el modelo no llame la tool).
+- `authoritative_hint`: un bloque de texto fijo con la lista, como refuerzo para el modelo.
 """
 from __future__ import annotations
 
@@ -11,16 +14,59 @@ from app.services.case_tools import ToolContext
 from app.services.query_hints import role_from_text
 
 
-def authoritative_hint(org_id: str, user_id: str | None, case_id: str, question: str) -> str | None:
-    """Bloque de texto con la lista fija de candidatos del rol pedido, o None si no aplica."""
+def _role_items(org_id: str, user_id: str | None, case_id: str, question: str) -> tuple[str | None, list[dict]]:
     role = role_from_text(question)
     if not role:
-        return None
+        return None, []
     try:
         with tx(org_id, user_id) as c:
             items = case_tools.execute(c, str(case_id), "list_people_by_role", {"role": role, "k": 20},
                                        ctx=ToolContext(org_id=org_id, actor_id=user_id))
     except Exception:  # noqa: BLE001 — nunca romper la consulta por esto
+        return role, []
+    return role, items or []
+
+
+def authoritative_evidence(org_id: str, user_id: str | None, case_id: str, question: str) -> list[dict]:
+    """Ítems de evidencia (citables) para preguntas de rol; [] si no aplica."""
+    _role, items = _role_items(org_id, user_id, case_id, question)
+    return items
+
+
+def render(role: str, items: list[dict]) -> str:
+    """Respuesta DETERMINISTA (texto) para preguntas de rol, con la fuente de cada uno.
+
+    Se usa cuando la síntesis del modelo no produce frases verificables: para preguntas
+    de agregación («cuántos jueces») la lista calculada es más fiable que el LLM.
+    """
+    lines: list[str] = []
+    for it in items:
+        n = it.get("person_name") or it.get("display_name") or it.get("label")
+        if not n:
+            continue
+        if it.get("authority"):
+            src = f" — {it.get('filename')} p.{it.get('page_number')}" if it.get("filename") else ""
+            lines.append(f"- {n} — {it.get('mentions') or 0} actuaciones{src}")
+        elif it.get("confirmed"):
+            party = f" · parte: {it.get('party_name')}" if it.get("party_name") else ""
+            lines.append(f"- {n} — {it.get('segments') or 0} segmentos{party}")
+        else:
+            lines.append(f"- {n} — {it.get('mentions')} menciones ({it.get('filename')} p.{it.get('page_number')})")
+    if not lines:
+        return ""
+    if any(it.get("authority") for it in items):
+        head = (f"Estas son las autoridades judiciales que han participado en el proceso "
+                f"({len(lines)} despachos detectados; el total es aproximado por variantes de OCR). "
+                "El principal, por número de actuaciones, es el primero:")
+    else:
+        head = f"Estos son los «{role}» detectados en el expediente ({len(lines)}):"
+    return head + "\n" + "\n".join(lines)
+
+
+def authoritative_hint(org_id: str, user_id: str | None, case_id: str, question: str) -> str | None:
+    """Bloque de texto con la lista fija de candidatos del rol pedido, o None si no aplica."""
+    role, items = _role_items(org_id, user_id, case_id, question)
+    if not role:
         return None
     names: list[str] = []
     confirmed = any(it.get("confirmed") for it in items)

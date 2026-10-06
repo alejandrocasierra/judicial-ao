@@ -91,12 +91,15 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             with tx(p.org_id, p.user_id) as c:
                 # System prompt del agente + system prompts de sus skills enlazadas.
                 agent_prompt = agent.load_agent_prompt(c, str(body.agent_id))
+        # Preguntas de rol/agregación: se inyectan los ítems del rol como evidencia
+        # (determinista) para que el agente no abstenga aunque no llame la tool.
+        seed = role_answer.authoritative_evidence(str(p.org_id), str(p.user_id), str(case_id), body.question)
         with tx(p.org_id, p.user_id) as c:
             agent_result = agent.run_agent_query(c, str(case_id), body.question, locale,
                                                  agent_prompt=agent_prompt, llm=llm,
                                                  attachments=_attachment_dicts(body),
                                                  org_id=str(p.org_id), actor_id=str(p.user_id),
-                                                 history_turns=history, hints=hints)
+                                                 history_turns=history, hints=hints, seed_evidence=seed)
         # Propagación diferida por las tools de escritura (reindex pgvector, rebuild del
         # grafo, encolado de jobs): solo DESPUÉS de confirmar la transacción del loop.
         case_tools.drain_actions(agent_result.pop("post_commit", []))
@@ -216,17 +219,23 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                               "speaker": it["speaker"], "filename": it.get("filename")})})
     answer = " ".join(cl["text"] for cl in claims)
     if not answer and items:
-        # Hay evidencia, pero la síntesis no produjo frases verificables (o el modelo
-        # varió su estrategia). En vez de decir «sin evidencia», se muestran las fuentes
-        # ENCONTRADAS con su cita (documento+página o video+minuto+hablante).
-        snips = []
-        for it in items[:3]:
-            if it.get("source_type") == "document_page":
-                src = f"{it.get('filename')} · página {it.get('page_number')}"
-            else:
-                src = f"{it.get('filename')} · {it.get('start_mmss') or it.get('start_ms')} · {it.get('speaker') or ''}".strip()
-            snips.append(f"- «{(it.get('text') or '').strip()[:280]}» — {src}")
-        answer = t("messages.evidence_fallback", locale) + "\n" + "\n".join(snips)
+        # Preguntas de rol/agregación: respuesta DETERMINISTA con la lista calculada
+        # (la síntesis del modelo no encaja en el contrato de citas verificables).
+        role = query_hints.role_from_text(body.question)
+        if role:
+            answer = role_answer.render(role, items)
+        if not answer:
+            # Hay evidencia, pero la síntesis no produjo frases verificables (o el modelo
+            # varió su estrategia). En vez de decir «sin evidencia», se muestran las fuentes
+            # ENCONTRADAS con su cita (documento+página o video+minuto+hablante).
+            snips = []
+            for it in items[:3]:
+                if it.get("source_type") == "document_page":
+                    src = f"{it.get('filename')} · página {it.get('page_number')}"
+                else:
+                    src = f"{it.get('filename')} · {it.get('start_mmss') or it.get('start_ms')} · {it.get('speaker') or ''}".strip()
+                snips.append(f"- «{(it.get('text') or '').strip()[:280]}» — {src}")
+            answer = t("messages.evidence_fallback", locale) + "\n" + "\n".join(snips)
     if not answer:
         answer = t("messages.insufficient_evidence", locale)
     return {"answer": answer, "claims": claims, "citations": citations,
