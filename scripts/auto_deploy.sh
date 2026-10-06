@@ -43,7 +43,7 @@ for a in "$@"; do case "$a" in
 esac; done
 
 mkdir -p "$STATE_DIR"
-ts() { date -u '+%Y-%m-%d %H:%M:%S'; }
+ts() { date '+%Y-%m-%d %H:%M:%S'; }   # hora LOCAL: el cron es 16:00 local, el log debe coincidir
 # Escribe SOLO en el archivo (sin stdout): cron redirige el stdout del script
 # al mismo $LOG, y con `tee` cada línea salía duplicada.
 log() { printf '%s %s\n' "$(ts)" "$*" >> "$LOG"; }

@@ -11,6 +11,9 @@
 name: judicial-infra
 services:
   postgres:
+    # Acceso externo a la BD de producción (pedido por el usuario).
+    # El firewall de GCP sólo permite tcp:5432 desde su IP.
+    ports: ["5432:5432"]
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
