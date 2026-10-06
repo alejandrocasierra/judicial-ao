@@ -156,7 +156,9 @@ def review_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]
             "sin_fecha": sum(1 for f in flags.values() if "sin_fecha" in f)}
 
 
-_ALLOWED_LINK = {"causes", "responds_to", "appeals", "confirms", "revokes", "precedes"}
+_ALLOWED_LINK = {"causes", "responds_to", "appeals", "confirms", "revokes", "precede"}
+# El LLM a veces usa la forma en inglés; la normalizamos a la canónica (coincide con las reglas).
+_REL_ALIAS = {"precedes": "precede"}
 
 
 def propose_relations_llm(conn: Connection, org_id: str, case_id: str, actor_id: str) -> dict[str, Any]:
@@ -170,7 +172,7 @@ def propose_relations_llm(conn: Connection, org_id: str, case_id: str, actor_id:
     system, prompt_id, prompt_version = le._load_prompt("link_procedural_events", s.DEFAULT_LOCALE)
     evs = rows(conn, """SELECT id, event_date, subtype, instance, actor, description
                         FROM events WHERE case_id = :c AND kind = 'procedural'
-                        ORDER BY event_date NULLS LAST LIMIT 200""", c=case_id)
+                        ORDER BY event_date NULLS LAST LIMIT 1200""", c=case_id)
     if len(evs) < 2:
         return {"links": 0, "model_run": None, "warning": "not_enough_events"}
 
@@ -196,7 +198,7 @@ def propose_relations_llm(conn: Connection, org_id: str, case_id: str, actor_id:
         ids = {str(e["id"]) for e in chunk}
         for link in (data.get("links") or []):
             src, tgt = str(link.get("source_event_id")), str(link.get("target_event_id"))
-            rel = link.get("relationship")
+            rel = _REL_ALIAS.get(link.get("relationship"), link.get("relationship"))
             if src in ids and tgt in ids and src != tgt and rel in _ALLOWED_LINK:
                 conn.execute(text("""INSERT INTO event_relationships
                         (organization_id, case_id, source_event_id, target_event_id, relationship, confidence)

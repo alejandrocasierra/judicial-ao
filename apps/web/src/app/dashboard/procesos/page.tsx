@@ -69,7 +69,7 @@ const FLAG_ES: Record<string, string> = {
 };
 const REL_ES: Record<string, string> = {
   causes: "causa", responds_to: "responde a", appeals: "apela a", confirms: "confirma",
-  revokes: "revoca", precedes: "precede", refers_to: "refiere a", same_as: "idéntico a",
+  revokes: "revoca", precede: "precede", precedes: "precede", refers_to: "refiere a", same_as: "idéntico a",
 };
 
 function mmss(ms: number) {

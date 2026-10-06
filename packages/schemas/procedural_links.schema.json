@@ -7,7 +7,7 @@
   "properties": {
     "source_event_id": { "type": "string" },
     "target_event_id": { "type": "string" },
-    "relationship": { "enum": ["causes", "responds_to", "appeals", "confirms", "revokes", "precedes"] },
+    "relationship": { "enum": ["causes", "responds_to", "appeals", "confirms", "revokes", "precede", "precedes"] },
     "reason": { "type": "string" },
     "confidence": { "type": ["number", "null"] }
   },
