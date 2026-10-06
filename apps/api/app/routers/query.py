@@ -213,11 +213,13 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     citations = []
     for h, cid in handle_to_cit.items():
         it = by_handle[h]
-        citations.append({"citation_id": cid, "source_type": it["source_type"],
-                          **({"document_id": str(it["document_id"]), "page": it["page_number"], "folio": it["folio"], "filename": it["filename"]}
-                             if it["source_type"] == "document_page" else
-                             {"media_id": str(it["media_id"]), "start_ms": it["start_ms"], "end_ms": it["end_ms"],
-                              "speaker": it["speaker"], "filename": it.get("filename")})})
+        meta = ({"document_id": str(it["document_id"]) if it.get("document_id") else None,
+                 "page": it.get("page_number"), "folio": it.get("folio"), "filename": it.get("filename")}
+                if it["source_type"] == "document_page" else
+                {"media_id": str(it["media_id"]) if it.get("media_id") else None,
+                 "start_ms": it.get("start_ms"), "end_ms": it.get("end_ms"),
+                 "speaker": it.get("speaker"), "filename": it.get("filename")})
+        citations.append({"citation_id": cid, "source_type": it["source_type"], **meta})
     answer = " ".join(cl["text"] for cl in claims)
     if not answer and items:
         # Preguntas de rol/agregación: respuesta DETERMINISTA con la lista calculada
