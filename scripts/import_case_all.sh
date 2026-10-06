@@ -81,6 +81,13 @@ for inst in $INSTANCES; do
   args=(--in /tmp/case-export --org-id "$org")
   [ "$NO_FILES" = "1" ] && args+=(--no-files)
   docker compose --env-file "$E" exec -T api python /srv/scripts/import_case.py "${args[@]}"
+  # Extrae y crea las PARTES (demandante/demandado/…) desde los encabezados de los autos.
+  CASEID="$(sed -n 's/.*"case_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$EXPORT_DIR/manifest.json" | head -1)"
+  if [ -n "$CASEID" ]; then
+    echo "  extrayendo partes del expediente..."
+    docker compose --env-file "$E" exec -T api \
+      python /srv/scripts/extract_parties.py --case-id "$CASEID" --org-id "$org" --confirm || true
+  fi
   docker compose --env-file "$E" exec -T api rm -rf /tmp/case-export || true
 done
 

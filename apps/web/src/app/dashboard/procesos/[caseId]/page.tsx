@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
+import { PartiesButton } from "@/components/parties-panel";
 import { useChatStore } from "@/lib/chat-store";
 import {
   Folder, FolderOpen, FolderPlus, Upload, ChevronRight, ArrowLeft,
@@ -291,6 +292,7 @@ export default function ProcesoDetallePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <PartiesButton caseId={caseId} />
           <Button variant="outline" onClick={() => openChat(caseId)}>
             <MessageSquare className="mr-2 h-4 w-4" />Chat del proceso
           </Button>

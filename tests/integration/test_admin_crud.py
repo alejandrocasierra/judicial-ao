@@ -373,3 +373,26 @@ def test_it_acr_15_speaker_role_suggestions_and_bulk_assign(client, auth, ids):
     assert set(r.json()["updated"]) == {a["id"], b["id"]}
     roles = {s["id"]: s["speaker_role"] for s in client.get(f"/v1/cases/{case}/speakers", headers=h).json()}
     assert roles[a["id"]] == "Juez" and roles[b["id"]] == "Testigo"
+
+
+def test_it_acr_16_parties_extract_and_create(client, auth, ids):
+    """Extrae candidatos de partes desde los autos y crea las confirmadas (deduplica por nombre)."""
+    h = auth("abogada.alfa")
+    case = ids["pago"]
+    ex = client.post(f"/v1/cases/{case}/parties/extract", headers=h)
+    assert ex.status_code == 200, ex.text
+    assert isinstance(ex.json(), list)
+
+    r = client.post(f"/v1/cases/{case}/parties", headers=h,
+                    json={"parties": [
+                        {"name": "Demandante Prueba S.A.S", "role": "claimant", "entity_type": "organization"},
+                        {"name": "Demandado Prueba", "role": "defendant", "entity_type": "person"}]})
+    assert r.status_code == 201, r.text
+    assert len(r.json()["created"]) == 2
+
+    again = client.post(f"/v1/cases/{case}/parties", headers=h,
+                        json={"parties": [{"name": "Demandante Prueba S.A.S", "role": "claimant"}]})
+    assert again.json()["created"] == []  # no duplica
+
+    names = {p["name"] for p in client.get(f"/v1/cases/{case}/parties", headers=h).json()}
+    assert {"Demandante Prueba S.A.S", "Demandado Prueba"} <= names

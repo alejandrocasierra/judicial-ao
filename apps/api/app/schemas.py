@@ -161,6 +161,24 @@ class SpeakerRoleAssign(Strict):
     assignments: list[SpeakerRoleItem] = Field(min_length=1, max_length=200)
 
 
+PartyRole = Literal["claimant", "defendant", "plaintiff", "respondent", "appellant", "appellee",
+                    "witness", "expert", "judge", "attorney", "representative", "third_party"]
+
+
+class PartyCreate(Strict):
+    name: str = Field(min_length=2, max_length=200)
+    role: PartyRole = "third_party"
+    entity_type: Literal["person", "organization"] | None = None
+    aliases: list[str] | None = None
+
+    _v = field_validator("name")(_no_control)
+
+
+class PartyBulkIn(Strict):
+    """Alta de una o varias partes (p. ej. al confirmar la extracción)."""
+    parties: list[PartyCreate] = Field(min_length=1, max_length=300)
+
+
 class ReviewIn(Strict):
     entity_type: Literal["claim", "fact", "speaker", "contradiction"]
     action: Literal["ACCEPT", "EDIT", "REJECT", "FLAG"]

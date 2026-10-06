@@ -38,6 +38,7 @@ Ramas actualizadas (todas al mismo commit): `main`, `develop`, `develop01`, `dev
 - `scripts/deploy_all.sh` — **un solo comando** que encadena todo el modo compartido (build → infra → db_create → apps → seed_admin → semillas → proxy → import → reindex → verificación).
 - `scripts/check_gemini.sh` — prueba de humo de Gemini (modelos + chat + embeddings) contra la key del `.env`.
 - `scripts/merge_speakers.py` — fusiona dos hablantes duplicados (misma persona en dos clusters de diarización): reasigna segmentos, borra el duplicado, reindexa pgvector y reconstruye el grafo (`--dry-run` para ver el plan).
+- `scripts/extract_parties.py` + panel `PartiesButton` — extrae y crea las PARTES del proceso (demandante/demandado/…) desde los autos (heurístico, con revisión). Se ejecuta también al final de `import_case_all.sh`.
 - `Makefile` — atajos: `make deploy`, `make verify`, `make gemini`, `make import EXPORT=casos/<uuid>`, `make migrate`, `make admin`, `make ps`, `make logs`.
 
 ## 4) Cómo bajar la última versión (para cualquiera)

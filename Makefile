@@ -16,7 +16,7 @@ ORG ?=
 USER ?=
 GEMINI_KEY ?=
 
-.PHONY: help deploy verify verify-local gemini import migrate admin models reindex infra proxy build up down ps logs
+.PHONY: help deploy verify verify-local gemini import migrate admin models reindex parties infra proxy build up down ps logs
 
 help:
 	@echo "Targets (ENV=$(ENV)):"
@@ -29,6 +29,7 @@ help:
 	@echo "  make admin   ENV=...            org + admin (seed_admin)"
 	@echo "  make models  ORG=<uuid> USER=<uuid> GEMINI_KEY=<key>"
 	@echo "  make reindex CASE=<uuid> ORG=<uuid> USER=<uuid>"
+	@echo "  make parties CASE=<uuid> ORG=<uuid>   extrae y crea las partes de los autos"
 	@echo "  make infra | proxy | build | up | down | ps | logs"
 
 deploy:
@@ -61,6 +62,10 @@ models:
 reindex:
 	@test -n "$(CASE)" && test -n "$(ORG)" && test -n "$(USER)" || { echo "Faltan CASE= ORG= USER="; exit 2; }
 	docker compose --env-file "$(ENV)" exec -T api python /srv/scripts/index_chunks_cli.py --case-id "$(CASE)" --org-id "$(ORG)" --user-id "$(USER)"
+
+parties:
+	@test -n "$(CASE)" && test -n "$(ORG)" || { echo "Faltan CASE= ORG="; exit 2; }
+	docker compose --env-file "$(ENV)" exec -T api python /srv/scripts/extract_parties.py --case-id "$(CASE)" --org-id "$(ORG)" --confirm
 
 infra:
 	docker network create judicial-net 2>/dev/null || true

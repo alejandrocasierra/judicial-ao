@@ -256,7 +256,11 @@ python scripts/export_case.py --case-id <uuid> --org-id <uuid> --out casos/<uuid
 bash scripts/import_case_all.sh --export-dir casos/<uuid>
 ```
 > Si hay varias organizaciones por instancia, pasa `--site-org/--develop-org/--quality-org <uuid>`.
-> `import_case_all.sh` copia la carpeta al contenedor y ejecuta `import_case.py` (remapea org y usuarios).
+> `import_case_all.sh` copia la carpeta al contenedor y ejecuta `import_case.py` (remapea org y usuarios)
+> y **extrae y crea las PARTES del proceso** (demandante/demandado/…) desde los autos.
+> Manualmente: `make parties CASE=<uuid> ORG=<uuid>` o
+> `python /srv/scripts/extract_parties.py --case-id <uuid> --org-id <uuid> --confirm`.
+> En la UI: botón **Partes** en la cabecera del proceso (extraer → revisar → crear).
 
 ## Con OpenCode en el VPS
 Una vez instalado (`curl -fsSL https://opencode.ai/install | bash`), puedes usarlo dentro del servidor:

@@ -14,11 +14,11 @@ from app.core.db import one, rows, tx
 from app.core.errors import AppError
 from app.domain import states
 from app.domain.jurisdiction import jurisdictions, validate_case_number
-from app.schemas import (CaseCreate, CasePatch, LegalHoldIn, MemberIn, ProcessIn, SpeakerCreate, SpeakerMergeIn,
-                         SpeakerPatch, SpeakerRoleAssign)
+from app.schemas import (CaseCreate, CasePatch, LegalHoldIn, MemberIn, PartyBulkIn, ProcessIn, SpeakerCreate,
+                         SpeakerMergeIn, SpeakerPatch, SpeakerRoleAssign)
 from app.security import rbac
 from app.security.deps import Principal, case_access, current_principal, require_org
-from app.services import audit, export, indexing, purge
+from app.services import audit, export, indexing, party_extraction, purge
 from app.services import speakers as speakers_service
 from app.services.case_tools import read as ct_read
 from app.workers.dispatcher import enqueue_job
@@ -508,6 +508,30 @@ def entities(case_id: UUID, p: Principal = Depends(current_principal)):
 @router.get("/{case_id}/parties")
 def parties(case_id: UUID, p: Principal = Depends(current_principal)):
     return _list(case_id, p, "SELECT id, name, role, entity_type, aliases FROM parties WHERE case_id=:c ORDER BY name")
+
+
+@router.post("/{case_id}/parties/extract")
+def extract_parties(case_id: UUID, p: Principal = Depends(current_principal)):
+    """Candidatos de partes (demandante/demandado/…) detectados en los encabezados de los autos.
+    NO persiste: devuélvelos al panel de revisión y confirma las correctas con POST /parties."""
+    case_access(p, case_id, "media.upload")
+    with tx(p.org_id, p.user_id) as c:
+        return party_extraction.extract(c, str(case_id))
+
+
+@router.post("/{case_id}/parties", status_code=201)
+def create_parties(case_id: UUID, body: PartyBulkIn, request: Request, p: Principal = Depends(current_principal)):
+    """Confirma/crea una o varias partes (deduplica por nombre normalizado)."""
+    case = case_access(p, case_id, "media.upload")
+    if case["status"] == "ARCHIVED":
+        raise AppError("INVALID_STATE_TRANSITION", 409)
+    with tx(p.org_id, p.user_id) as c:
+        created = party_extraction.create_parties(
+            c, p.org_id, str(case_id), p.user_id, [b.model_dump() for b in body.parties])
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="parties.created", entity_type="case",
+                     entity_id=str(case_id),
+                     after={"count": len(created), "names": [x["name"] for x in created]}, request=request)
+    return {"created": created}
 
 
 @router.get("/{case_id}/speakers")
