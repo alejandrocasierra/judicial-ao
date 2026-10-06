@@ -71,6 +71,19 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
             log.exception("contradiction detection failed for case %s", case_id)
             contradictions = {"status": "error", "error": str(exc)}
 
+    # Process Graph: relaciones entre actuaciones + resolución de referenciados + revisión.
+    graph: dict[str, Any] | None = None
+    if any(r.get("status") == "ok" for r in results):
+        try:
+            from app.services import procedural_graph
+            with tx(org_id, user_id) as conn:
+                linked = procedural_graph.link_events(conn, org_id, case_id)
+                reviewed = procedural_graph.review_events(conn, org_id, case_id)
+            graph = {"linked": linked, "reviewed": reviewed}
+        except Exception as exc:  # noqa: BLE001
+            log.exception("process graph build failed for case %s", case_id)
+            graph = {"status": "error", "error": str(exc)}
+
     # Encadena la reconstrucción del grafo con los nodos recién extraídos.
     if any(r.get("status") == "ok" for r in results):
         try:
@@ -79,4 +92,4 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             log.exception("no se pudo encolar graph_build tras legal_extraction (caso %s)", case_id)
 
-    return {"processed": len(results), "results": results, "contradictions": contradictions}
+    return {"processed": len(results), "results": results, "contradictions": contradictions, "graph": graph}
