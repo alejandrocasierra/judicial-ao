@@ -173,15 +173,16 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         handle_to_cit: dict[str, str] = {}
         for h in sorted({h for cl in validated["claims"] for h in cl["citations"]}):
             it = by_handle[h]
-            if it["source_type"] == "document_page":
+            if it["source_type"] == "document_page" and it.get("document_id"):
                 cid = one(c, """INSERT INTO citations (organization_id, case_id, target_type, target_id, source_type, document_id, page_number, folio)
                     VALUES (:o,:c,'answer',:r,'document_page',:d,:pg,:f) RETURNING id""",
-                          o=p.org_id, c=str(case_id), r=run["id"], d=str(it["document_id"]), pg=it["page_number"], f=it["folio"])["id"]
-            elif it["source_type"] == "transcript_segment":
+                          o=p.org_id, c=str(case_id), r=run["id"], d=str(it["document_id"]),
+                          pg=it.get("page_number"), f=it.get("folio"))["id"]
+            elif it["source_type"] == "transcript_segment" and it.get("media_id") and it.get("segment_id"):
                 cid = one(c, """INSERT INTO citations (organization_id, case_id, target_type, target_id, source_type, media_id, segment_id, start_ms, end_ms)
                     VALUES (:o,:c,'answer',:r,'transcript_segment',:m,:sg,:s,:e) RETURNING id""",
                           o=p.org_id, c=str(case_id), r=run["id"], m=str(it["media_id"]), sg=str(it["segment_id"]),
-                          s=it["start_ms"], e=it["end_ms"])["id"]
+                          s=it.get("start_ms"), e=it.get("end_ms"))["id"]
             else:
                 continue
             handle_to_cit[h] = str(cid)
@@ -224,6 +225,18 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         role = query_hints.role_from_text(body.question)
         if role:
             answer = role_answer.render(role, items)
+            if answer:
+                # Citas de la respuesta determinista (documento+página de cada autoridad).
+                with tx(p.org_id, p.user_id) as c:
+                    for it in items[:10]:
+                        if it.get("source_type") == "document_page" and it.get("document_id"):
+                            cid = one(c, """INSERT INTO citations (organization_id, case_id, target_type, target_id, source_type, document_id, page_number, folio)
+                                VALUES (:o,:c,'answer',:r,'document_page',:d,:pg,:f) RETURNING id""",
+                                      o=p.org_id, c=str(case_id), r=run["id"], d=str(it["document_id"]),
+                                      pg=it.get("page_number"), f=it.get("folio"))["id"]
+                            citations.append({"citation_id": str(cid), "source_type": "document_page",
+                                              "document_id": str(it["document_id"]), "page": it.get("page_number"),
+                                              "folio": it.get("folio"), "filename": it.get("filename")})
         if not answer:
             # Hay evidencia, pero la síntesis no produjo frases verificables (o el modelo
             # varió su estrategia). En vez de decir «sin evidencia», se muestran las fuentes
