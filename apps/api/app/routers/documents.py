@@ -361,12 +361,15 @@ def list_segments(case_id: UUID, media_id: UUID, p: Principal = Depends(current_
         spks = rows(c, """SELECT sp.id, sp.label, sp.display_name, sp.speaker_role, sp.resolved_party_id,
                                  sp.resolution_status, sp.version
                           FROM speakers sp
-                          WHERE sp.case_id = :c
+                          WHERE sp.case_id = :c AND sp.label <> 'UNKNOWN'
                             AND EXISTS (SELECT 1 FROM transcript_segments s
                                         WHERE s.speaker_id = sp.id AND s.media_id = :m)
                           ORDER BY sp.label""", c=str(case_id), m=str(media_id))
+        unknown = one(c, "SELECT id FROM speakers WHERE case_id = :c AND label = 'UNKNOWN' LIMIT 1",
+                      c=str(case_id))
     return {"media_id": str(media_id), "filename": media["filename"], "title": media["title"],
-            "segments": segs, "speakers": spks}
+            "segments": segs, "speakers": spks,
+            "unknown_speaker_id": str(unknown["id"]) if unknown else None}
 
 
 @router.patch("/media/{media_id}/segments/{segment_id}")

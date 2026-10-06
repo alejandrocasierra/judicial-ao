@@ -55,11 +55,12 @@ export default function VideosPage() {
   });
   const { data: segmentsData, refetch } = useQuery({
     queryKey: ["segments", activeCaseId, media?.id],
-    queryFn: () => api.get<{ segments: Segment[]; speakers: Speaker[] }>(`/cases/${activeCaseId}/media/${media!.id}/segments`),
+    queryFn: () => api.get<{ segments: Segment[]; speakers: Speaker[]; unknown_speaker_id?: string | null }>(`/cases/${activeCaseId}/media/${media!.id}/segments`),
     enabled: !!media,
   });
   const segData = segmentsData?.segments;
   const speakers = segmentsData?.speakers ?? [];
+  const unidentified = segmentsData?.unknown_speaker_id ?? "none";
 
   useEffect(() => {
     let revoke: string | null = null;
@@ -206,7 +207,7 @@ export default function VideosPage() {
                       <span className={cn("text-xs font-medium", active ? "text-primary" : "text-muted-foreground")}>
                         {mmss(s.start_ms)}–{mmss(s.end_ms)} · <span className="font-semibold text-foreground">{s.speaker_name || s.speaker_label || "Sin identificar"}</span> {s.needs_review && <Badge variant="destructive" className="ml-2">Revisar</Badge>}
                       </span>
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditingId(s.id); setEditText(s.text); setEditSpeakerId(s.speaker_id ?? "none"); }}>Editar</Button>
+                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditingId(s.id); setEditText(s.text); setEditSpeakerId(s.speaker_id ?? unidentified); }}>Editar</Button>
                     </div>
                     {editingId === s.id ? (
                       <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
@@ -214,7 +215,7 @@ export default function VideosPage() {
                           onValueChange={(v) => { if (v === "__new__") setNewSpeakerOpen(true); else setEditSpeakerId(v); }}>
                           <SelectTrigger className="h-9"><SelectValue placeholder="¿Quién lo dijo?" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="none">Sin identificar</SelectItem>
+                            <SelectItem value={unidentified}>Sin identificar</SelectItem>
                             {speakers.map((spk) => (
                               <SelectItem key={spk.id} value={spk.id}>{spk.display_name || spk.label}</SelectItem>
                             ))}

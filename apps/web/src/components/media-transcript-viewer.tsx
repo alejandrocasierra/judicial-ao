@@ -64,11 +64,13 @@ export function MediaTranscriptViewer({
   const { data } = useQuery({
     queryKey: ["segments", caseId, mediaId],
     queryFn: () =>
-      api.get<{ segments: Segment[]; speakers: Speaker[] }>(`/cases/${caseId}/media/${mediaId}/segments`),
+      api.get<{ segments: Segment[]; speakers: Speaker[]; unknown_speaker_id?: string | null }>(
+        `/cases/${caseId}/media/${mediaId}/segments`),
     enabled: !!mediaId,
   });
   const segments = data?.segments;
   const speakers = data?.speakers ?? [];
+  const unidentified = data?.unknown_speaker_id ?? "none";
 
   // Streaming directo: el <video> lee por HTTP Range (no espera a descargar todo).
   const videoUrl = useMemo(
@@ -185,7 +187,7 @@ export function MediaTranscriptViewer({
                         e.stopPropagation();
                         setEditingId(s.id);
                         setEditText(s.text);
-                        setEditSpeakerId(s.speaker_id ?? "none");
+                        setEditSpeakerId(s.speaker_id ?? unidentified);
                       }}>
                       Editar
                     </Button>
@@ -198,7 +200,7 @@ export function MediaTranscriptViewer({
                           <SelectValue placeholder="¿Quién lo dijo?" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">Sin identificar</SelectItem>
+                          <SelectItem value={unidentified}>Sin identificar</SelectItem>
                           {speakers.map((spk) => (
                             <SelectItem key={spk.id} value={spk.id}>
                               {spk.display_name || spk.label}

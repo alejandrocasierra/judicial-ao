@@ -413,7 +413,8 @@ def test_it_acr_17_delete_speaker_unassigns_segments(client, auth, ids):
         assert r.json()["segments_unassigned"] >= 1
         after = client.get(f"/v1/cases/{case}/media/{mid}/segments", headers=h).json()
         seg = next(s for s in after["segments"] if s["id"] == sid)
-        assert seg["speaker_id"] is None                      # la cita sigue, sin hablante
+        assert seg["speaker_id"] == after.get("unknown_speaker_id")   # reasignado a "Sin identificar"
+        assert seg["speaker_name"] == "Sin identificar"
         assert not any(x["id"] == spk["id"] for x in after["speakers"])
     finally:
         if orig:
