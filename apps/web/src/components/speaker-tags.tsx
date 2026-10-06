@@ -6,14 +6,14 @@
  * - "Fusionar" une dos hablantes que son la misma persona (reasigna segmentos y borra el duplicado). */
 
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Merge, Pencil, Plus } from "lucide-react";
+import { Merge, Pencil, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 export interface Speaker {
@@ -33,9 +33,48 @@ interface Party {
 }
 
 const STANDARD_ROLES = ["Juez", "Magistrado", "Apoderado", "Abogado", "Fiscal", "Secretario",
-  "Demandante", "Demandado", "Testigo", "Perito"];
+  "Demandante", "Demandado", "Testigo", "Perito", "Parte"];
 const CUSTOM = "__custom__";
 const NONE = "__none__";
+
+const ROLE_KEY_LABEL: Record<string, string> = {
+  juez: "Juez", apoderado: "Apoderado", testigo: "Testigo", perito: "Perito",
+  secretario: "Secretario", fiscal: "Fiscal", parte: "Parte",
+};
+
+interface RoleSuggestion {
+  speaker_id: string;
+  label: string;
+  display_name?: string | null;
+  current_role?: string | null;
+  suggested_role: string;
+  mentions: number;
+  filename?: string | null;
+  page_number?: number | null;
+}
+
+function normTokens(s: string): string[] {
+  return (s || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase().split(/[^A-Z0-9]+/).filter((t) => t.length >= 3);
+}
+
+function similar(a: string[], b: string[]): boolean {
+  const A = new Set(a), B = new Set(b);
+  if (!A.size || !B.size) return false;
+  const inter = [...A].filter((x) => B.has(x)).length;
+  const union = new Set([...A, ...B]).size;
+  return a.every((x) => B.has(x)) || b.every((x) => A.has(x)) || inter / union >= 0.5;
+}
+
+function suggestFor(name: string, list: RoleSuggestion[]): RoleSuggestion | undefined {
+  const toks = normTokens(name);
+  let best: RoleSuggestion | undefined;
+  for (const s of list) {
+    if (similar(toks, normTokens(s.display_name || s.label)) && (!best || s.mentions > best.mentions)) best = s;
+  }
+  return best;
+}
 
 export function SpeakerTags({
   caseId,
@@ -64,6 +103,14 @@ export function SpeakerTags({
     enabled: !!caseId,
   });
   const parties = partiesQ.data ?? [];
+  const qc = useQueryClient();
+  const suggestionsQ = useQuery({
+    queryKey: ["role-suggestions", caseId],
+    queryFn: () => api.get<RoleSuggestion[]>(`/cases/${caseId}/speakers/role-suggestions`),
+    enabled: !!caseId,
+  });
+  const suggestions = suggestionsQ.data ?? [];
+  const suggestion = name.trim() ? suggestFor(name, suggestions) : undefined;
 
   const effectiveRole = role === CUSTOM ? customRole.trim() : (role === NONE ? "" : role);
 
@@ -74,7 +121,7 @@ export function SpeakerTags({
         speaker_role: effectiveRole || null,
         resolved_party_id: partyId === NONE ? null : partyId,
       }),
-    onSuccess: () => { toast.success("Hablante creado"); closeForm(); onRenamed?.(); },
+    onSuccess: () => { toast.success("Hablante creado"); closeForm(); qc.invalidateQueries({ queryKey: ["role-suggestions", caseId] }); onRenamed?.(); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo crear el hablante"),
   });
 
@@ -85,7 +132,7 @@ export function SpeakerTags({
         speaker_role: effectiveRole || null,
         resolved_party_id: partyId === NONE ? null : partyId,
       }),
-    onSuccess: () => { toast.success("Hablante actualizado"); closeForm(); onRenamed?.(); },
+    onSuccess: () => { toast.success("Hablante actualizado"); closeForm(); qc.invalidateQueries({ queryKey: ["role-suggestions", caseId] }); onRenamed?.(); },
     onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo actualizar"),
   });
 
@@ -99,6 +146,23 @@ export function SpeakerTags({
     onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo fusionar"),
   });
 
+  // Asigna de golpe el rol sugerido a todos los hablantes detectados en las firmas.
+  const assignSuggested = useMutation({
+    mutationFn: () =>
+      api.post(`/cases/${caseId}/speakers/roles`, {
+        assignments: suggestions.map((s) => ({
+          speaker_id: s.speaker_id,
+          speaker_role: ROLE_KEY_LABEL[s.suggested_role] || s.suggested_role,
+        })),
+      }),
+    onSuccess: () => {
+      toast.success("Roles sugeridos asignados");
+      qc.invalidateQueries({ queryKey: ["role-suggestions", caseId] });
+      onRenamed?.();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudieron asignar los roles"),
+  });
+
   function closeForm() {
     setFormOpen(false); setEditId(null); setName(""); setRole(NONE); setCustomRole(""); setPartyId(NONE);
   }
@@ -107,9 +171,12 @@ export function SpeakerTags({
   }
   function openEdit(spk: Speaker) {
     const r = spk.speaker_role || "";
+    const nm = spk.display_name || spk.label;
+    const sug = suggestFor(nm, suggestions);
+    const sugLabel = sug ? ROLE_KEY_LABEL[sug.suggested_role] : "";
     setEditId(spk.id);
-    setName(spk.display_name || spk.label);
-    setRole(r ? (STANDARD_ROLES.includes(r) ? r : CUSTOM) : NONE);
+    setName(nm);
+    setRole(r ? (STANDARD_ROLES.includes(r) ? r : CUSTOM) : (sugLabel || NONE));
     setCustomRole(r && !STANDARD_ROLES.includes(r) ? r : "");
     setPartyId(spk.resolved_party_id || NONE);
     setFormOpen(true);
@@ -139,11 +206,20 @@ export function SpeakerTags({
           </Badge>
         </button>
       ))}
-      {speakers.length >= 2 && (
-        <Button size="sm" variant="outline" className="ml-auto h-7 gap-1" onClick={() => setMergeOpen(true)}>
-          <Merge className="h-3.5 w-3.5" />Fusionar
-        </Button>
-      )}
+      <div className="ml-auto flex items-center gap-2">
+        {suggestions.length > 0 && (
+          <Button size="sm" variant="outline" className="h-7 gap-1" disabled={assignSuggested.isPending}
+            title="Asignar a cada hablante el rol detectado en las firmas de los documentos"
+            onClick={() => assignSuggested.mutate()}>
+            <Sparkles className="h-3.5 w-3.5" />Roles sugeridos ({suggestions.length})
+          </Button>
+        )}
+        {speakers.length >= 2 && (
+          <Button size="sm" variant="outline" className="h-7 gap-1" onClick={() => setMergeOpen(true)}>
+            <Merge className="h-3.5 w-3.5" />Fusionar
+          </Button>
+        )}
+      </div>
 
       <Dialog open={formOpen} onOpenChange={(o) => { if (!o) closeForm(); }}>
         <DialogContent className="max-w-md">
@@ -170,6 +246,17 @@ export function SpeakerTags({
               {role === CUSTOM && (
                 <Input className="h-9" placeholder="Nombre del rol (p. ej. Magistrado auxiliar)"
                   value={customRole} onChange={(e) => setCustomRole(e.target.value)} />
+              )}
+              {suggestion && (
+                <p className="text-[11px] text-muted-foreground">
+                  Sugerido: <b>{ROLE_KEY_LABEL[suggestion.suggested_role] || suggestion.suggested_role}</b>
+                  {" "}— {suggestion.mentions} menciones
+                  {suggestion.filename ? ` (${suggestion.filename} p.${suggestion.page_number})` : ""}
+                  {role === NONE && (
+                    <button type="button" className="ml-1 underline"
+                      onClick={() => setRole(ROLE_KEY_LABEL[suggestion.suggested_role] || NONE)}>usar</button>
+                  )}
+                </p>
               )}
               <p className="text-[11px] text-muted-foreground">
                 El rol permite responder con exactitud «¿cuántos jueces/apoderados…?».

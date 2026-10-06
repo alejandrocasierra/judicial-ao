@@ -15,11 +15,12 @@ from app.core.errors import AppError
 from app.domain import states
 from app.domain.jurisdiction import jurisdictions, validate_case_number
 from app.schemas import (CaseCreate, CasePatch, LegalHoldIn, MemberIn, ProcessIn, SpeakerCreate, SpeakerMergeIn,
-                         SpeakerPatch)
+                         SpeakerPatch, SpeakerRoleAssign)
 from app.security import rbac
 from app.security.deps import Principal, case_access, current_principal, require_org
 from app.services import audit, export, indexing, purge
 from app.services import speakers as speakers_service
+from app.services.case_tools import read as ct_read
 from app.workers.dispatcher import enqueue_job
 from app.workers.handlers.file_ingest import enqueue_graph_refresh
 
@@ -514,10 +515,40 @@ def speakers(case_id: UUID, p: Principal = Depends(current_principal)):
     return _list(case_id, p, "SELECT id, label, display_name, speaker_role, resolved_party_id, resolution_status, resolution_source, confidence, version FROM speakers WHERE case_id=:c ORDER BY label")
 
 
+@router.get("/{case_id}/speakers/role-suggestions")
+def speaker_role_suggestions(case_id: UUID, p: Principal = Depends(current_principal)):
+    """Sugiere un rol a cada hablante a partir de los candidatos detectados en las firmas de los documentos."""
+    case_access(p, case_id, "media.read")
+    with tx(p.org_id, p.user_id) as c:
+        return ct_read.role_suggestions(c, str(case_id))
+
+
+@router.post("/{case_id}/speakers/roles")
+def assign_speaker_roles(case_id: UUID, body: SpeakerRoleAssign, request: Request,
+                         p: Principal = Depends(current_principal)):
+    """Asigna rol (y parte opcional) a varios hablantes de una vez (deja EXACTO el conteo por rol)."""
+    case = case_access(p, case_id, "media.upload")
+    if case["status"] == "ARCHIVED":
+        raise AppError("INVALID_STATE_TRANSITION", 409)
+    updated: list[str] = []
+    with tx(p.org_id, p.user_id) as c:
+        for a in body.assignments:
+            if not one(c, "SELECT id FROM speakers WHERE id = :i AND case_id = :c",
+                       i=str(a.speaker_id), c=str(case_id)):
+                continue
+            party = _valid_party(c, case_id, a.resolved_party_id)
+            one(c, """UPDATE speakers SET speaker_role = :r, resolved_party_id = :pid, version = version + 1
+                      WHERE id = :i RETURNING id""",
+                r=(a.speaker_role or "").strip() or None, pid=party, i=str(a.speaker_id))
+            updated.append(str(a.speaker_id))
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="speaker.roles_assigned", entity_type="case",
+                     entity_id=str(case_id), after={"count": len(updated)}, request=request)
+    return {"updated": updated}
+
+
 @router.post("/{case_id}/speakers", status_code=201)
 def create_speaker(case_id: UUID, body: SpeakerCreate, request: Request, p: Principal = Depends(current_principal)):
-    """Crea un hablante manual (p. ej. alguien que la diarización no detectó) con su nombre visible,
-    su rol (juez/apoderado/…) y, opcionalmente, la parte del proceso a la que corresponde."""
+    """Crea un hablante manual con su nombre visible, su rol (juez/apoderado/…) y parte opcional."""
     case = case_access(p, case_id, "media.upload")
     if case["status"] == "ARCHIVED":
         raise AppError("INVALID_STATE_TRANSITION", 409)

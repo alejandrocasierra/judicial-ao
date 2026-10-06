@@ -355,3 +355,21 @@ def test_it_acr_14_create_and_merge_speakers(client, auth, ids):
 
     labels = {s["id"]: s["label"] for s in client.get(f"/v1/cases/{case}/speakers", headers=h).json()}
     assert aid in labels and bid not in labels
+
+
+def test_it_acr_15_speaker_role_suggestions_and_bulk_assign(client, auth, ids):
+    """Sugerencias de rol (heurísticas) y asignación de rol en bloque (conteo exacto)."""
+    h = auth("abogada.alfa")
+    case = ids["pago"]
+    sug = client.get(f"/v1/cases/{case}/speakers/role-suggestions", headers=h)
+    assert sug.status_code == 200 and isinstance(sug.json(), list)
+
+    a = client.post(f"/v1/cases/{case}/speakers", headers=h, json={"display_name": "Bulk A"}).json()
+    b = client.post(f"/v1/cases/{case}/speakers", headers=h, json={"display_name": "Bulk B"}).json()
+    r = client.post(f"/v1/cases/{case}/speakers/roles", headers=h,
+                    json={"assignments": [{"speaker_id": a["id"], "speaker_role": "Juez"},
+                                          {"speaker_id": b["id"], "speaker_role": "Testigo"}]})
+    assert r.status_code == 200, r.text
+    assert set(r.json()["updated"]) == {a["id"], b["id"]}
+    roles = {s["id"]: s["speaker_role"] for s in client.get(f"/v1/cases/{case}/speakers", headers=h).json()}
+    assert roles[a["id"]] == "Juez" and roles[b["id"]] == "Testigo"

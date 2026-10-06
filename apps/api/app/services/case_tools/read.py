@@ -410,7 +410,6 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
     keywords = _ROLE_KEYWORDS.get(role_key) or _ROLE_KEYWORDS.get(role_key.rstrip("s"))
     if not keywords:
         return _err("rol no soportado; usa uno de: " + ", ".join(sorted(_ROLE_KEYWORDS)))
-    pats = "{" + ",".join(f"%{kw}%" for kw in keywords) + "}"
     cpats = "{" + ",".join(f"%{kw}%" for kw in _ROLE_CONFIRMED.get(role_key, (role_key,))) + "}"
 
     # 1) Roles CONFIRMADOS por el usuario (speakers.speaker_role) → conteo EXACTO (no heurístico).
@@ -436,6 +435,13 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
                 for sp in confirmed[:k]]
 
     # 2) Respaldo HEURÍSTICO (firmas/encabezados) si aún no hay roles confirmados.
+    return _role_candidates_heuristic(conn, case_id, role_key, keywords, k)
+
+
+def _role_candidates_heuristic(conn: Connection, case_id: str, role_key: str,
+                               keywords: tuple[str, ...], k: int = 15) -> list[dict[str, Any]]:
+    """Candidatos por rol leídos de las firmas (heurístico): nombre, menciones y cita."""
+    pats = "{" + ",".join(f"%{kw}%" for kw in keywords) + "}"
     pages = rows(conn, """
         SELECT p.document_id, d.filename, p.page_number, p.folio, p.text
         FROM document_pages p JOIN documents d ON d.id = p.document_id
@@ -453,8 +459,7 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
             counts[key] += 1
             display.setdefault(key, name)
             best.setdefault(key, (snippet, str(pg["document_id"]), pg["filename"], pg["page_number"], pg["folio"]))
-    # Agrupa VARIANTES OCR del mismo nombre por solape de tokens (p. ej. 'ALBA LUCY COCK ALVAREZ'
-    # vs 'ALBA LUCY COCK ALVARE' vs 'ALBA KUCY COCK ÁLVAREZ') y suma sus menciones.
+    # Agrupa VARIANTES OCR del mismo nombre por solape de tokens y suma sus menciones.
     groups: list[dict[str, Any]] = []
     for key, n in counts.most_common():
         toks = _name_tokens(display[key])
@@ -472,15 +477,50 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
             groups.append({"display": display[key], "tokens": toks, "n": n, "best_n": n,
                            "snippet": snippet, "did": did, "fn": fn, "pn": pn, "folio": folio})
     groups.sort(key=lambda g: g["n"], reverse=True)
-
     items: list[dict[str, Any]] = []
     for g in groups[:k]:
-        # Nombre y conteo van en el texto para que la respuesta final pueda citarlos y verificarlos.
         text = f"{g['snippet']} ⟦{role_key}: {g['display']} · {g['n']} menciones⟧"
         items.append(evidence_item("PER", "document_page", text, document_id=g["did"], filename=g["fn"],
                                    page_number=g["pn"], folio=g["folio"], person_name=g["display"],
                                    role=role_key, mentions=g["n"]))
     return items
+
+
+def _all_role_candidates(conn: Connection, case_id: str, k: int = 12) -> list[dict[str, Any]]:
+    """Candidatos heurísticos de TODOS los roles, con tokens del nombre para emparejar."""
+    entries: list[dict[str, Any]] = []
+    for role_key, keywords in _ROLE_KEYWORDS.items():
+        for it in _role_candidates_heuristic(conn, case_id, role_key, keywords, k):
+            name = it.get("person_name") or ""
+            entries.append({"role": role_key, "name": name, "tokens": _name_tokens(name),
+                            "mentions": it.get("mentions", 0), "filename": it.get("filename"),
+                            "page_number": it.get("page_number")})
+    return entries
+
+
+def role_suggestions(conn: Connection, case_id: str) -> list[dict[str, Any]]:
+    """Sugiere un rol a cada hablante comparando su nombre con los candidatos heurísticos de firmas."""
+    entries = _all_role_candidates(conn, case_id)
+    sps = rows(conn, "SELECT id, label, display_name, speaker_role FROM speakers WHERE case_id = :c ORDER BY label",
+               c=case_id)
+    out: list[dict[str, Any]] = []
+    for sp in sps:
+        toks = _name_tokens(sp["display_name"] or "")
+        if not toks:
+            continue
+        best: dict[str, Any] | None = None
+        for e in entries:
+            inter = toks & e["tokens"]
+            union = toks | e["tokens"]
+            if toks and e["tokens"] and inter and (len(inter) / len(union) >= 0.5
+                                                   or toks <= e["tokens"] or e["tokens"] <= toks):
+                if best is None or e["mentions"] > best["mentions"]:
+                    best = e
+        if best:
+            out.append({"speaker_id": str(sp["id"]), "label": sp["label"], "display_name": sp["display_name"],
+                        "current_role": sp["speaker_role"], "suggested_role": best["role"],
+                        "mentions": best["mentions"], "filename": best["filename"], "page_number": best["page_number"]})
+    return out
 
 
 

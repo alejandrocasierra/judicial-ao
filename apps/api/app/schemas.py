@@ -150,6 +150,17 @@ class SpeakerMergeIn(Strict):
     merge_speaker_id: UUID
 
 
+class SpeakerRoleItem(Strict):
+    speaker_id: UUID
+    speaker_role: str = Field(min_length=1, max_length=100)
+    resolved_party_id: UUID | None = None
+
+
+class SpeakerRoleAssign(Strict):
+    """Asignación de rol (y parte opcional) a varios hablantes de una vez."""
+    assignments: list[SpeakerRoleItem] = Field(min_length=1, max_length=200)
+
+
 class ReviewIn(Strict):
     entity_type: Literal["claim", "fact", "speaker", "contradiction"]
     action: Literal["ACCEPT", "EDIT", "REJECT", "FLAG"]
