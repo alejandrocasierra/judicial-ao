@@ -488,16 +488,33 @@ def contradictions(case_id: UUID, p: Principal = Depends(current_principal)):
 
 
 @router.get("/{case_id}/timeline")
-def timeline(case_id: UUID, p: Principal = Depends(current_principal)):
-    return _list(case_id, p, """SELECT e.id, e.event_date, e.date_precision, e.event_type, e.description, e.timeline_confidence,
-        (SELECT coalesce(json_agg(json_build_object('citation_id', ci.id, 'source_type', ci.source_type, 'document_id', ci.document_id,
-           'page', ci.page_number, 'media_id', ci.media_id, 'start_ms', ci.start_ms, 'end_ms', ci.end_ms,
-           'filename', coalesce(d.filename, m.filename))), '[]')
-         FROM citations ci
-         LEFT JOIN documents d ON d.id = ci.document_id
-         LEFT JOIN media m ON m.id = ci.media_id
-         WHERE ci.target_type='event' AND ci.target_id=e.id) AS sources
-        FROM events e WHERE e.case_id=:c ORDER BY e.event_date NULLS LAST""")
+def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None,
+             actor: str | None = None, p: Principal = Depends(current_principal)):
+    """Línea de tiempo: eventos PROCESALES (actuaciones) y genéricos.
+    Filtros opcionales: kind=procedural|generic, instance, actor."""
+    case_access(p, case_id, "case.read")
+    with tx(p.org_id, p.user_id) as c:
+        return rows(c, """
+            SELECT e.id, e.kind, e.event_date, e.date_precision, e.event_type, e.subtype, e.instance,
+                   e.actor, e.authority, e.date_type, e.procedural_effect, e.description,
+                   e.timeline_confidence, e.confidence, e.document_id, e.page_number,
+                   d.filename AS document_filename,
+                   (SELECT coalesce(json_agg(json_build_object('citation_id', ci.id, 'source_type', ci.source_type,
+                        'document_id', ci.document_id, 'page', ci.page_number, 'media_id', ci.media_id,
+                        'start_ms', ci.start_ms, 'end_ms', ci.end_ms,
+                        'filename', coalesce(dc.filename, m.filename))), '[]')
+                     FROM citations ci
+                     LEFT JOIN documents dc ON dc.id = ci.document_id
+                     LEFT JOIN media m ON m.id = ci.media_id
+                     WHERE ci.target_type = 'event' AND ci.target_id = e.id) AS sources
+            FROM events e
+            LEFT JOIN documents d ON d.id = e.document_id
+            WHERE e.case_id = :c
+              AND (CAST(:kind AS text) IS NULL OR e.kind = :kind)
+              AND (CAST(:instance AS text) IS NULL OR e.instance = :instance)
+              AND (CAST(:actor AS text) IS NULL OR e.actor = :actor)
+            ORDER BY e.event_date NULLS LAST, e.kind""",
+            c=str(case_id), kind=kind, instance=instance, actor=actor)
 
 
 @router.get("/{case_id}/entities")

@@ -792,6 +792,79 @@ def extract_events(
     return {"events": n_events, "citations": n_citations, "model_run": last_validation}
 
 
+def _insert_procedural_events(conn: Connection, org_id: str, case_id: str, document_id: str | None,
+                              events: list[dict[str, Any]]) -> list[str]:
+    ids: list[str] = []
+    for e in events:
+        eid = _valid_uuid_or_new(e.get("id"))
+        ids.append(eid)
+        one(conn, """
+            INSERT INTO events
+              (id, organization_id, case_id, kind, event_type, subtype, instance, actor, authority,
+               date_type, procedural_effect, document_id, page_number, event_date, date_precision,
+               description, timeline_confidence, confidence, participants)
+            VALUES
+              (:id, :o, :c, 'procedural', :et, :st, :inst, :act, :auth, :dt, :eff, :doc, :pg, :ed, :dp,
+               :desc, :tc, :conf, :parts)
+            ON CONFLICT (id) DO UPDATE SET
+              kind = 'procedural', event_type = EXCLUDED.event_type, subtype = EXCLUDED.subtype,
+              instance = EXCLUDED.instance, actor = EXCLUDED.actor, authority = EXCLUDED.authority,
+              date_type = EXCLUDED.date_type, procedural_effect = EXCLUDED.procedural_effect,
+              document_id = EXCLUDED.document_id, page_number = EXCLUDED.page_number,
+              event_date = EXCLUDED.event_date, date_precision = EXCLUDED.date_precision,
+              description = EXCLUDED.description, timeline_confidence = EXCLUDED.timeline_confidence,
+              confidence = EXCLUDED.confidence, participants = EXCLUDED.participants
+            RETURNING id""",
+            id=eid, o=org_id, c=case_id, et=e.get("event_type") or "otro", st=e.get("subtype") or "otro",
+            inst=e.get("instance"), act=e.get("actor"), auth=e.get("authority"),
+            dt=e.get("date_type") or "actuacion", eff=e.get("procedural_effect"),
+            doc=document_id, pg=e.get("page_number"), ed=e.get("event_date"),
+            dp=e.get("date_precision") or "day", desc=e["description"],
+            tc=e.get("timeline_confidence") or "source_backed", conf=e.get("confidence"),
+            parts=_uuid_list(e.get("participants") or []))
+    return ids
+
+
+def extract_procedural_events(
+    conn: Connection,
+    org_id: str,
+    case_id: str,
+    source_type: str,
+    source_id: str,
+    actor_id: str,
+    locale: str | None = None,
+) -> dict[str, Any]:
+    """Extrae ACTUACIONES PROCESALES del documento/media y las persiste (kind='procedural')."""
+    locale = locale or get_settings().DEFAULT_LOCALE
+    system, prompt_id, prompt_version = _load_prompt("extract_procedural_events", locale)
+    all_items, input_hash = build_evidence_blocks(conn, case_id, source_type, source_id)
+    if not all_items:
+        return {"events": 0, "citations": 0, "model_run": None, "warning": "no_evidence"}
+
+    document_id = source_id if source_type == "document" else None
+    schema_path = get_settings().path("packages/schemas/procedural_event.schema.json")
+    n_events = n_citations = 0
+    last_validation: dict[str, Any] | None = None
+    for items in _batch_windows(all_items):
+        user = build_user_prompt(items)
+        result = _call_llm(conn, case_id, system, user, "extract_procedural_events")
+        data, validation = _validate_and_parse(result, schema_path, conn, case_id, actor_id, ["events"])
+        _record_model_run(conn, org_id, case_id, "extract_procedural_events", prompt_id, prompt_version,
+                          input_hash, result, validation, actor_id)
+        last_validation = validation
+        if not validation["schema_valid"]:
+            continue
+        events = data.get("events") or []
+        evidence_map = {it["handle"]: it for it in items}
+        ids = _insert_procedural_events(conn, org_id, case_id, document_id, events)
+        for eid, e in zip(ids, events, strict=False):
+            _insert_citations(conn, org_id, case_id, "event", eid, e.get("sources") or [], evidence_map)
+        n_events += len(ids)
+        n_citations += sum(len((e.get("sources") or [])) for e in events)
+
+    return {"events": n_events, "citations": n_citations, "model_run": last_validation}
+
+
 def extract_decisions(
     conn: Connection,
     org_id: str,

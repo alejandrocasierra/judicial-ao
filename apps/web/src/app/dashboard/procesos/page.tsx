@@ -23,7 +23,41 @@ interface TimelineSource {
 interface TimelineEvent {
   id: string; event_date: string | null; date_precision?: string | null; event_type?: string | null;
   description: string; timeline_confidence?: string | null; sources: TimelineSource[];
+  kind?: string | null; subtype?: string | null; instance?: string | null; actor?: string | null;
+  authority?: string | null; date_type?: string | null; procedural_effect?: string | null;
+  document_id?: string | null; page_number?: number | null; document_filename?: string | null;
 }
+
+const INSTANCE_ES: Record<string, string> = {
+  primera: "Primera instancia", segunda: "Segunda instancia", casacion: "Casación", tutela: "Tutela",
+  incidente: "Incidente", cautelar: "Medida cautelar", ejecucion: "Ejecución", otro: "Otras actuaciones",
+  generico: "Otros eventos",
+};
+const ACTOR_ES: Record<string, string> = {
+  juzgado: "Juzgado", demandante: "Demandante", demandado: "Demandado",
+  apoderado_demandante: "Apod. demandante", apoderado_demandado: "Apod. demandado",
+  tercero: "Tercero", fiscal: "Fiscalía", secretario: "Secretaría", otro: "Otro",
+};
+const SUBTYPE_ES: Record<string, string> = {
+  demanda: "Demanda", reforma_demanda: "Reforma de demanda", subsanacion: "Subsanación", rechazo: "Rechazo",
+  inadmision: "Inadmisión", admision: "Admisión", reparto: "Reparto", radicacion: "Radicación",
+  contestacion: "Contestación", reconvencion: "Reconvención", excepciones: "Excepciones", memorial: "Memorial",
+  solicitud: "Solicitud", desistimiento: "Desistimiento", alegato: "Alegato", recurso: "Recurso", objecion: "Objeción",
+  auto: "Auto", auto_admisorio: "Auto admisorio", auto_pruebas: "Auto de pruebas", auto_fija_audiencia: "Fija audiencia",
+  auto_suspension: "Suspensión", auto_terminacion: "Terminación", sentencia: "Sentencia", correccion: "Corrección",
+  aclaracion: "Aclaración", adicion: "Adición", apremio: "Apremio", reposicion: "Reposición", apelacion: "Apelación",
+  queja: "Queja", casacion: "Casación", revision: "Revisión", nulidad: "Nulidad",
+  concesion_recurso: "Concesión de recurso", improcedencia_recurso: "Improcedencia del recurso",
+  notificacion_personal: "Notificación personal", notificacion_estado: "Notificación por estado",
+  notificacion_electronica: "Notificación electrónica", emplazamiento: "Emplazamiento", comunicacion: "Comunicación",
+  solicitud_prueba: "Solicitud de prueba", decreto_prueba: "Decreto de prueba", practica_prueba: "Práctica de prueba",
+  testimonio: "Testimonio", interrogatorio: "Interrogatorio", dictamen: "Dictamen", inspeccion_judicial: "Inspección judicial",
+  incorporacion_documental: "Incorporación documental", audiencia: "Audiencia", audiencia_inicial: "Audiencia inicial",
+  audiencia_juzgamiento: "Audiencia de juzgamiento", suspension_audiencia: "Suspensión de audiencia",
+  mandamiento_pago: "Mandamiento de pago", embargo: "Embargo", secuestro: "Secuestro", remate: "Remate",
+  liquidacion_credito: "Liquidación del crédito", avaluo: "Avalúo", otro: "Otro",
+};
+const INSTANCE_ORDER = ["primera", "segunda", "casacion", "tutela", "incidente", "cautelar", "ejecucion", "otro", "generico"];
 
 function mmss(ms: number) {
   const s = Math.floor((ms || 0) / 1000);
@@ -41,6 +75,9 @@ export default function ProcesosPage() {
   const [deleting, setDeleting] = useState<Case | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [timelineCase, setTimelineCase] = useState<Case | null>(null);
+  const [tlKind, setTlKind] = useState<string>("procedural");
+  const [tlInstance, setTlInstance] = useState<string>("all");
+  const [tlActor, setTlActor] = useState<string>("all");
   const [docView, setDocView] = useState<{ caseId: string; id: string; page: number; name?: string | null } | null>(null);
   const [mediaView, setMediaView] = useState<{ caseId: string; id: string; ms: number; name?: string | null } | null>(null);
 
@@ -50,10 +87,21 @@ export default function ProcesosPage() {
   });
 
   const { data: timeline = [], isLoading: timelineLoading } = useQuery({
-    queryKey: ["timeline", timelineCase?.id],
-    queryFn: () => api.get<TimelineEvent[]>(`/cases/${timelineCase!.id}/timeline`),
+    queryKey: ["timeline", timelineCase?.id, tlKind, tlInstance, tlActor],
+    queryFn: () => {
+      const params: Record<string, string> = {};
+      if (tlKind !== "all") params.kind = tlKind;
+      if (tlInstance !== "all") params.instance = tlInstance;
+      if (tlActor !== "all") params.actor = tlActor;
+      return api.get<TimelineEvent[]>(`/cases/${timelineCase!.id}/timeline`, params);
+    },
     enabled: !!timelineCase,
   });
+  const tlInstances = Array.from(new Set(timeline.map((e) => e.instance).filter(Boolean))) as string[];
+  const tlActors = Array.from(new Set(timeline.map((e) => e.actor).filter(Boolean))) as string[];
+  const tlGroups = INSTANCE_ORDER
+    .map((k) => [k, timeline.filter((e) => (e.instance || (e.kind === "procedural" ? "otro" : "generico")) === k)] as const)
+    .filter(([, list]) => list.length > 0);
 
   const create = useMutation({
     mutationFn: () => {
@@ -227,56 +275,88 @@ export default function ProcesosPage() {
           <p className="-mt-2 text-sm text-muted-foreground">
             {timelineCase?.title} · <span className="font-mono">{timelineCase?.case_number}</span>
           </p>
-          <div className="max-h-[65vh] overflow-y-auto pr-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Filtros:</span>
+            <Button size="sm" variant={tlKind === "all" ? "default" : "outline"} className="h-7" onClick={() => setTlKind("all")}>Todo</Button>
+            <Button size="sm" variant={tlKind === "procedural" ? "default" : "outline"} className="h-7" onClick={() => setTlKind("procedural")}>Actuaciones</Button>
+            <Button size="sm" variant={tlKind === "generic" ? "default" : "outline"} className="h-7" onClick={() => setTlKind("generic")}>Otros</Button>
+            <span className="mx-1 h-4 w-px bg-border" />
+            <Button size="sm" variant={tlInstance === "all" ? "default" : "outline"} className="h-7" onClick={() => setTlInstance("all")}>Toda instancia</Button>
+            {tlInstances.map((i) => (
+              <Button key={i} size="sm" variant={tlInstance === i ? "default" : "outline"} className="h-7" onClick={() => setTlInstance(tlInstance === i ? "all" : i)}>
+                {INSTANCE_ES[i] || i}
+              </Button>
+            ))}
+            {tlActors.length > 0 && <span className="mx-1 h-4 w-px bg-border" />}
+            {tlActors.map((a) => (
+              <Button key={a} size="sm" variant={tlActor === a ? "default" : "outline"} className="h-7" onClick={() => setTlActor(tlActor === a ? "all" : a)}>
+                {ACTOR_ES[a] || a}
+              </Button>
+            ))}
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto pr-1">
             {timelineLoading ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
             ) : timeline.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                No hay eventos en la línea de tiempo todavía. Se alimenta de la extracción de eventos del expediente.
+                No hay actuaciones en la línea de tiempo todavía. Se alimenta de la extracción de actuaciones
+                procesales del expediente (autos, sentencias, recursos, pruebas, audiencias…).
               </p>
             ) : (
-              <ol className="relative ml-2 border-l border-border">
-                {timeline.map((ev) => (
-                  <li key={ev.id} className="relative mb-5 ml-4">
-                    <span className="absolute -left-[21px] top-1.5 h-3 w-3 rounded-full border-2 border-background bg-primary" />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold">
-                        {ev.event_date
-                          ? new Date(ev.event_date).toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" })
-                          : "Sin fecha"}
-                      </span>
-                      {ev.date_precision && <Badge variant="outline" className="text-[10px]">{ev.date_precision}</Badge>}
-                      {ev.event_type && <Badge variant="secondary" className="text-[10px]">{ev.event_type}</Badge>}
-                      {ev.timeline_confidence && (
-                        <Badge variant={ev.timeline_confidence === "source_backed" ? "default" : "outline"} className="text-[10px]">
-                          {ev.timeline_confidence}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="mt-1 text-sm">{ev.description}</p>
-                    {ev.sources?.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {ev.sources.map((s) => (
-                          <button key={s.citation_id} type="button"
-                            onClick={() => {
-                              if (!timelineCase) return;
-                              if (s.source_type === "document_page" && s.document_id) {
-                                setDocView({ caseId: timelineCase.id, id: s.document_id, page: s.page || 1, name: s.filename });
-                              } else if (s.media_id) {
-                                setMediaView({ caseId: timelineCase.id, id: s.media_id, ms: s.start_ms || 0, name: s.filename });
-                              }
-                            }}
-                            className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
-                            {s.source_type === "document_page" ? <FileText className="h-3 w-3" /> : <Video className="h-3 w-3" />}
-                            {s.filename || (s.source_type === "document_page" ? "documento" : "video")}
-                            {s.source_type === "document_page" ? ` p.${s.page}` : ` ${mmss(s.start_ms || 0)}`}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ol>
+              tlGroups.map(([instance, list]) => (
+                <section key={instance} className="mb-4">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {INSTANCE_ES[instance] || instance} · {list.length}
+                  </h4>
+                  <ol className="relative ml-2 border-l border-border">
+                    {list.map((ev) => (
+                      <li key={ev.id} className="relative mb-5 ml-4">
+                        <span className="absolute -left-[21px] top-1.5 h-3 w-3 rounded-full border-2 border-background bg-primary" />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold">
+                            {ev.event_date
+                              ? new Date(ev.event_date).toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" })
+                              : "Sin fecha"}
+                          </span>
+                          {ev.subtype && <Badge variant="secondary" className="text-[10px]">{SUBTYPE_ES[ev.subtype] || ev.subtype}</Badge>}
+                          {ev.actor && <Badge variant="outline" className="text-[10px]">{ACTOR_ES[ev.actor] || ev.actor}</Badge>}
+                          {ev.date_type === "referenciada" && (
+                            <Badge variant="outline" className="border-amber-500 text-[10px] text-amber-600">referenciada</Badge>
+                          )}
+                          {ev.timeline_confidence && ev.timeline_confidence !== "source_backed" && (
+                            <Badge variant="outline" className="text-[10px]">{ev.timeline_confidence}</Badge>
+                          )}
+                        </div>
+                        {ev.authority && <p className="mt-0.5 text-[11px] text-muted-foreground">{ev.authority}</p>}
+                        <p className="mt-1 text-sm">{ev.description}</p>
+                        {ev.procedural_effect && (
+                          <p className="mt-0.5 text-xs text-muted-foreground"><b>Efecto:</b> {ev.procedural_effect}</p>
+                        )}
+                        {ev.sources?.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {ev.sources.map((s) => (
+                              <button key={s.citation_id} type="button"
+                                onClick={() => {
+                                  if (!timelineCase) return;
+                                  if (s.source_type === "document_page" && s.document_id) {
+                                    setDocView({ caseId: timelineCase.id, id: s.document_id, page: s.page || 1, name: s.filename });
+                                  } else if (s.media_id) {
+                                    setMediaView({ caseId: timelineCase.id, id: s.media_id, ms: s.start_ms || 0, name: s.filename });
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
+                                {s.source_type === "document_page" ? <FileText className="h-3 w-3" /> : <Video className="h-3 w-3" />}
+                                {s.filename || (s.source_type === "document_page" ? "documento" : "video")}
+                                {s.source_type === "document_page" ? ` p.${s.page}` : ` ${mmss(s.start_ms || 0)}`}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              ))
             )}
           </div>
         </DialogContent>

@@ -11,7 +11,8 @@ from typing import Any
 
 from app.core.db import one, tx
 from app.services.legal_extraction import (detect_contradictions, extract_claims, extract_decisions,
-                                            extract_entities, extract_events, link_evidence)
+                                            extract_entities, extract_events, extract_procedural_events,
+                                            link_evidence)
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
                 result["entities"] = extract_entities(conn, org_id, case_id, source_type, resolved_id, user_id)
                 result["claims"] = extract_claims(conn, org_id, case_id, source_type, resolved_id, user_id)
                 result["events"] = extract_events(conn, org_id, case_id, source_type, resolved_id, user_id)
+                result["procedural_events"] = extract_procedural_events(conn, org_id, case_id, source_type, resolved_id, user_id)
                 result["decisions"] = extract_decisions(conn, org_id, case_id, source_type, resolved_id, user_id)
                 result["evidence_links"] = link_evidence(conn, org_id, case_id, source_type, resolved_id, user_id)
         except Exception as exc:  # noqa: BLE001

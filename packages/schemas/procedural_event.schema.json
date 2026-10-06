@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/procedural_event.schema.json",
+  "title": "procedural_event",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "date_type": { "enum": ["actuacion", "documento", "incorporacion", "referenciada"] },
+    "event_date": { "type": ["string", "null"], "format": "date" },
+    "date_precision": { "enum": ["day", "month", "year", "unknown"] },
+    "event_type": { "type": "string" },
+    "subtype": { "type": "string" },
+    "instance": { "type": "string" },
+    "actor": { "type": "string" },
+    "authority": { "type": ["string", "null"] },
+    "description": { "type": "string" },
+    "procedural_effect": { "type": ["string", "null"] },
+    "timeline_confidence": { "enum": ["source_backed", "inferred", "ambiguous"] },
+    "confidence": { "type": ["number", "null"] },
+    "sources": { "type": "array", "minItems": 1 }
+  },
+  "required": ["id", "date_type", "event_type", "subtype", "description", "timeline_confidence", "sources"],
+  "additionalProperties": true
+}
