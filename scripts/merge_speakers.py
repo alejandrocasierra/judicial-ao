@@ -84,21 +84,22 @@ def main() -> int:
     conn.commit()
     print(f"[OK] reasignados {moved} segmentos y borrado el duplicado")
 
-    from app.services import graph, indexing  # noqa: E402
+    from app.core.db import tx
+    from app.services import graph, indexing
 
     done = 0
     for mid in media_ids:
         try:
-            indexing.index_media(conn, a.org_id, a.case_id, mid, actor_id=a.user_id)
+            with tx(a.org_id, a.user_id) as c:
+                indexing.index_media(c, a.org_id, a.case_id, mid, actor_id=a.user_id)
             done += 1
         except Exception as exc:  # noqa: BLE001
             print(f"  warn: no se pudo reindexar {mid}: {exc}")
-    conn.commit()
     print(f"[OK] media reindexados: {done}/{len(media_ids)}")
 
     try:
-        res = graph.build_case_graph(conn, a.org_id, a.case_id, actor_id=a.user_id)
-        conn.commit()
+        with tx(a.org_id, a.user_id) as c:
+            res = graph.build_case_graph(c, a.org_id, a.case_id, actor_id=a.user_id)
         print(f"[OK] grafo reconstruido: {res}")
     except Exception as exc:  # noqa: BLE001
         print(f"  warn: no se pudo reconstruir el grafo: {exc}")

@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, streamUrl } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -55,6 +56,7 @@ export function MediaTranscriptViewer({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editSpeakerId, setEditSpeakerId] = useState("none");
+  const [newSpeakerName, setNewSpeakerName] = useState("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const segRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -104,11 +106,19 @@ export function MediaTranscriptViewer({
   }, [activeId]);
 
   const save = useMutation({
-    mutationFn: (segId: string) =>
-      api.patch(`/cases/${caseId}/media/${mediaId}/segments/${segId}`, {
+    mutationFn: async (segId: string) => {
+      let speakerId: string | null = editSpeakerId === "none" ? null : editSpeakerId;
+      if (editSpeakerId === "__new__") {
+        const name = newSpeakerName.trim();
+        if (!name) throw new Error("Escribe el nombre del nuevo hablante");
+        const spk = await api.post<{ id: string }>(`/cases/${caseId}/speakers`, { display_name: name });
+        speakerId = spk.id;
+      }
+      await api.patch(`/cases/${caseId}/media/${mediaId}/segments/${segId}`, {
         text: editText,
-        speaker_id: editSpeakerId === "none" ? null : editSpeakerId,
-      }),
+        speaker_id: speakerId,
+      });
+    },
     onSuccess: () => {
       toast.success("Transcripción corregida y reindexada");
       setEditingId(null);
@@ -146,6 +156,7 @@ export function MediaTranscriptViewer({
 
           <div className="space-y-2">
             <SpeakerTags
+              caseId={caseId}
               speakers={speakers}
               onRenamed={() => qc.invalidateQueries({ queryKey: ["segments", caseId, mediaId] })}
             />
@@ -174,6 +185,7 @@ export function MediaTranscriptViewer({
                         setEditingId(s.id);
                         setEditText(s.text);
                         setEditSpeakerId(s.speaker_id ?? "none");
+                        setNewSpeakerName("");
                       }}>
                       Editar
                     </Button>
@@ -191,8 +203,18 @@ export function MediaTranscriptViewer({
                               {spk.display_name || spk.label}
                             </SelectItem>
                           ))}
+                          <SelectItem value="__new__">➕ Nuevo hablante…</SelectItem>
                         </SelectContent>
                       </Select>
+                      {editSpeakerId === "__new__" && (
+                        <Input
+                          autoFocus
+                          className="h-9"
+                          placeholder="Nombre del nuevo hablante"
+                          value={newSpeakerName}
+                          onChange={(e) => setNewSpeakerName(e.target.value)}
+                        />
+                      )}
                       <Textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} />
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => save.mutate(s.id)} disabled={save.isPending}>

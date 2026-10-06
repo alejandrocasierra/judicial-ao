@@ -20,6 +20,7 @@ from sqlalchemy.engine import Connection
 from app.core.config import get_settings
 from app.core.db import one, rows, tx
 from app.services import audit, indexing, ocr_confidence, ocr_lexicon
+from app.services import speakers as speakers_service
 from app.services.case_tools import ToolContext, evidence_item, register
 from app.services.case_tools.read import _err, _uuid
 from app.workers.dispatcher import create_job, enqueue_if_pending
@@ -215,6 +216,62 @@ def rename_speaker(conn: Connection, case_id: str, ctx: ToolContext, speaker_id:
                           f"✅ Hablante «{spk['label']}» renombrado a «{new_name}». Actualizado en la BD; "
                           "se reindexan sus audios en pgvector y se encola la reconstrucción del grafo.",
                           speaker_id=sid, old_name=old_name, new_name=new_name,
+                          reindex_scheduled=True, graph_refresh_scheduled=True)]
+
+
+@register("merge_speakers",
+          "Fusiona DOS hablantes que en realidad son la misma persona (la diarización los separó en dos). "
+          "Reasigna TODOS los segmentos del hablante 'merge_speaker_id' al hablante 'keep_speaker_id' y borra el "
+          "duplicado. Úsalo cuando el usuario diga p. ej. 'SPEAKER_01 y SPEAKER_03 son la misma persona' o 'el mismo "
+          "hablante aparece dos veces'. APLICA directamente: llamada con confirm=true en el mismo turno, SIN pedir "
+          "confirmación. Propaga a la BD, pgvector (reindexa los audios) y el grafo (reviews). Sin confirm sólo "
+          "devuelve vista previa. Usa list_speakers para obtener los speaker_id (label, nombre y nº de segmentos).",
+          {"keep_speaker_id": {"type": "string", "format": "uuid", "description": "Hablante que se CONSERVA"},
+           "merge_speaker_id": {"type": "string", "format": "uuid", "description": "Hablante DUPLICADO que se elimina"},
+           "reason": {"type": "string"},
+           "confirm": {"type": "boolean", "default": False}},
+          kind="write")
+def merge_speakers(conn: Connection, case_id: str, ctx: ToolContext, keep_speaker_id: str,
+                   merge_speaker_id: str, reason: str = "", confirm: bool = False) -> list[dict[str, Any]]:
+    keep = _uuid(keep_speaker_id)
+    merge = _uuid(merge_speaker_id)
+    if not keep or not merge:
+        return _err("speaker_id inválido")
+    if keep == merge:
+        return _err("No se puede fusionar un hablante consigo mismo")
+    k = one(conn, "SELECT id, label, display_name FROM speakers WHERE id = :i AND case_id = :c", i=keep, c=case_id)
+    m = one(conn, "SELECT id, label, display_name FROM speakers WHERE id = :i AND case_id = :c", i=merge, c=case_id)
+    if not k or not m:
+        return _err("Hablante no encontrado en este expediente")
+    cnt = one(conn, "SELECT count(*) AS n FROM transcript_segments WHERE speaker_id = :s", s=merge)["n"]
+    kname = k["display_name"] or k["label"]
+    mname = m["display_name"] or m["label"]
+    if not confirm:
+        return _preview(
+            f"Fusionar «{mname}» ({m['label']}, {cnt} segmentos) en «{kname}» ({k['label']}): los segmentos pasarán "
+            f"a {k['label']} y se borrará el duplicado.",
+            keep_speaker_id=keep, merge_speaker_id=merge, moved_segments=cnt)
+    identity_error = _need_identity(ctx)
+    if identity_error:
+        return identity_error
+    media_ids = speakers_service.merge(conn, case_id, keep, merge)
+    one(conn, """INSERT INTO reviews (organization_id, case_id, entity_type, entity_id, action,
+                 reviewer_id, reason, original_output, human_output)
+        VALUES (:o, :c, 'speaker', :e, 'EDIT', :r, :reason, CAST(:orig AS jsonb), CAST(:human AS jsonb))
+        RETURNING id""",
+        o=ctx.org_id, c=case_id, e=keep, r=ctx.actor_id,
+        reason=reason or "Fusión de hablantes desde el chat",
+        orig=json.dumps({"merged_speaker_id": merge, "merged_label": m["label"]}),
+        human=json.dumps({"keep_speaker_id": keep, "keep_label": k["label"]}))
+    audit.record(conn, org_id=ctx.org_id, actor_id=ctx.actor_id, action="speaker.merged", entity_type="speaker",
+                 entity_id=keep, after={"merged_id": merge, "merged_label": m["label"], "moved_segments": cnt,
+                                        "media_affected": len(media_ids), "via": "chat_tool"})
+    ctx.post_commit.append(lambda: _reindex_speaker_media(ctx, case_id, keep))
+    ctx.post_commit.append(lambda: _enqueue_graph(ctx, case_id))
+    return [evidence_item("W", "correction_result",
+                          f"✅ Fusionado «{mname}» en «{kname}»: {cnt} segmentos reasignados y el duplicado eliminado. "
+                          "Se reindexan los audios en pgvector y se encola la reconstrucción del grafo.",
+                          keep_speaker_id=keep, merge_speaker_id=merge, moved_segments=cnt,
                           reindex_scheduled=True, graph_refresh_scheduled=True)]
 
 

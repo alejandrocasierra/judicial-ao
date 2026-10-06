@@ -17,7 +17,7 @@ PLAN_TOOLS = ["search_case", "read_document", "get_document_page", "get_document
               "search_transcript_by_time", "get_file", "list_case_files", "graph_query", "graph_neighbors",
               "find_person", "get_timeline", "get_video_segment", "search_transcripts", "list_speakers",
               "list_people_by_role", "correct_ocr_page", "correct_transcript_segment", "rename_speaker",
-              "suggest_reprocess"]
+              "merge_speakers", "suggest_reprocess"]
 
 
 def test_ut_ct_01_mmss():

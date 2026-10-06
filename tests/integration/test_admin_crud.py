@@ -323,3 +323,28 @@ def test_it_acr_13_direct_upload_presign_and_complete(client, auth, ids):
     bad = client.post(f"/v1/cases/{ids['pago']}/uploads/presign", headers=h,
                       json={"filename": "malware.exe", "sha256": sha, "size_bytes": 10})
     assert bad.status_code == 415
+
+
+def test_it_acr_14_create_and_merge_speakers(client, auth, ids):
+    """Alta manual de hablantes y fusión de duplicados (reasigna segmentos y elimina el duplicado)."""
+    h = auth("abogada.alfa")
+    case = ids["pago"]
+    a = client.post(f"/v1/cases/{case}/speakers", headers=h, json={"display_name": "Hablante Manual A"})
+    assert a.status_code == 201, a.text
+    b = client.post(f"/v1/cases/{case}/speakers", headers=h, json={"display_name": "Hablante Manual B"})
+    assert b.status_code == 201, b.text
+    aid, bid = a.json()["id"], b.json()["id"]
+    assert a.json()["label"].startswith("SPEAKER_")
+    assert aid != bid
+
+    same = client.post(f"/v1/cases/{case}/speakers/merge", headers=h,
+                       json={"keep_speaker_id": aid, "merge_speaker_id": aid})
+    assert same.status_code == 422, same.text
+
+    m = client.post(f"/v1/cases/{case}/speakers/merge", headers=h,
+                    json={"keep_speaker_id": aid, "merge_speaker_id": bid})
+    assert m.status_code == 200, m.text
+    assert m.json()["merge_speaker_id"] == bid
+
+    labels = {s["id"]: s["label"] for s in client.get(f"/v1/cases/{case}/speakers", headers=h).json()}
+    assert aid in labels and bid not in labels

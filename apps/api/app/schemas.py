@@ -126,6 +126,20 @@ class UploadCompleteIn(Strict):
     _f = field_validator("filename", "mime_type")(_no_control)
 
 
+class SpeakerCreate(Strict):
+    """Alta de un hablante manual (no detectado por la diarización)."""
+    display_name: str = Field(min_length=1, max_length=200)
+    speaker_role: str | None = Field(default=None, max_length=100)
+
+    _v = field_validator("display_name", "speaker_role")(_no_control)
+
+
+class SpeakerMergeIn(Strict):
+    """Fusiona dos hablantes que son la misma persona (dos clusters de diarización)."""
+    keep_speaker_id: UUID
+    merge_speaker_id: UUID
+
+
 class ReviewIn(Strict):
     entity_type: Literal["claim", "fact", "speaker", "contradiction"]
     action: Literal["ACCEPT", "EDIT", "REJECT", "FLAG"]

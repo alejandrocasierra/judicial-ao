@@ -35,6 +35,7 @@ export default function VideosPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editSpeakerId, setEditSpeakerId] = useState("none");
+  const [newSpeakerName, setNewSpeakerName] = useState("");
   const [currentMs, setCurrentMs] = useState(0);
   const [listPage, setListPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(20);
@@ -83,11 +84,19 @@ export default function VideosPage() {
   }, [activeId]);
 
   const save = useMutation({
-    mutationFn: (segId: string) =>
-      api.patch(`/cases/${activeCaseId}/media/${media!.id}/segments/${segId}`, {
+    mutationFn: async (segId: string) => {
+      let speakerId: string | null = editSpeakerId === "none" ? null : editSpeakerId;
+      if (editSpeakerId === "__new__") {
+        const name = newSpeakerName.trim();
+        if (!name) throw new Error("Escribe el nombre del nuevo hablante");
+        const spk = await api.post<{ id: string }>(`/cases/${activeCaseId}/speakers`, { display_name: name });
+        speakerId = spk.id;
+      }
+      await api.patch(`/cases/${activeCaseId}/media/${media!.id}/segments/${segId}`, {
         text: editText,
-        speaker_id: editSpeakerId === "none" ? null : editSpeakerId,
-      }),
+        speaker_id: speakerId,
+      });
+    },
     onSuccess: () => {
       toast.success("Transcripción corregida y reindexada");
       setEditingId(null);
@@ -173,6 +182,7 @@ export default function VideosPage() {
 
             <div className="space-y-2">
               <SpeakerTags
+                caseId={activeCaseId}
                 speakers={speakers}
                 onRenamed={() => { qc.invalidateQueries({ queryKey: ["segments", activeCaseId, media?.id] }); refetch(); }}
               />
@@ -193,7 +203,7 @@ export default function VideosPage() {
                       <span className={cn("text-xs font-medium", active ? "text-primary" : "text-muted-foreground")}>
                         {mmss(s.start_ms)}–{mmss(s.end_ms)} · <span className="font-semibold text-foreground">{s.speaker_name || s.speaker_label || "Sin identificar"}</span> {s.needs_review && <Badge variant="destructive" className="ml-2">Revisar</Badge>}
                       </span>
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditingId(s.id); setEditText(s.text); setEditSpeakerId(s.speaker_id ?? "none"); }}>Editar</Button>
+                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setEditingId(s.id); setEditText(s.text); setEditSpeakerId(s.speaker_id ?? "none"); setNewSpeakerName(""); }}>Editar</Button>
                     </div>
                     {editingId === s.id ? (
                       <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
@@ -204,8 +214,13 @@ export default function VideosPage() {
                             {speakers.map((spk) => (
                               <SelectItem key={spk.id} value={spk.id}>{spk.display_name || spk.label}</SelectItem>
                             ))}
+                            <SelectItem value="__new__">➕ Nuevo hablante…</SelectItem>
                           </SelectContent>
                         </Select>
+                        {editSpeakerId === "__new__" && (
+                          <Input autoFocus className="h-9" placeholder="Nombre del nuevo hablante"
+                            value={newSpeakerName} onChange={(e) => setNewSpeakerName(e.target.value)} />
+                        )}
                         <Textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={3} />
                         <div className="flex gap-2">
                           <Button size="sm" onClick={() => save.mutate(s.id)} disabled={save.isPending}><Save className="mr-1 h-4 w-4" />Guardar</Button>

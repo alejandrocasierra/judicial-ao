@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -13,13 +14,16 @@ from app.core.db import one, rows, tx
 from app.core.errors import AppError
 from app.domain import states
 from app.domain.jurisdiction import jurisdictions, validate_case_number
-from app.schemas import CaseCreate, CasePatch, LegalHoldIn, MemberIn, ProcessIn
+from app.schemas import CaseCreate, CasePatch, LegalHoldIn, MemberIn, ProcessIn, SpeakerCreate, SpeakerMergeIn
 from app.security import rbac
 from app.security.deps import Principal, case_access, current_principal, require_org
-from app.services import audit, export, purge
+from app.services import audit, export, indexing, purge
+from app.services import speakers as speakers_service
 from app.workers.dispatcher import enqueue_job
+from app.workers.handlers.file_ingest import enqueue_graph_refresh
 
 router = APIRouter(prefix="/cases", tags=["cases"])
+log = logging.getLogger(__name__)
 CASE_COLS = ("id, organization_id, external_reference, jurisdiction, court, chamber, case_number, title, status, "
              "retention_status, legal_hold, knowledge_version, language, version, created_at, updated_at")
 
@@ -507,3 +511,55 @@ def parties(case_id: UUID, p: Principal = Depends(current_principal)):
 @router.get("/{case_id}/speakers")
 def speakers(case_id: UUID, p: Principal = Depends(current_principal)):
     return _list(case_id, p, "SELECT id, label, display_name, speaker_role, resolved_party_id, resolution_status, resolution_source, confidence, version FROM speakers WHERE case_id=:c ORDER BY label")
+
+
+@router.post("/{case_id}/speakers", status_code=201)
+def create_speaker(case_id: UUID, body: SpeakerCreate, request: Request, p: Principal = Depends(current_principal)):
+    """Crea un hablante manual (p. ej. alguien que la diarización no detectó) con su nombre visible."""
+    case = case_access(p, case_id, "media.upload")
+    if case["status"] == "ARCHIVED":
+        raise AppError("INVALID_STATE_TRANSITION", 409)
+    with tx(p.org_id, p.user_id) as c:
+        row = one(c, """SELECT COALESCE(MAX(NULLIF(regexp_replace(label, '\\D', '', 'g'), '')::int), 0) AS n
+                        FROM speakers WHERE case_id = :c AND label ~ '^SPEAKER_[0-9]+$'""", c=str(case_id))
+        label = f"SPEAKER_{int(row['n']) + 1:02d}"
+        spk = one(c, """INSERT INTO speakers (organization_id, case_id, label, display_name, speaker_role,
+                              resolution_status, resolution_source, confidence)
+            VALUES (:o, :c, :l, :n, :r, 'PROBABLE', 'manual', 1.0)
+            RETURNING id, label, display_name, speaker_role, resolution_status, resolution_source, confidence, version""",
+                  o=p.org_id, c=str(case_id), l=label, n=body.display_name.strip(), r=body.speaker_role or None)
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="speaker.created", entity_type="speaker",
+                     entity_id=str(spk["id"]),
+                     after={"display_name": body.display_name.strip(), "via": "manual"}, request=request)
+    return spk
+
+
+@router.post("/{case_id}/speakers/merge")
+def merge_speakers(case_id: UUID, body: SpeakerMergeIn, request: Request, p: Principal = Depends(current_principal)):
+    """Fusiona dos hablantes que son la misma persona: reasigna segmentos, borra el duplicado,
+    reindexa pgvector y encola la reconstrucción del grafo."""
+    case = case_access(p, case_id, "media.upload")
+    if case["status"] == "ARCHIVED":
+        raise AppError("INVALID_STATE_TRANSITION", 409)
+    keep, merge = str(body.keep_speaker_id), str(body.merge_speaker_id)
+    if keep == merge:
+        raise AppError("VALIDATION_ERROR", 422, [{"field": "merge_speaker_id", "type": "same_as_keep"}])
+    with tx(p.org_id, p.user_id) as c:
+        found = {str(r["id"]) for r in rows(
+            c, "SELECT id FROM speakers WHERE case_id = :c AND id IN (:k, :m)", c=str(case_id), k=keep, m=merge)}
+        if keep not in found or merge not in found:
+            raise AppError("NOT_FOUND", 404)
+        media_ids = speakers_service.merge(c, str(case_id), keep, merge)
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="speaker.merged", entity_type="speaker",
+                     entity_id=keep, after={"merged_id": merge, "via": "api"}, request=request)
+    for mid in media_ids:  # propagación fuera de la transacción
+        try:
+            with tx(p.org_id, p.user_id) as c:
+                indexing.index_media(c, p.org_id, str(case_id), mid, actor_id=p.user_id)
+        except Exception:  # noqa: BLE001
+            log.exception("no se pudo reindexar el media %s tras fusionar hablantes", mid)
+    try:
+        enqueue_graph_refresh(p.org_id, str(case_id), p.user_id)
+    except Exception:  # noqa: BLE001
+        log.exception("no se pudo encolar el grafo tras fusionar hablantes (caso %s)", case_id)
+    return {"keep_speaker_id": keep, "merge_speaker_id": merge, "media_affected": len(media_ids)}
