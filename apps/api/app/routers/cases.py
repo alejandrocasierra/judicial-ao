@@ -519,18 +519,21 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
 
 
 @router.post("/{case_id}/timeline/build")
-def build_timeline(case_id: UUID, request: Request, p: Principal = Depends(current_principal)):
+def build_timeline(case_id: UUID, request: Request, llm: bool = False,
+                   p: Principal = Depends(current_principal)):
     """Recalcula el Process Graph: relaciones entre actuaciones, resolución de eventos referenciados
-    y marcas de revisión (duplicados / inconsistencias de fecha / sin fuente)."""
+    y marcas de revisión. Con `llm=true`, un segundo pase con IA propone relaciones causales."""
     case = case_access(p, case_id, "media.upload")
     if case["status"] == "ARCHIVED":
         raise AppError("INVALID_STATE_TRANSITION", 409)
     with tx(p.org_id, p.user_id) as c:
         linked = procedural_graph.link_events(c, p.org_id, str(case_id))
         reviewed = procedural_graph.review_events(c, p.org_id, str(case_id))
+        ai = procedural_graph.propose_relations_llm(c, p.org_id, str(case_id), p.user_id) if llm else None
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="timeline.built", entity_type="case",
-                     entity_id=str(case_id), after={"linked": linked, "reviewed": reviewed}, request=request)
-    return {"linked": linked, "reviewed": reviewed}
+                     entity_id=str(case_id), after={"linked": linked, "reviewed": reviewed, "ai": ai},
+                     request=request)
+    return {"linked": linked, "reviewed": reviewed, "ai_links": ai}
 
 
 @router.get("/{case_id}/entities")

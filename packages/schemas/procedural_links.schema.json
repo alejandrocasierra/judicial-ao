@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/procedural_links.schema.json",
+  "title": "procedural_link",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "properties": {
+    "source_event_id": { "type": "string" },
+    "target_event_id": { "type": "string" },
+    "relationship": { "enum": ["causes", "responds_to", "appeals", "confirms", "revokes", "precedes"] },
+    "reason": { "type": "string" },
+    "confidence": { "type": ["number", "null"] }
+  },
+  "required": ["source_event_id", "target_event_id", "relationship"],
+  "additionalProperties": true
+}

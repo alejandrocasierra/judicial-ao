@@ -41,6 +41,7 @@ def main() -> int:
     ap.add_argument("--only-missing", action="store_true", help="Solo documentos sin actuaciones extraídas")
     ap.add_argument("--link", action="store_true", help="Construir el Process Graph (relaciones + revisión) al terminar")
     ap.add_argument("--link-only", action="store_true", help="Solo construir el Process Graph (sin extraer)")
+    ap.add_argument("--llm", action="store_true", help="Segundo pase con IA que propone relaciones causales")
     a = ap.parse_args()
 
     if not a.user_id:
@@ -85,6 +86,10 @@ def main() -> int:
             linked = procedural_graph.link_events(c, a.org_id, a.case_id)
             reviewed = procedural_graph.review_events(c, a.org_id, a.case_id)
         print(f"[OK] Process Graph: relaciones={linked['relationships']} marcas={reviewed['flagged']}")
+        if a.llm:
+            with tx(a.org_id, a.user_id) as c:
+                ai = procedural_graph.propose_relations_llm(c, a.org_id, a.case_id, a.user_id)
+            print(f"[OK] IA: relaciones causales propuestas={ai.get('links', 0)}")
     return 0
 
 

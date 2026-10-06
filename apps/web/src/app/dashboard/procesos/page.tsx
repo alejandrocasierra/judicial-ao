@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FolderKanban, Plus, ChevronRight, Pencil, Trash2, AlertTriangle, Activity, FileText, Video, GitBranch } from "lucide-react";
+import { FolderKanban, Plus, ChevronRight, Pencil, Trash2, AlertTriangle, Activity, FileText, Video, GitBranch, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
@@ -116,6 +116,16 @@ export default function ProcesosPage() {
       qc.invalidateQueries({ queryKey: ["timeline"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo construir el grafo"),
+  });
+
+  const buildGraphAi = useMutation({
+    mutationFn: () => api.post<{ linked?: { relationships?: number }; ai_links?: { links?: number } }>(
+      `/cases/${timelineCase!.id}/timeline/build?llm=true`, {}),
+    onSuccess: (r) => {
+      toast.success(`IA: ${r?.ai_links?.links ?? 0} relaciones causales · ${r?.linked?.relationships ?? 0} por reglas`);
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "La IA no pudo proponer relaciones (¿modelo/cuota?)"),
   });
 
   const create = useMutation({
@@ -287,11 +297,18 @@ export default function ProcesosPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary" />Línea de tiempo procesal</span>
-              <Button size="sm" variant="outline" className="mr-6 h-7 gap-1" disabled={buildGraph.isPending}
-                title="Recalcular relaciones (precede/responde/apela), resolver eventos referenciados y marcar duplicados/inconsistencias"
-                onClick={() => buildGraph.mutate()}>
-                <GitBranch className="h-3.5 w-3.5" />{buildGraph.isPending ? "Construyendo…" : "Relacionar y revisar"}
-              </Button>
+              <span className="mr-6 flex items-center gap-2">
+                <Button size="sm" variant="outline" className="h-7 gap-1" disabled={buildGraph.isPending}
+                  title="Recalcular relaciones por reglas, resolver eventos referenciados y marcar duplicados/inconsistencias"
+                  onClick={() => buildGraph.mutate()}>
+                  <GitBranch className="h-3.5 w-3.5" />{buildGraph.isPending ? "Construyendo…" : "Relacionar y revisar"}
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 gap-1" disabled={buildGraphAi.isPending}
+                  title="Segundo pase con IA: propone relaciones causales (usa el modelo de la organización, p. ej. Gemini)"
+                  onClick={() => buildGraphAi.mutate()}>
+                  <Sparkles className="h-3.5 w-3.5" />{buildGraphAi.isPending ? "IA…" : "IA: causas"}
+                </Button>
+              </span>
             </DialogTitle>
           </DialogHeader>
           <p className="-mt-2 text-sm text-muted-foreground">

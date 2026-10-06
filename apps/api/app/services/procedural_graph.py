@@ -154,3 +154,53 @@ def review_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]
             "fecha_inconsistente": sum(1 for f in flags.values() if "fecha_inconsistente" in f),
             "sin_fuente_real": sum(1 for f in flags.values() if "sin_fuente_real" in f),
             "sin_fecha": sum(1 for f in flags.values() if "sin_fecha" in f)}
+
+
+_ALLOWED_LINK = {"causes", "responds_to", "appeals", "confirms", "revokes", "precedes"}
+
+
+def propose_relations_llm(conn: Connection, org_id: str, case_id: str, actor_id: str) -> dict[str, Any]:
+    """Segundo pase: el LLM (modelo de la org, p. ej. Gemini) propone relaciones que las reglas no cubren."""
+    import hashlib
+
+    from app.core.config import get_settings
+    from app.services import legal_extraction as le
+
+    s = get_settings()
+    system, prompt_id, prompt_version = le._load_prompt("link_procedural_events", s.DEFAULT_LOCALE)
+    evs = rows(conn, """SELECT id, event_date, subtype, instance, actor, description
+                        FROM events WHERE case_id = :c AND kind = 'procedural'
+                        ORDER BY event_date NULLS LAST LIMIT 200""", c=case_id)
+    if len(evs) < 2:
+        return {"links": 0, "model_run": None, "warning": "not_enough_events"}
+
+    schema_path = s.path("packages/schemas/procedural_links.schema.json")
+    chunk_size = 60  # por lotes: evita respuestas truncadas por max_tokens
+    total = 0
+    last_validation: dict[str, Any] | None = None
+    for i in range(0, len(evs), chunk_size):
+        chunk = evs[i:i + chunk_size]
+        if len(chunk) < 2:
+            continue
+        lines = [f"[{e['id']}] {e['event_date'] or '?'} | {e['subtype']} | {e['instance']} | {e['actor']} | "
+                 f"{(e['description'] or '')[:110]}" for e in chunk]
+        user = "\n".join(lines)
+        input_hash = hashlib.sha256(user.encode("utf-8")).hexdigest()
+        result = le._call_llm(conn, case_id, system, user, "link_procedural_events")
+        data, validation = le._validate_and_parse(result, schema_path, conn, case_id, actor_id, ["links"])
+        le._record_model_run(conn, org_id, case_id, "link_procedural_events", prompt_id, prompt_version,
+                             input_hash, result, validation, actor_id)
+        last_validation = validation
+        if not validation.get("schema_valid"):
+            continue
+        ids = {str(e["id"]) for e in chunk}
+        for link in (data.get("links") or []):
+            src, tgt = str(link.get("source_event_id")), str(link.get("target_event_id"))
+            rel = link.get("relationship")
+            if src in ids and tgt in ids and src != tgt and rel in _ALLOWED_LINK:
+                conn.execute(text("""INSERT INTO event_relationships
+                        (organization_id, case_id, source_event_id, target_event_id, relationship, confidence)
+                    VALUES (:o, :c, :s, :t, :r, :conf) ON CONFLICT DO NOTHING"""),
+                    {"o": org_id, "c": case_id, "s": src, "t": tgt, "r": rel, "conf": link.get("confidence")})
+                total += 1
+    return {"links": total, "model_run": last_validation}
