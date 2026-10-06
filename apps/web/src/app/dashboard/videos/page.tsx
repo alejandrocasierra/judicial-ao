@@ -188,6 +188,8 @@ export default function VideosPage() {
               <SpeakerTags
                 caseId={activeCaseId}
                 speakers={speakers}
+                unidentifiedId={segmentsData?.unknown_speaker_id ?? null}
+                unidentifiedCount={(segData ?? []).filter((s) => segmentsData?.unknown_speaker_id && s.speaker_id === segmentsData.unknown_speaker_id).length}
                 onRenamed={() => { qc.invalidateQueries({ queryKey: ["segments", activeCaseId, media?.id] }); refetch(); }}
               />
               <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">

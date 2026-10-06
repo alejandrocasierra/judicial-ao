@@ -161,6 +161,8 @@ export function MediaTranscriptViewer({
             <SpeakerTags
               caseId={caseId}
               speakers={speakers}
+              unidentifiedId={data?.unknown_speaker_id ?? null}
+              unidentifiedCount={(segments ?? []).filter((s) => data?.unknown_speaker_id && s.speaker_id === data.unknown_speaker_id).length}
               onRenamed={() => qc.invalidateQueries({ queryKey: ["segments", caseId, mediaId] })}
             />
             <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">

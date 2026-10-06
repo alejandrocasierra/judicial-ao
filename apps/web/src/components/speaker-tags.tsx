@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Merge, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Merge, Pencil, Plus, Sparkles, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   SpeakerFormDialog, ROLE_KEY_LABEL, suggestFor,
@@ -28,13 +28,18 @@ export function SpeakerTags({
   caseId,
   speakers,
   onRenamed,
+  unidentifiedId,
+  unidentifiedCount = 0,
 }: {
   caseId: string;
   speakers: Speaker[];
   onRenamed?: () => void;
+  unidentifiedId?: string | null;
+  unidentifiedCount?: number;
 }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<FormTarget | null>(null);
+  const [reassignFrom, setReassignFrom] = useState<string | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [keepId, setKeepId] = useState<string | undefined>(undefined);
   const [mergeId, setMergeId] = useState<string | undefined>(undefined);
@@ -47,8 +52,8 @@ export function SpeakerTags({
   const suggestions = suggestionsQ.data ?? [];
 
   const merge = useMutation({
-    mutationFn: () =>
-      api.post(`/cases/${caseId}/speakers/merge`, { keep_speaker_id: keepId, merge_speaker_id: mergeId }),
+    mutationFn: ({ keep, merge: m }: { keep: string; merge: string }) =>
+      api.post(`/cases/${caseId}/speakers/merge`, { keep_speaker_id: keep, merge_speaker_id: m }),
     onSuccess: () => {
       toast.success("Hablantes fusionados y reindexados");
       setMergeOpen(false); setKeepId(undefined); setMergeId(undefined);
@@ -86,6 +91,7 @@ export function SpeakerTags({
   });
 
   function openCreate() {
+    setReassignFrom(null);
     setForm({});
   }
   function openEdit(spk: Speaker) {
@@ -94,10 +100,16 @@ export function SpeakerTags({
     const initialPartyId = spk.resolved_party_id || sug?.suggested_party_id || "";
     setForm({ speaker: spk, initialRole, initialPartyId });
   }
-  function onSaved() {
-    qc.invalidateQueries({ queryKey: ["role-suggestions", caseId] });
+  function onSaved(spk?: { id: string }) {
+    if (reassignFrom && spk) {
+      // "Sin identificar" → nuevo hablante: se pasan TODAS sus citas al recién creado.
+      merge.mutate({ keep: spk.id, merge: reassignFrom });
+      setReassignFrom(null);
+    } else {
+      qc.invalidateQueries({ queryKey: ["role-suggestions", caseId] });
+      onRenamed?.();
+    }
     setForm(null);
-    onRenamed?.();
   }
 
   const nameOf = (id?: string) => {
@@ -112,6 +124,13 @@ export function SpeakerTags({
       <Button size="icon" variant="outline" className="h-6 w-6 rounded-full" title="Nuevo hablante" onClick={openCreate}>
         <Plus className="h-3.5 w-3.5" />
       </Button>
+      {unidentifiedId && unidentifiedCount > 0 && (
+        <Button size="sm" variant="outline" className="h-7 gap-1"
+          title="Poner nombre a las citas de «Sin identificar» (se reasignan todas)"
+          onClick={() => { setReassignFrom(unidentifiedId); setForm({}); }}>
+          <UserPlus className="h-3.5 w-3.5" />Sin identificar ({unidentifiedCount})
+        </Button>
+      )}
       {speakers.map((spk) => (
         <span key={spk.id} className="inline-flex items-center gap-1 rounded-md bg-muted/50 pr-1">
           <Badge variant="secondary" className="gap-1 border-0 bg-transparent">
@@ -188,7 +207,8 @@ export function SpeakerTags({
           )}
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="outline" onClick={() => setMergeOpen(false)}>Cancelar</Button>
-            <Button size="sm" disabled={!canMerge || merge.isPending} onClick={() => merge.mutate()}>
+            <Button size="sm" disabled={!canMerge || merge.isPending}
+              onClick={() => canMerge && merge.mutate({ keep: keepId!, merge: mergeId! })}>
               <Merge className="mr-1 h-4 w-4" />Fusionar
             </Button>
           </div>
