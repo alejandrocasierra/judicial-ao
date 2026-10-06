@@ -14,6 +14,7 @@ import { FolderKanban, Plus, ChevronRight, Pencil, Trash2, AlertTriangle, Activi
 import { toast } from "sonner";
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
+import { ProcessGraph } from "@/components/process-graph";
 
 interface Case { id: string; case_number: string; title: string; created_at: string; version: number; }
 interface TimelineSource {
@@ -90,6 +91,7 @@ export default function ProcesosPage() {
   const [tlKind, setTlKind] = useState<string>("procedural");
   const [tlInstance, setTlInstance] = useState<string>("all");
   const [tlActor, setTlActor] = useState<string>("all");
+  const [tlView, setTlView] = useState<"list" | "graph">("list");
   const [docView, setDocView] = useState<{ caseId: string; id: string; page: number; name?: string | null } | null>(null);
   const [mediaView, setMediaView] = useState<{ caseId: string; id: string; ms: number; name?: string | null } | null>(null);
 
@@ -134,6 +136,16 @@ export default function ProcesosPage() {
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "La IA no pudo proponer relaciones (¿modelo/cuota?)"),
   });
+
+  function openSource(s: { source_type: string; document_id?: string | null; page?: number | null;
+                           media_id?: string | null; start_ms?: number | null; filename?: string | null }) {
+    if (!timelineCase) return;
+    if (s.source_type === "document_page" && s.document_id) {
+      setDocView({ caseId: timelineCase.id, id: s.document_id, page: s.page || 1, name: s.filename });
+    } else if (s.media_id) {
+      setMediaView({ caseId: timelineCase.id, id: s.media_id, ms: s.start_ms || 0, name: s.filename });
+    }
+  }
 
   const create = useMutation({
     mutationFn: () => {
@@ -322,6 +334,10 @@ export default function ProcesosPage() {
             {timelineCase?.title} · <span className="font-mono">{timelineCase?.case_number}</span>
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Vista:</span>
+            <Button size="sm" variant={tlView === "list" ? "default" : "outline"} className="h-7" onClick={() => setTlView("list")}>Lista</Button>
+            <Button size="sm" variant={tlView === "graph" ? "default" : "outline"} className="h-7" onClick={() => setTlView("graph")}>Grafo</Button>
+            <span className="mx-1 h-4 w-px bg-border" />
             <span className="text-xs text-muted-foreground">Filtros:</span>
             <Button size="sm" variant={tlKind === "all" ? "default" : "outline"} className="h-7" onClick={() => setTlKind("all")}>Todo</Button>
             <Button size="sm" variant={tlKind === "procedural" ? "default" : "outline"} className="h-7" onClick={() => setTlKind("procedural")}>Actuaciones</Button>
@@ -340,6 +356,9 @@ export default function ProcesosPage() {
               </Button>
             ))}
           </div>
+          {tlView === "graph" ? (
+            <ProcessGraph events={timeline} onOpenSource={openSource} />
+          ) : (
           <div className="max-h-[60vh] overflow-y-auto pr-1">
             {timelineLoading ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
@@ -423,6 +442,7 @@ export default function ProcesosPage() {
               ))
             )}
           </div>
+          )}
         </DialogContent>
       </Dialog>
 
