@@ -20,5 +20,13 @@ dist/
 11001310302120180036100/
 # Cachés locales varias
 .cache/
+
+# Editores: los swaps/respaldos NUNCA se versionan. Un `..env.swp` suelto
+# hacía que `git status --porcelain` marcara el repo como "sucio" y el
+# auto_deploy.sh omitiera el pull de esta instancia (ver AGENTS.md §12).
+*.swp
+*.swo
+*.swn
+*~
 # Volcados de datos (¡con datos reales!) — NUNCA versionar
 backup/
