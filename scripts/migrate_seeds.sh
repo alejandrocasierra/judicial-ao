@@ -44,7 +44,7 @@ for f in "${ENVS[@]}"; do
   echo "==> [$f] APP_ENV=${app_env:-?} POSTGRES_DB=${db:-?}"
 
   if [ "$DOCKER" = "1" ]; then
-    docker compose --env-file "$f" exec -T api alembic -c alembic.ini upgrade head
+    ENV_FILE="$f" docker compose --env-file "$f" exec -T api alembic -c alembic.ini upgrade head
   else
     ENV_FILE="$f" "$PY" -m alembic -c apps/api/alembic.ini upgrade head
   fi
@@ -52,7 +52,7 @@ for f in "${ENVS[@]}"; do
   if [ "$SEED" = "1" ] && [ "${app_env:-}" != "production" ] && { [ "${app_env:-}" != "staging" ] || [ "$FORCE" = "1" ]; }; then
     echo "    -> seed"
     if [ "$DOCKER" = "1" ]; then
-      docker compose --env-file "$f" exec -T api python -m seeds.seed || true
+      ENV_FILE="$f" docker compose --env-file "$f" exec -T api python -m seeds.seed || true
     else
       ( cd apps/api && ENV_FILE="$f" "$PY" -m seeds.seed ) || true
     fi

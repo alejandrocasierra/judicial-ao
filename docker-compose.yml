@@ -33,7 +33,7 @@ services:
   api:
     image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
-    env_file: .env
+    env_file: ${ENV_FILE:-.env}
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
@@ -58,7 +58,7 @@ services:
   worker:
     image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
-    env_file: .env
+    env_file: ${ENV_FILE:-.env}
     # --concurrency=1: cada proceso prefork carga torch+docling+faster-whisper
     # (cientos de MB). Con varios procesos por CPU se agota la RAM del contenedor
     # y el worker muere por OOM (SIGKILL) al procesar ASR pesado.
@@ -112,7 +112,7 @@ services:
   mcp:
     image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
-    env_file: .env
+    env_file: ${ENV_FILE:-.env}
     command: ["python", "-m", "mcp_server"]
     environment:
       POSTGRES_HOST: postgres

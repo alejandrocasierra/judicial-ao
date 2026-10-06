@@ -69,7 +69,7 @@ docker compose -p judicial-infra --env-file .env.advisorlegal \
 log "3/10 Creando BD + roles por instancia"
 for inst in $INSTANCES; do
   E="$(env_for "$inst")"; echo "  db_create $inst"
-  docker compose --env-file "$E" -f docker-compose.yml -f infra/docker/docker-compose.shared-app.yml \
+  ENV_FILE="$E" docker compose --env-file "$E" -f docker-compose.yml -f infra/docker/docker-compose.shared-app.yml \
     run --rm --no-deps api python /srv/scripts/db_create.py
 done
 
@@ -101,10 +101,10 @@ fi
 
 if [ -n "$CASE_ID" ] && [ -n "$ORG_ID" ] && [ -n "$USER_ID" ]; then
   log "9/10 Post-despliegue de site (reindex embeddings + modelos Gemini)"
-  docker compose --env-file .env.advisorlegal exec -T api \
+  ENV_FILE=.env.advisorlegal docker compose --env-file .env.advisorlegal exec -T api \
     python /srv/scripts/index_chunks_cli.py --case-id "$CASE_ID" --org-id "$ORG_ID" --user-id "$USER_ID"
   if [ "$SEED_MODELS" = "1" ] && [ -n "$GEMINI_KEY" ]; then
-    docker compose --env-file .env.advisorlegal exec -T api \
+    ENV_FILE=.env.advisorlegal docker compose --env-file .env.advisorlegal exec -T api \
       python /srv/scripts/seed_ai_models.py --org-id "$ORG_ID" --user-id "$USER_ID" --api-key "$GEMINI_KEY"
   fi
 else
