@@ -223,6 +223,13 @@ def test_ut_ct_authority_signature_groups_ocr_variants():
     assert sig("Juzgado 21 Civil Municipal de Bogotá") != sig("Juzgado 21 Civil del Circuito de Bogotá")
 
 
+def test_ut_ct_fuzzy_same_merges_ocr_name_variants():
+    """El mismo nombre pese a OCR se fusiona; nombres distintos no."""
+    from app.services.case_tools.read import _fuzzy_same
+    assert _fuzzy_same("ALBA LUCY COCK ALVAREZ", "ALBALUCY COCKKEVAREZ")
+    assert not _fuzzy_same("ALBA LUCY COCK ALVAREZ", "CARLOS ALFONSO GOMEZ GARCES")
+
+
 def test_ut_ct_14_name_candidates_filters_roles_and_numbers():
     """`_name_candidates` extrae nombres propios y descarta cargos/números en letras."""
     out = ct_read._name_candidates(

@@ -348,6 +348,7 @@ DOSCIENTOS TRESCIENTOS CUATROCIENTOS QUINIENTOS SEISCIENTOS SETECIENTOS OCHOCIEN
 MILLONES BILLONES PESOS PESO CENTAVOS CENTAVO DOLAR DÓLAR DOLARES DÓLARES MCTE INTERESES CAPITAL
 QUIROGRAFARIO DENTRO ACUMULADO GARANTIA GARANTÍA REAL EFECTIVIDAD
 HACE SABER TIPO LEY APLICA LINK SOLICITUD RESPETADA RESPETADO RESPETABLE SRA DRA CIU CTO BOG SIENDO
+TITULADA TITULADO DERECHO DERECHOS ABOGACIA ESPECIALISTA ESPECIALISTAS MAESTRIA MAESTRÍA
 """.split())
 
 _NAME_RE = re.compile(
@@ -376,6 +377,21 @@ def _strip_accents(s: str) -> str:
 def _name_tokens(name: str) -> set[str]:
     """Tokens significativos del nombre (≥3 letras, sin acentos, en mayúsculas) para agrupar variantes OCR."""
     return {t for t in re.split(r"[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+", _strip_accents(name).upper()) if len(t) >= 3}
+
+
+def _concat_norm(name: str) -> str:
+    return re.sub(r"[^A-Z]", "", _strip_accents(name or "").upper())
+
+
+def _fuzzy_same(a: str, b: str) -> bool:
+    """Dos nombres son la misma persona pese a OCR: 'ALBALUCY COCKKEVAREZ' ≈ 'ALBA LUCY COCK ALVAREZ'."""
+    ca, cb = _concat_norm(a), _concat_norm(b)
+    if min(len(ca), len(cb)) < 8:
+        return False
+    if ca in cb or cb in ca:
+        return True
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, ca, cb).ratio() >= 0.88
 
 
 def _role_signature_matches(text: str, keywords: tuple[str, ...]) -> list[tuple[str, str]]:
@@ -456,7 +472,7 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
 
 
 # --- Autoridades judiciales (juez/fiscal/secretario) ---
-_AUTHORITY_ROLES = {"juez", "fiscal", "secretario"}
+_AUTHORITY_ROLES: set[str] = set()  # rol «juez» → PERSONAS (nombres), no despachos; ver nota arriba
 _AUTHORITY_KEYWORDS: dict[str, tuple[str, ...]] = {
     "juez": ("juez", "jueza", "juzgado", "tribunal", "corte", "magistrad", "sala"),
     "fiscal": ("fiscal", "fiscalia"),
@@ -602,8 +618,9 @@ def _role_candidates_heuristic(conn: Connection, case_id: str, role_key: str,
         for g in groups:
             inter = toks & g["tokens"]
             union = toks | g["tokens"]
-            if toks and g["tokens"] and inter and (len(inter) / len(union) >= 0.5
-                                                   or toks <= g["tokens"] or g["tokens"] <= toks):
+            same_tokens = bool(inter) and (len(inter) / len(union) >= 0.5
+                                           or toks <= g["tokens"] or g["tokens"] <= toks)
+            if toks and g["tokens"] and (same_tokens or _fuzzy_same(display[key], g["display"])):
                 g["n"] += n
                 if n > g["best_n"]:
                     g["best_n"], g["display"] = n, display[key]
