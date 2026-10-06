@@ -329,13 +329,20 @@ def test_it_acr_14_create_and_merge_speakers(client, auth, ids):
     """Alta manual de hablantes y fusión de duplicados (reasigna segmentos y elimina el duplicado)."""
     h = auth("abogada.alfa")
     case = ids["pago"]
-    a = client.post(f"/v1/cases/{case}/speakers", headers=h, json={"display_name": "Hablante Manual A"})
+    a = client.post(f"/v1/cases/{case}/speakers", headers=h,
+                    json={"display_name": "Hablante Manual A", "speaker_role": "juez"})
     assert a.status_code == 201, a.text
+    assert a.json()["speaker_role"] == "juez"
     b = client.post(f"/v1/cases/{case}/speakers", headers=h, json={"display_name": "Hablante Manual B"})
     assert b.status_code == 201, b.text
     aid, bid = a.json()["id"], b.json()["id"]
     assert a.json()["label"].startswith("SPEAKER_")
     assert aid != bid
+
+    # Editar el rol de un hablante (para que los conteos por rol sean exactos).
+    up = client.patch(f"/v1/cases/{case}/speakers/{aid}", headers=h, json={"speaker_role": "perito"})
+    assert up.status_code == 200, up.text
+    assert up.json()["speaker_role"] == "perito"
 
     same = client.post(f"/v1/cases/{case}/speakers/merge", headers=h,
                        json={"keep_speaker_id": aid, "merge_speaker_id": aid})

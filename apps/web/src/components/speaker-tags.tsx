@@ -1,20 +1,19 @@
 "use client";
 
-/** Tags de los hablantes detectados en una transcripción.
- * - Edición GENERAL del nombre (speakers.display_name): al guardar, el nombre se actualiza
- *   en todos los segmentos que comparten ese hablante.
- * - Fusionar dos hablantes que son la misma persona (dos clusters de diarización):
- *   reasigna los segmentos del duplicado y lo elimina (reindexa pgvector y el grafo). */
+/** Tags de los hablantes de una transcripción.
+ * - "+" crea un hablante nuevo (nombre + rol opcional + parte) → aparece en los tags y en el selector.
+ * - El lápiz edita nombre, rol y parte (el rol CONFIRMADO hace exacto el conteo de «¿cuántos jueces?»).
+ * - "Fusionar" une dos hablantes que son la misma persona (reasigna segmentos y borra el duplicado). */
 
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, Merge, Pencil, Plus, X } from "lucide-react";
+import { Merge, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 export interface Speaker {
@@ -22,9 +21,21 @@ export interface Speaker {
   label: string;
   display_name?: string | null;
   speaker_role?: string | null;
+  resolved_party_id?: string | null;
   resolution_status?: string;
   version: number;
 }
+
+interface Party {
+  id: string;
+  name: string;
+  role?: string | null;
+}
+
+const STANDARD_ROLES = ["Juez", "Magistrado", "Apoderado", "Abogado", "Fiscal", "Secretario",
+  "Demandante", "Demandado", "Testigo", "Perito"];
+const CUSTOM = "__custom__";
+const NONE = "__none__";
 
 export function SpeakerTags({
   caseId,
@@ -33,32 +44,49 @@ export function SpeakerTags({
 }: {
   caseId: string;
   speakers: Speaker[];
-  /** Tras renombrar/fusionar: refresca los segmentos para que el nuevo nombre aparezca en los textos. */
+  /** Tras crear/editar/fusionar: refresca los segmentos (y por tanto los hablantes). */
   onRenamed?: () => void;
 }) {
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [role, setRole] = useState<string>(NONE);
+  const [customRole, setCustomRole] = useState("");
+  const [partyId, setPartyId] = useState<string>(NONE);
+
   const [mergeOpen, setMergeOpen] = useState(false);
   const [keepId, setKeepId] = useState<string | undefined>(undefined);
   const [mergeId, setMergeId] = useState<string | undefined>(undefined);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [newName, setNewName] = useState("");
 
-  const rename = useMutation({
-    mutationFn: (spk: Speaker) =>
-      api.post(`/review/${spk.id}`, {
-        entity_type: "speaker",
-        action: "EDIT",
-        expected_version: spk.version,
-        changes: { display_name: name.trim() },
-        reason: "Edición general del nombre del hablante",
+  const partiesQ = useQuery({
+    queryKey: ["parties", caseId],
+    queryFn: () => api.get<Party[]>(`/cases/${caseId}/parties`),
+    enabled: !!caseId,
+  });
+  const parties = partiesQ.data ?? [];
+
+  const effectiveRole = role === CUSTOM ? customRole.trim() : (role === NONE ? "" : role);
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.post(`/cases/${caseId}/speakers`, {
+        display_name: name.trim(),
+        speaker_role: effectiveRole || null,
+        resolved_party_id: partyId === NONE ? null : partyId,
       }),
-    onSuccess: () => {
-      toast.success("Nombre del hablante actualizado");
-      setEditingId(null);
-      onRenamed?.();
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo renombrar"),
+    onSuccess: () => { toast.success("Hablante creado"); closeForm(); onRenamed?.(); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo crear el hablante"),
+  });
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.patch(`/cases/${caseId}/speakers/${editId}`, {
+        display_name: name.trim(),
+        speaker_role: effectiveRole || null,
+        resolved_party_id: partyId === NONE ? null : partyId,
+      }),
+    onSuccess: () => { toast.success("Hablante actualizado"); closeForm(); onRenamed?.(); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo actualizar"),
   });
 
   const merge = useMutation({
@@ -66,92 +94,107 @@ export function SpeakerTags({
       api.post(`/cases/${caseId}/speakers/merge`, { keep_speaker_id: keepId, merge_speaker_id: mergeId }),
     onSuccess: () => {
       toast.success("Hablantes fusionados y reindexados");
-      setMergeOpen(false);
-      setKeepId(undefined);
-      setMergeId(undefined);
-      onRenamed?.();
+      setMergeOpen(false); setKeepId(undefined); setMergeId(undefined); onRenamed?.();
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo fusionar"),
   });
 
-  // Alta de un hablante nuevo (aparece en los tags y en el selector de "quién lo dijo").
-  const create = useMutation({
-    mutationFn: () => api.post(`/cases/${caseId}/speakers`, { display_name: newName.trim() }),
-    onSuccess: () => {
-      toast.success("Hablante creado");
-      setCreateOpen(false);
-      setNewName("");
-      onRenamed?.();
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo crear el hablante"),
-  });
-
-  function start(spk: Speaker) {
-    setEditingId(spk.id);
+  function closeForm() {
+    setFormOpen(false); setEditId(null); setName(""); setRole(NONE); setCustomRole(""); setPartyId(NONE);
+  }
+  function openCreate() {
+    closeForm(); setFormOpen(true);
+  }
+  function openEdit(spk: Speaker) {
+    const r = spk.speaker_role || "";
+    setEditId(spk.id);
     setName(spk.display_name || spk.label);
+    setRole(r ? (STANDARD_ROLES.includes(r) ? r : CUSTOM) : NONE);
+    setCustomRole(r && !STANDARD_ROLES.includes(r) ? r : "");
+    setPartyId(spk.resolved_party_id || NONE);
+    setFormOpen(true);
   }
 
-  if (!speakers.length) return null;
   const nameOf = (id?: string) => {
     const s = speakers.find((x) => x.id === id);
     return s ? s.display_name || s.label : "";
   };
   const canMerge = !!keepId && !!mergeId && keepId !== mergeId;
+  const canSubmit = name.trim().length > 0 && (role !== CUSTOM || customRole.trim().length > 0);
+  const isEdit = !!editId;
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-2">
       <span className="text-xs font-medium text-muted-foreground">Hablantes:</span>
-      <Button
-        size="icon"
-        variant="outline"
-        className="h-6 w-6 rounded-full"
-        title="Nuevo hablante"
-        onClick={() => setCreateOpen(true)}
-      >
+      <Button size="icon" variant="outline" className="h-6 w-6 rounded-full" title="Nuevo hablante" onClick={openCreate}>
         <Plus className="h-3.5 w-3.5" />
       </Button>
-      {speakers.map((spk) =>
-        editingId === spk.id ? (
-          <span key={spk.id} className="flex items-center gap-1">
-            <Input
-              autoFocus
-              value={name}
-              className="h-7 w-44"
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && name.trim()) rename.mutate(spk);
-                if (e.key === "Escape") setEditingId(null);
-              }}
-            />
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7"
-              title="Guardar"
-              disabled={rename.isPending || !name.trim()}
-              onClick={() => rename.mutate(spk)}
-            >
-              <Check className="h-4 w-4" />
-            </Button>
-            <Button size="icon" variant="ghost" className="h-7 w-7" title="Cancelar" onClick={() => setEditingId(null)}>
-              <X className="h-4 w-4" />
-            </Button>
-          </span>
-        ) : (
-          <button key={spk.id} type="button" title="Cambiar el nombre en toda la transcripción" onClick={() => start(spk)}>
-            <Badge variant="secondary" className="cursor-pointer gap-1 hover:bg-muted">
-              {spk.display_name || spk.label}
-              <Pencil className="h-3 w-3" />
-            </Badge>
-          </button>
-        ),
-      )}
+      {speakers.map((spk) => (
+        <button key={spk.id} type="button" title="Editar nombre, rol y parte"
+          onClick={() => openEdit(spk)}>
+          <Badge variant="secondary" className="cursor-pointer gap-1 hover:bg-muted">
+            {spk.display_name || spk.label}
+            {spk.speaker_role ? <span className="text-muted-foreground">· {spk.speaker_role}</span> : null}
+            <Pencil className="h-3 w-3" />
+          </Badge>
+        </button>
+      ))}
       {speakers.length >= 2 && (
         <Button size="sm" variant="outline" className="ml-auto h-7 gap-1" onClick={() => setMergeOpen(true)}>
-          <Merge className="h-3.5 w-3.5" />
-          Fusionar
+          <Merge className="h-3.5 w-3.5" />Fusionar
         </Button>
       )}
+
+      <Dialog open={formOpen} onOpenChange={(o) => { if (!o) closeForm(); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isEdit ? "Editar hablante" : "Nuevo hablante"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Nombre</label>
+              <Input autoFocus placeholder="Nombre del hablante" value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) (isEdit ? save : create).mutate(); }} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Rol</label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Sin rol" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Sin rol</SelectItem>
+                  {STANDARD_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  <SelectItem value={CUSTOM}>➕ Otro rol…</SelectItem>
+                </SelectContent>
+              </Select>
+              {role === CUSTOM && (
+                <Input className="h-9" placeholder="Nombre del rol (p. ej. Magistrado auxiliar)"
+                  value={customRole} onChange={(e) => setCustomRole(e.target.value)} />
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                El rol permite responder con exactitud «¿cuántos jueces/apoderados…?».
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Parte del proceso (opcional)</label>
+              <Select value={partyId} onValueChange={setPartyId}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Sin parte" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Sin parte</SelectItem>
+                  {parties.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={closeForm}>Cancelar</Button>
+            <Button size="sm" disabled={!canSubmit || create.isPending || save.isPending}
+              onClick={() => (isEdit ? save : create).mutate()}>
+              {isEdit ? "Guardar" : "Crear"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
         <DialogContent className="max-w-md">
@@ -183,39 +226,12 @@ export function SpeakerTags({
             </Select>
           </div>
           {canMerge && (
-            <p className="text-xs text-muted-foreground">
-              Se fusionará <b>{nameOf(mergeId)}</b> en <b>{nameOf(keepId)}</b>.
-            </p>
+            <p className="text-xs text-muted-foreground">Se fusionará <b>{nameOf(mergeId)}</b> en <b>{nameOf(keepId)}</b>.</p>
           )}
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="outline" onClick={() => setMergeOpen(false)}>Cancelar</Button>
             <Button size="sm" disabled={!canMerge || merge.isPending} onClick={() => merge.mutate()}>
               <Merge className="mr-1 h-4 w-4" />Fusionar
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Nuevo hablante</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Crea un hablante que la diarización no detectó; quedará en la lista de hablantes y en el selector
-            de «quién lo dijo».
-          </p>
-          <Input
-            autoFocus
-            placeholder="Nombre del hablante"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && newName.trim()) create.mutate(); }}
-          />
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button size="sm" disabled={!newName.trim() || create.isPending} onClick={() => create.mutate()}>
-              <Plus className="mr-1 h-4 w-4" />Crear
             </Button>
           </div>
         </DialogContent>

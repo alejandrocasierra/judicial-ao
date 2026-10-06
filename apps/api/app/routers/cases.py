@@ -14,7 +14,8 @@ from app.core.db import one, rows, tx
 from app.core.errors import AppError
 from app.domain import states
 from app.domain.jurisdiction import jurisdictions, validate_case_number
-from app.schemas import CaseCreate, CasePatch, LegalHoldIn, MemberIn, ProcessIn, SpeakerCreate, SpeakerMergeIn
+from app.schemas import (CaseCreate, CasePatch, LegalHoldIn, MemberIn, ProcessIn, SpeakerCreate, SpeakerMergeIn,
+                         SpeakerPatch)
 from app.security import rbac
 from app.security.deps import Principal, case_access, current_principal, require_org
 from app.services import audit, export, indexing, purge
@@ -515,23 +516,68 @@ def speakers(case_id: UUID, p: Principal = Depends(current_principal)):
 
 @router.post("/{case_id}/speakers", status_code=201)
 def create_speaker(case_id: UUID, body: SpeakerCreate, request: Request, p: Principal = Depends(current_principal)):
-    """Crea un hablante manual (p. ej. alguien que la diarización no detectó) con su nombre visible."""
+    """Crea un hablante manual (p. ej. alguien que la diarización no detectó) con su nombre visible,
+    su rol (juez/apoderado/…) y, opcionalmente, la parte del proceso a la que corresponde."""
     case = case_access(p, case_id, "media.upload")
     if case["status"] == "ARCHIVED":
         raise AppError("INVALID_STATE_TRANSITION", 409)
     with tx(p.org_id, p.user_id) as c:
+        party = _valid_party(c, case_id, body.resolved_party_id)
         row = one(c, """SELECT COALESCE(MAX(NULLIF(regexp_replace(label, '\\D', '', 'g'), '')::int), 0) AS n
                         FROM speakers WHERE case_id = :c AND label ~ '^SPEAKER_[0-9]+$'""", c=str(case_id))
         label = f"SPEAKER_{int(row['n']) + 1:02d}"
         spk = one(c, """INSERT INTO speakers (organization_id, case_id, label, display_name, speaker_role,
-                              resolution_status, resolution_source, confidence)
-            VALUES (:o, :c, :l, :n, :r, 'PROBABLE', 'manual', 1.0)
-            RETURNING id, label, display_name, speaker_role, resolution_status, resolution_source, confidence, version""",
-                  o=p.org_id, c=str(case_id), l=label, n=body.display_name.strip(), r=body.speaker_role or None)
+                              resolved_party_id, resolution_status, resolution_source, confidence)
+            VALUES (:o, :c, :l, :n, :r, :pid, 'PROBABLE', 'manual', 1.0)
+            RETURNING id, label, display_name, speaker_role, resolved_party_id, resolution_status, resolution_source, confidence, version""",
+                  o=p.org_id, c=str(case_id), l=label, n=body.display_name.strip(),
+                  r=(body.speaker_role or "").strip() or None, pid=party)
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="speaker.created", entity_type="speaker",
                      entity_id=str(spk["id"]),
-                     after={"display_name": body.display_name.strip(), "via": "manual"}, request=request)
+                     after={"display_name": body.display_name.strip(), "speaker_role": spk["speaker_role"],
+                            "resolved_party_id": party, "via": "manual"}, request=request)
     return spk
+
+
+def _valid_party(c, case_id: UUID, party_id) -> str | None:
+    """Valida que la parte pertenezca al caso y devuelve su id (o None)."""
+    if party_id is None:
+        return None
+    if not one(c, "SELECT id FROM parties WHERE id = :i AND case_id = :c", i=str(party_id), c=str(case_id)):
+        raise AppError("NOT_FOUND", 404)
+    return str(party_id)
+
+
+@router.patch("/{case_id}/speakers/{speaker_id}")
+def update_speaker(case_id: UUID, speaker_id: UUID, body: SpeakerPatch, request: Request,
+                   p: Principal = Depends(current_principal)):
+    """Edita el nombre, el rol y/o la parte asociada de un hablante (para que los conteos por rol
+    sean EXACTOS en vez de heurísticos)."""
+    case = case_access(p, case_id, "media.upload")
+    if case["status"] == "ARCHIVED":
+        raise AppError("INVALID_STATE_TRANSITION", 409)
+    with tx(p.org_id, p.user_id) as c:
+        if not one(c, "SELECT id FROM speakers WHERE id = :i AND case_id = :c", i=str(speaker_id), c=str(case_id)):
+            raise AppError("NOT_FOUND", 404)
+        sets, params, after = ["version = version + 1"], {}, {}
+        if "display_name" in body.model_fields_set:
+            sets.append("display_name = :n")
+            params["n"] = (body.display_name or "").strip() or None
+            after["display_name"] = params["n"]
+        if "speaker_role" in body.model_fields_set:
+            sets.append("speaker_role = :r")
+            params["r"] = (body.speaker_role or "").strip() or None
+            after["speaker_role"] = params["r"]
+        if "resolved_party_id" in body.model_fields_set:
+            sets.append("resolved_party_id = :pid")
+            params["pid"] = _valid_party(c, case_id, body.resolved_party_id)
+            after["resolved_party_id"] = params["pid"]
+        m = one(c, f"""UPDATE speakers SET {', '.join(sets)} WHERE id = :i
+            RETURNING id, label, display_name, speaker_role, resolved_party_id, resolution_status,
+                      resolution_source, confidence, version""", i=str(speaker_id), **params)
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="speaker.updated", entity_type="speaker",
+                     entity_id=str(speaker_id), after=after, request=request)
+    return m
 
 
 @router.post("/{case_id}/speakers/merge")

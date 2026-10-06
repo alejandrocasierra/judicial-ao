@@ -358,7 +358,8 @@ def list_segments(case_id: UUID, media_id: UUID, p: Principal = Depends(current_
                           FROM transcript_segments s LEFT JOIN speakers sp ON sp.id = s.speaker_id
                           WHERE s.media_id = :m ORDER BY s.start_ms""", m=str(media_id))
         # Hablantes detectados en ESTE media (para los tags de edición general del nombre).
-        spks = rows(c, """SELECT sp.id, sp.label, sp.display_name, sp.speaker_role, sp.resolution_status, sp.version
+        spks = rows(c, """SELECT sp.id, sp.label, sp.display_name, sp.speaker_role, sp.resolved_party_id,
+                                 sp.resolution_status, sp.version
                           FROM speakers sp
                           WHERE sp.case_id = :c
                             AND EXISTS (SELECT 1 FROM transcript_segments s

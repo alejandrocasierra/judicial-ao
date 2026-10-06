@@ -23,17 +23,25 @@ def authoritative_hint(org_id: str, user_id: str | None, case_id: str, question:
     except Exception:  # noqa: BLE001 — nunca romper la consulta por esto
         return None
     names: list[str] = []
+    confirmed = any(it.get("confirmed") for it in items)
     for it in items:
-        n = it.get("person_name")
+        n = it.get("person_name") or it.get("display_name") or it.get("label")
         if not n:
             continue
-        names.append(f"- {n} — {it.get('mentions')} menciones; {it.get('filename')} p.{it.get('page_number')}")
+        if it.get("confirmed"):
+            extra = it.get("speaker_role") or ""
+            party = f" · parte: {it.get('party_name')}" if it.get("party_name") else ""
+            names.append(f"- {n}" + (f" ({extra})" if extra else "") + party + f" — {it.get('segments') or 0} segmentos")
+        else:
+            names.append(f"- {n} — {it.get('mentions')} menciones; {it.get('filename')} p.{it.get('page_number')}")
     if not names:
         return None
-    return (
-        f"LISTA DETERMINISTA de «{role}» (candidatos detectados en firmas; TOTAL={len(names)}), "
-        "la misma para cualquier modelo. Para «¿quiénes…?» o «¿cuántos…?» responde con ESTA lista: "
-        "enumera estos nombres DISTINTOS, indica el total y cita cada uno (documento/página). NO añadas ni "
-        "quites personas de la lista; aclara que es un resultado heurístico y que debe verificarse.\n"
-        + "\n".join(names)
-    )
+    if confirmed:
+        header = (f"LISTA OFICIAL de «{role}» (roles CONFIRMADOS por el usuario; TOTAL={len(names)}). "
+                  "Responde con EXACTAMENTE estos nombres y este total (con su parte si la tienen). No añadas ni "
+                  "quites personas ni la contestes con un fragmento de transcripción.")
+    else:
+        header = (f"LISTA DETERMINISTA de «{role}» (candidatos detectados en firmas; TOTAL={len(names)}), "
+                  "la misma para cualquier modelo. Responde con ESTA lista: nombres DISTINTOS, total y cita cada "
+                  "uno; aclara que es heurística y que conviene verificarla.")
+    return header + "\n" + "\n".join(names)

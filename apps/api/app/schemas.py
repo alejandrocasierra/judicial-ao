@@ -130,6 +130,16 @@ class SpeakerCreate(Strict):
     """Alta de un hablante manual (no detectado por la diarización)."""
     display_name: str = Field(min_length=1, max_length=200)
     speaker_role: str | None = Field(default=None, max_length=100)
+    resolved_party_id: UUID | None = None
+
+    _v = field_validator("display_name", "speaker_role")(_no_control)
+
+
+class SpeakerPatch(Strict):
+    """Edición del nombre, el rol y/o la parte asociada de un hablante."""
+    display_name: str | None = Field(default=None, min_length=1, max_length=200)
+    speaker_role: str | None = Field(default=None, max_length=100)
+    resolved_party_id: UUID | None = None
 
     _v = field_validator("display_name", "speaker_role")(_no_control)
 

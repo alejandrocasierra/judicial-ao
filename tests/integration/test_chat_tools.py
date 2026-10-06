@@ -271,9 +271,11 @@ def test_it_ct_12_list_people_by_role_returns_citable_document_pages(client, aut
     doc_id = client.get(f"/v1/cases/{ids['pago']}/documents", headers=h).json()[0]["id"]
     n = client.get(f"/v1/cases/{ids['pago']}/documents/{doc_id}/pages", headers=h).json()["pages"][0]["page_number"]
     snap = fetch(owner_db, "SELECT text FROM document_pages WHERE document_id=%s AND page_number=%s", (doc_id, n))[0][0]
+    roles_snap = fetch(owner_db, "SELECT id, speaker_role FROM speakers WHERE case_id = %s", (ids["pago"],))
     with owner_db.cursor() as cur:
         cur.execute("UPDATE document_pages SET text=%s WHERE document_id=%s AND page_number=%s",
                     ("Auto. Firmado por ALBA LUCY COCK ÁLVAREZ\nJUEZ CIRCUITO", doc_id, n))
+        cur.execute("UPDATE speakers SET speaker_role = NULL WHERE case_id = %s", (ids["pago"],))
     owner_db.commit()
     try:
         ctx = case_tools.ToolContext(org_id=org_ids["alfa"], actor_id=None)
@@ -286,6 +288,8 @@ def test_it_ct_12_list_people_by_role_returns_citable_document_pages(client, aut
     finally:
         with owner_db.cursor() as cur:
             cur.execute("UPDATE document_pages SET text=%s WHERE document_id=%s AND page_number=%s", (snap, doc_id, n))
+            for sid, role in roles_snap:
+                cur.execute("UPDATE speakers SET speaker_role = %s WHERE id = %s", (role, sid))
         owner_db.commit()
 
 
@@ -297,3 +301,23 @@ def test_it_ct_13_get_document_markdown_tool(client, auth, ids, org_ids):
         items = case_tools.execute(conn, ids["pago"], "get_document_markdown", {"document_id": fname}, ctx=ctx)
     assert items and items[0]["source_type"] == "document_markdown"
     assert items[0]["text"].startswith("#") and "## Página 1" in items[0]["text"]
+
+
+def test_it_ct_14_list_people_by_role_prefers_confirmed_roles(client, auth, ids, org_ids, owner_db):
+    """Si el usuario confirma el rol de un hablante, el conteo por rol usa ESA lista (exacta), no la heurística."""
+    h = auth("abogada.alfa")
+    actor = client.get("/v1/auth/me", headers=h).json()["id"]
+    r = client.post(f"/v1/cases/{ids['pago']}/speakers", headers=h,
+                    json={"display_name": "JUEZ CONFIRMADO PRUEBA", "speaker_role": "juez"})
+    assert r.status_code == 201, r.text
+    sid = r.json()["id"]
+    try:
+        with tx(org_ids["alfa"], actor) as conn:
+            items = case_tools.execute(conn, ids["pago"], "list_people_by_role", {"role": "juez"},
+                                       ctx=case_tools.ToolContext(org_id=org_ids["alfa"], actor_id=actor))
+        assert items and all(it.get("confirmed") for it in items)
+        assert any(it.get("speaker_id") == sid and it.get("speaker_role") == "juez" for it in items)
+    finally:
+        with owner_db.cursor() as cur:
+            cur.execute("DELETE FROM speakers WHERE id = %s", (sid,))
+        owner_db.commit()

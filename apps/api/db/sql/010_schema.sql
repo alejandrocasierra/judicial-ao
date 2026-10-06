@@ -152,7 +152,7 @@ CREATE TABLE speakers (
   organization_id uuid NOT NULL REFERENCES organizations(id),
   case_id uuid NOT NULL REFERENCES cases(id),
   label text NOT NULL,
-  speaker_role text CHECK (speaker_role IN ('judge','attorney','witness','expert','party','clerk','other')),
+  speaker_role text,  -- libre: roles estándar o personalizados (juez, apoderado, perito, …)
   resolved_party_id uuid REFERENCES parties(id),
   resolution_status text NOT NULL DEFAULT 'UNRESOLVED' CHECK (resolution_status IN ('UNRESOLVED','PROBABLE','CONFIRMED')),
   resolution_source text,

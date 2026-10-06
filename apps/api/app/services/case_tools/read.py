@@ -323,6 +323,17 @@ _ROLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "parte": ("demandante", "demandado"),
 }
 
+# Patrones para el ROL CONFIRMADO por el usuario en speakers.speaker_role (español o inglés).
+_ROLE_CONFIRMED: dict[str, tuple[str, ...]] = {
+    "juez": ("juez", "jueza", "judge", "magistrad"),
+    "apoderado": ("apoderad", "abogad", "attorney"),
+    "testigo": ("testig", "witness"),
+    "perito": ("perit", "expert"),
+    "secretario": ("secretari", "clerk"),
+    "fiscal": ("fiscal",),
+    "parte": ("parte", "party", "demandante", "demandado"),
+}
+
 # Palabras que NO son nombres de persona (roles, cargos, números en letras, etc.).
 _STOP_NAME_TOKENS = frozenset("""
 JUEZ JUEZA JUZGADO CIRCUITO BOGOTA BOGOTÁ COLOMBIA REPUBLICA REPÚBLICA CIVIL TRIBUNAL PENAL LABORAL
@@ -400,6 +411,31 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
     if not keywords:
         return _err("rol no soportado; usa uno de: " + ", ".join(sorted(_ROLE_KEYWORDS)))
     pats = "{" + ",".join(f"%{kw}%" for kw in keywords) + "}"
+    cpats = "{" + ",".join(f"%{kw}%" for kw in _ROLE_CONFIRMED.get(role_key, (role_key,))) + "}"
+
+    # 1) Roles CONFIRMADOS por el usuario (speakers.speaker_role) → conteo EXACTO (no heurístico).
+    confirmed = rows(conn, """
+        SELECT sp.id, sp.label, sp.display_name, sp.speaker_role, sp.resolved_party_id, pt.name AS party_name,
+               (SELECT count(*) FROM transcript_segments t WHERE t.speaker_id = sp.id) AS segments
+        FROM speakers sp LEFT JOIN parties pt ON pt.id = sp.resolved_party_id
+        WHERE sp.case_id = :c AND sp.speaker_role IS NOT NULL AND btrim(sp.speaker_role) <> ''
+          AND lower(sp.speaker_role) LIKE ANY(CAST(:pats AS text[]))
+        ORDER BY segments DESC, sp.label
+    """, c=case_id, pats=cpats)
+    if confirmed:
+        return [evidence_item(
+                    "PER", "speaker",
+                    f"{sp['display_name'] or sp['label']}"
+                    + (f" — {sp['speaker_role']}" if sp["speaker_role"] else "")
+                    + (f" ({sp['party_name']})" if sp["party_name"] else ""),
+                    speaker_id=str(sp["id"]), label=sp["label"], display_name=sp["display_name"],
+                    person_name=sp["display_name"] or sp["label"], role=role_key,
+                    speaker_role=sp["speaker_role"], segments=sp["segments"], confirmed=True,
+                    party_name=sp["party_name"],
+                    resolved_party_id=str(sp["resolved_party_id"]) if sp["resolved_party_id"] else None)
+                for sp in confirmed[:k]]
+
+    # 2) Respaldo HEURÍSTICO (firmas/encabezados) si aún no hay roles confirmados.
     pages = rows(conn, """
         SELECT p.document_id, d.filename, p.page_number, p.folio, p.text
         FROM document_pages p JOIN documents d ON d.id = p.document_id
