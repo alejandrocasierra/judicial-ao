@@ -132,9 +132,19 @@ def _seed_bootstrap_admin(accounts: list[dict]) -> None:
                               is_active = true, failed_login_attempts = 0, locked_until = NULL WHERE id = :u"""),
                       {"h": hash_password(password), "n": full_name, "u": str(existing["id"])})
         else:
-            c.execute(text("""INSERT INTO users (organization_id, email, full_name, password_hash, org_role, locale)
-                              VALUES (:o, :e, :n, :h, 'ORG_ADMIN', 'es')"""),
-                      {"o": org_id, "e": email, "n": full_name, "h": hash_password(password)})
+            # RIESGO: el admin puede existir ya en OTRA organización (p. ej.
+            # scripts/seed_admin.sh lo crea en la primera org alfabética). RLS de
+            # ESTA org no lo deja ver, pero `users.email` es UNIQUE global, así que
+            # un INSERT simple revienta con users_email_key (UniqueViolation) y el
+            # paso de semillas muere con traceback. ON CONFLICT lo convierte en un
+            # no-op atómico sin perder el UPDATE de arriba cuando sí se ve.
+            res = c.execute(text("""INSERT INTO users (organization_id, email, full_name, password_hash, org_role, locale)
+                                    VALUES (:o, :e, :n, :h, 'ORG_ADMIN', 'es')
+                                    ON CONFLICT (email) DO NOTHING"""),
+                            {"o": org_id, "e": email, "n": full_name, "h": hash_password(password)})
+            if res.rowcount == 0:
+                print(f"[seed] bootstrap admin {email} ya existe en otra organización — no se duplica")
+                return
     accounts.append({"org": "alfa", "email": email, "role": "ORG_ADMIN", "active": True})
     print(f"[seed] bootstrap admin listo: {email}")
 
