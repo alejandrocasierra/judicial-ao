@@ -494,7 +494,7 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
     Filtros opcionales: kind=procedural|generic, instance, actor."""
     case_access(p, case_id, "case.read")
     with tx(p.org_id, p.user_id) as c:
-        return rows(c, """
+        evs = [dict(r) for r in rows(c, """
             SELECT e.id, e.kind, e.event_date, e.date_precision, e.event_type, e.subtype, e.instance,
                    e.actor, e.authority, e.date_type, e.procedural_effect, e.description,
                    e.timeline_confidence, e.confidence, e.document_id, e.page_number,
@@ -515,7 +515,26 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
               AND (CAST(:instance AS text) IS NULL OR e.instance = :instance)
               AND (CAST(:actor AS text) IS NULL OR e.actor = :actor)
             ORDER BY e.event_date NULLS LAST, e.kind""",
-            c=str(case_id), kind=kind, instance=instance, actor=actor)
+            c=str(case_id), kind=kind, instance=instance, actor=actor)]
+        rels = rows(c, """SELECT source_event_id, target_event_id, relationship, confidence
+                          FROM event_relationships WHERE case_id = :c""", c=str(case_id))
+    for i, e in enumerate(evs, 1):
+        e["seq"] = i
+        e["code"] = f"EV-{i:04d}"
+    idx = {str(e["id"]): e for e in evs}
+    links_map: dict[str, list[dict[str, object]]] = {k: [] for k in idx}
+    for r in rels:
+        s, t = str(r["source_event_id"]), str(r["target_event_id"])
+        if s in idx and t in idx:
+            links_map[s].append({"relationship": r["relationship"], "direction": "out",
+                                 "other_id": t, "other_code": idx[t]["code"],
+                                 "other_subtype": idx[t]["subtype"], "confidence": r["confidence"]})
+            links_map[t].append({"relationship": r["relationship"], "direction": "in",
+                                 "other_id": s, "other_code": idx[s]["code"],
+                                 "other_subtype": idx[s]["subtype"], "confidence": r["confidence"]})
+    for e in evs:
+        e["links"] = links_map.get(str(e["id"]), [])
+    return evs
 
 
 @router.post("/{case_id}/timeline/build")

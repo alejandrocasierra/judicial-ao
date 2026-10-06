@@ -27,6 +27,9 @@ interface TimelineEvent {
   authority?: string | null; date_type?: string | null; procedural_effect?: string | null;
   document_id?: string | null; page_number?: number | null; document_filename?: string | null;
   duplicate_of?: string | null; review_flags?: string[] | null;
+  seq?: number; code?: string | null;
+  links?: Array<{ relationship: string; direction: "in" | "out"; other_id: string; other_code: string;
+                  other_subtype?: string | null; confidence?: number | null }> | null;
 }
 
 const INSTANCE_ES: Record<string, string> = {
@@ -62,6 +65,10 @@ const INSTANCE_ORDER = ["primera", "segunda", "casacion", "tutela", "incidente",
 const FLAG_ES: Record<string, string> = {
   duplicado: "duplicado", fecha_inconsistente: "fecha inconsistente",
   sin_fuente_real: "sin fuente real", sin_fecha: "sin fecha",
+};
+const REL_ES: Record<string, string> = {
+  causes: "causa", responds_to: "responde a", appeals: "apela a", confirms: "confirma",
+  revokes: "revoca", precedes: "precede", refers_to: "refiere a", same_as: "idéntico a",
 };
 
 function mmss(ms: number) {
@@ -349,7 +356,7 @@ export default function ProcesosPage() {
                   </h4>
                   <ol className="relative ml-2 border-l border-border">
                     {list.map((ev) => (
-                      <li key={ev.id} className="relative mb-5 ml-4">
+                      <li key={ev.id} id={`ev-${ev.id}`} className="relative mb-5 ml-4 scroll-mt-4">
                         <span className="absolute -left-[21px] top-1.5 h-3 w-3 rounded-full border-2 border-background bg-primary" />
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-semibold">
@@ -357,6 +364,7 @@ export default function ProcesosPage() {
                               ? new Date(ev.event_date).toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" })
                               : "Sin fecha"}
                           </span>
+                          {ev.code && <span className="font-mono text-[10px] text-muted-foreground">{ev.code}</span>}
                           {ev.subtype && <Badge variant="secondary" className="text-[10px]">{SUBTYPE_ES[ev.subtype] || ev.subtype}</Badge>}
                           {ev.actor && <Badge variant="outline" className="text-[10px]">{ACTOR_ES[ev.actor] || ev.actor}</Badge>}
                           {ev.date_type === "referenciada" && (
@@ -375,6 +383,18 @@ export default function ProcesosPage() {
                         <p className="mt-1 text-sm">{ev.description}</p>
                         {ev.procedural_effect && (
                           <p className="mt-0.5 text-xs text-muted-foreground"><b>Efecto:</b> {ev.procedural_effect}</p>
+                        )}
+                        {(ev.links ?? []).length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(ev.links ?? []).map((l, i) => (
+                              <button key={`${l.other_id}-${l.relationship}-${i}`} type="button"
+                                onClick={() => document.getElementById(`ev-${l.other_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                                className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+                                title={`Ir a ${l.other_code}`}>
+                                {l.direction === "out" ? "→" : "←"} {REL_ES[l.relationship] || l.relationship} {l.other_code}
+                              </button>
+                            ))}
+                          </div>
                         )}
                         {ev.sources?.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
