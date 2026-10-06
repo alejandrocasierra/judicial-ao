@@ -5,6 +5,7 @@
  * "Archivar" la retira del listado (soft-delete en el backend). */
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useChatStore } from "@/lib/chat-store";
@@ -24,8 +25,15 @@ interface CaseSessions { case: Case; sessions: Session[] }
 
 export default function ChatsPage() {
   const qc = useQueryClient();
+  const router = useRouter();
   const openChat = useChatStore((s) => s.openChat);
   const [toDelete, setToDelete] = useState<{ caseId: string; sessionId: string; title: string } | null>(null);
+
+  // El chat vive dentro del proceso: abre la sesión y navega a ese expediente.
+  const continueSession = (caseId: string, sessionId: string) => {
+    openChat(caseId, sessionId);
+    router.push(`/dashboard/procesos/${caseId}`);
+  };
 
   const { data = [], isLoading } = useQuery({
     queryKey: ["all-chats"],
@@ -62,8 +70,8 @@ export default function ChatsPage() {
             {total > 0 ? `${total} conversación${total === 1 ? "" : "es"} sobre tus expedientes` : "Historial de conversaciones con IA"}
           </p>
         </div>
-        <Button onClick={() => openChat()}>
-          <MessageSquare className="mr-2 h-4 w-4" />Nueva conversación
+        <Button onClick={() => router.push("/dashboard/procesos")}>
+          <MessageSquare className="mr-2 h-4 w-4" />Ir a un proceso
         </Button>
       </div>
 
@@ -75,7 +83,7 @@ export default function ChatsPage() {
             <MessageSquare className="mb-4 h-12 w-12 text-muted-foreground" />
             <p className="text-muted-foreground">No hay chats registrados aún</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Abre el Chat IA (abajo a la derecha) y pregunta sobre un expediente.
+              Entra a un proceso y usa «Chat del proceso» para preguntar sobre sus documentos.
             </p>
           </CardContent>
         </Card>
@@ -99,7 +107,7 @@ export default function ChatsPage() {
                         Última actividad: {new Date(s.updated_at).toLocaleString()}
                       </p>
                       <div className="flex gap-2">
-                        <Button size="sm" className="flex-1" onClick={() => openChat(c.id, s.id)}>
+                        <Button size="sm" className="flex-1" onClick={() => continueSession(c.id, s.id)}>
                           <Play className="mr-1 h-3.5 w-3.5" />Continuar
                         </Button>
                         <Button size="sm" variant="outline" className="text-destructive hover:text-destructive"

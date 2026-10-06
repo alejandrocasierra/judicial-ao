@@ -26,7 +26,6 @@ import { toast } from "sonner";
 
 interface Agent { id: string; name: string; is_system: boolean }
 interface Model { id: string; provider: string; model_name: string; is_default: boolean }
-interface Case { id: string; case_number: string; title: string }
 interface FileItem { id: string; name: string; kind: "pdf" | "video" }
 interface Attachment { kind: "document" | "media"; id: string; name?: string }
 interface Citation {
@@ -106,20 +105,28 @@ function Markdown({ text }: { text: string }) {
   return <div className="space-y-1">{blocks}</div>;
 }
 
+/** El chat vive DENTRO de un proceso: sin expediente abierto no hay botón flotante.
+ * Queda anclado al expediente de la URL, así que nunca responde sobre otro proceso. */
 export function ChatWidget() {
-  const { open, setOpen, caseId: storeCaseId, sessionId, setSession } = useChatStore();
   const pathname = usePathname();
   const activeProcessId = useMemo(() => {
     const m = pathname?.match(/\/dashboard\/procesos\/([0-9a-f-]{36})/i);
     return m?.[1] ?? null;
   }, [pathname]);
+  // Fuera de un proceso (dashboard, usuarios, agentes…) no se muestra el chat.
+  if (!activeProcessId) return null;
+  // `key` remonta el chat al cambiar de expediente: nunca arrastra estado del anterior.
+  return <ChatWidgetInner key={activeProcessId} caseId={activeProcessId} />;
+}
+
+function ChatWidgetInner({ caseId }: { caseId: string }) {
+  const { open, setOpen, sessionId, setSession } = useChatStore();
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
-  const [cases, setCases] = useState<Case[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [models, setModels] = useState<Model[]>([]);
@@ -133,10 +140,7 @@ export function ChatWidget() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
 
-  // El expediente del chat: el proceso abierto en pantalla > el elegido > el primero.
-  const caseId = activeProcessId || storeCaseId || cases[0]?.id || "";
-
-  // Carga inicial: agentes, modelos y expedientes.
+  // Carga inicial: agentes y modelos (el expediente está fijado a la URL).
   useEffect(() => {
     if (!open) return;
     (async () => {
@@ -146,7 +150,6 @@ export function ChatWidget() {
         setModels(ms);
         setSelectedModel((prev) => prev || ms.find((m) => m.is_default) || ms[0] || null);
       } catch { setModels([]); }
-      try { setCases(await api.get<Case[]>("/cases")); } catch { setCases([]); }
     })();
   }, [open]);
 
@@ -379,20 +382,6 @@ export function ChatWidget() {
           </div>
 
           <div className="space-y-2 border-b px-4 py-2">
-            {cases.length > 1 && !activeProcessId && (
-              <Select value={caseId} onValueChange={(id) => useChatStore.setState({ caseId: id })}>
-                <SelectTrigger className="h-8 w-full text-xs">
-                  <SelectValue placeholder="Expediente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cases.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      <span className="text-xs">{c.case_number} · {c.title.slice(0, 40)}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
             <div className="flex gap-2">
               {sessions.length > 0 && (
                 <Select value={sessionId ?? ""} onValueChange={(v) => {
