@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS document_ocr_versions (
   page_number int NOT NULL CHECK (page_number >= 1),
   mode text NOT NULL CHECK (mode IN ('basico', 'document_ai')),
   text text NOT NULL DEFAULT '',
-  ocr_confidence numeric(4,3) CHECK (ocr_confidence BETWEEN 0 AND 1),
+  ocr_confidence numeric(6,5) CHECK (ocr_confidence BETWEEN 0 AND 1),
   layout_json jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (document_id, page_number, mode)

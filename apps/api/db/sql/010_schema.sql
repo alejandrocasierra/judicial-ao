@@ -121,7 +121,7 @@ CREATE TABLE document_pages (
   folio text,
   image_uri text,
   text text NOT NULL DEFAULT '',
-  ocr_confidence numeric(4,3) CHECK (ocr_confidence BETWEEN 0 AND 1),
+  ocr_confidence numeric(6,5) CHECK (ocr_confidence BETWEEN 0 AND 1),
   needs_review boolean NOT NULL DEFAULT false,
   layout_json jsonb,
   tsv tsvector GENERATED ALWAYS AS (to_tsvector('{{FTS_CONFIG}}', coalesce(text,''))) STORED,

@@ -1,23 +1,29 @@
 """Confianza de OCR por página y por modo, ajustada por edición humana.
 
-Modelo TRANSPARENTE (por palabras):
+Modelo TRANSPARENTE (por CARACTERES de contenido):
 - Toda página arranca en 100% de confianza para el modo que la procesó (`basico` o `document_ai`).
-- Si la persona cambia contenido real, la confianza baja de forma **proporcional a las
-  palabras cambiadas**:
+- Si la persona cambia contenido real, la confianza baja de forma **proporcional a los
+  caracteres cambiados** (distancia de Levenshtein, donde una sustitución cuenta 1):
 
-      confianza = base − (palabras_cambiadas / palabras_totales)
+      confianza = base − (caracteres_cambiados / caracteres_totales)
 
-  Ejemplo: 100 palabras y se cambian 5 → 100% − 5% = **95%**.
+  Así, cambiar UNA letra pesa menos que reescribir una palabra completa.
+  Ejemplo: cambiar 1 letra en un texto de 100 caracteres → 100% − 1% = **99%**.
 - Los cambios que sólo agregan/quitan **puntuación o espacios** NO afectan la confianza
-  (se comparan palabras: letras/dígitos).
+  (se comparan solo letras/dígitos). Sin acentos ni mayúsculas se normalizan: se comparan
+  tal cual.
 """
 from __future__ import annotations
 
 import re
-from difflib import SequenceMatcher
+
+from rapidfuzz.distance import Levenshtein
 
 # "Palabra" = secuencia de letras/dígitos (con acentos). Ignora puntuación y espacios.
 _WORD = re.compile(r"[^\W_]+", re.UNICODE)
+
+# Decimales de la confianza (coincide con numeric(6,5) en document_pages/document_ocr_versions).
+_PRECISION = 5
 
 
 def words(text: str | None) -> list[str]:
@@ -26,37 +32,35 @@ def words(text: str | None) -> list[str]:
 
 
 def content_signature(text: str | None) -> str:
-    """Texto sin puntuación ni espacios (letras/dígitos). Se conserva por compatibilidad."""
+    """Texto sin puntuación ni espacios (solo letras/dígitos), para comparar contenido."""
     return "".join(words(text))
 
 
-def _changed_words(old: list[str], new: list[str]) -> int:
-    """Palabras cambiadas = max(n_old, n_new) − coincidencias (LCS). Sustituciones cuentan 1."""
-    sm = SequenceMatcher(None, old, new, autojunk=False)
-    lcs = sum(size for _i, _j, size in sm.get_matching_blocks())
-    return max(len(old), len(new)) - lcs
+def _changed_chars(a: str, b: str) -> int:
+    """Caracteres cambiados = distancia de Levenshtein (sustitución = 1, inserción/borrado = 1)."""
+    return Levenshtein.distance(a, b)
 
 
 def edit_metrics(old_text: str | None, new_text: str | None) -> dict[str, int]:
-    """Métricas del cambio: total de palabras, cambiadas, y letras del texto nuevo."""
-    old, new = words(old_text), words(new_text)
-    total = max(len(old), len(new))
-    changed = 0 if old == new else _changed_words(old, new)
-    return {"total": total, "changed": changed, "letters": len(content_signature(new_text))}
+    """Métricas del cambio sobre el CONTENIDO: total de caracteres, cambiados y letras del nuevo."""
+    a, b = content_signature(old_text), content_signature(new_text)
+    total = max(len(a), len(b))
+    changed = 0 if a == b else _changed_chars(a, b)
+    return {"total": total, "changed": changed, "letters": len(b)}
 
 
 def confidence_after_edit(old_confidence: float | None, old_text: str | None, new_text: str | None) -> float:
-    """Confianza resultante tras una edición humana (0..1, 3 decimales).
+    """Confianza resultante tras una edición humana (0..1, `_PRECISION` decimales).
 
     - Sólo puntuación/espacios → conserva la confianza anterior.
-    - Contenido → baja proporcionalmente a las palabras cambiadas.
+    - Contenido → baja proporcionalmente a los caracteres cambiados (Levenshtein).
     """
     base = 1.0 if old_confidence is None else min(1.0, max(0.0, float(old_confidence)))
-    old, new = words(old_text), words(new_text)
-    if old == new:
-        return round(base, 3)
-    if not old:
+    a, b = content_signature(old_text), content_signature(new_text)
+    if a == b:
+        return round(base, _PRECISION)
+    if not a:
         return 0.0
-    total = max(len(old), len(new))
-    drop = (_changed_words(old, new) / total) if total else 0.0
-    return round(max(0.0, base - drop), 3)
+    total = max(len(a), len(b))
+    drop = (_changed_chars(a, b) / total) if total else 0.0
+    return round(max(0.0, base - drop), _PRECISION)

@@ -292,7 +292,7 @@ def update_page(case_id: UUID, document_id: UUID, page_number: int, body: Docume
         log.exception("no se pudo encolar graph_build tras corregir la página %s del documento %s",
                       page_number, document_id)
     return {"document_id": str(document_id), "page_number": page_number, "mode": effective_mode,
-            "confidence": new_conf, "words_total": metrics["total"], "words_changed": metrics["changed"],
+            "confidence": new_conf, "chars_total": metrics["total"], "chars_changed": metrics["changed"],
             "letters": metrics["letters"], "learned_terms": learned, "reindexed": True,
             "graph_refresh_scheduled": True}
 

@@ -1,6 +1,8 @@
 """UT-CNF — confianza OCR ajustada por edición humana (por página y modo).
 
-Modelo: confianza = base − (palabras_cambiadas / palabras_totales).
+Modelo: confianza = base − (caracteres_cambiados / caracteres_totales), con la
+distancia de Levenshtein sobre el CONTENIDO (letras/dígitos; sin puntuación ni
+espacios). Así, cambiar una letra pesa menos que reescribir una palabra completa.
 """
 import pytest
 
@@ -17,21 +19,23 @@ def test_ut_cnf_01_punctuation_and_spaces_do_not_lower_confidence():
     assert oc.confidence_after_edit(None, "texto", "texto,") == 1.0
 
 
-def test_ut_cnf_02_real_edit_lowers_proportionally():
-    """4 palabras, 1 cambiada → cae 25% (0.75)."""
+def test_ut_cnf_02_single_letter_weighs_less_than_full_word():
+    """Granularidad por letra: 1 letra baja menos que reescribir la palabra."""
+    letra = oc.confidence_after_edit(1.0, "el juez ordeno pagar", "el juez ordeno pahar")
+    palabra = oc.confidence_after_edit(1.0, "el juez ordeno pagar", "el juez ordeno dictar")
+    assert palabra < letra < 1.0
+
+
+def test_ut_cnf_03_proportional_to_characters():
+    """10 caracteres de contenido, 1 cambiado → 0.9."""
+    assert oc.confidence_after_edit(1.0, "abcdefghij", "abcdefghiX") == 0.9
+    # 4 palabras (12 caracteres), 1 palabra distinta (3 letras) → cae 25%
     assert oc.confidence_after_edit(1.0, "el pago es alto", "el pago es bajo") == 0.75
-    c = oc.confidence_after_edit(1.0, "pagos", "pagas")
-    assert 0.0 <= c < 1.0
-
-
-def test_ut_cnf_03_more_changes_lower_more():
-    small = oc.confidence_after_edit(1.0, "el juez ordeno pagar", "el juez ordeno pagas")
-    big = oc.confidence_after_edit(1.0, "el juez ordeno pagar", "xxx xxx xxx xxx")
-    assert big < small
 
 
 def test_ut_cnf_04_never_below_zero():
-    assert oc.confidence_after_edit(0.1, "abc", "xyz") >= 0.0
+    assert oc.confidence_after_edit(0.1, "abc", "xyz") == 0.0
+    assert oc.confidence_after_edit(0.5, "abc", "xyz") >= 0.0
 
 
 def test_ut_cnf_05_empty_old_content():
@@ -44,16 +48,13 @@ def test_ut_cnf_06_content_signature_ignores_punctuation():
     assert oc.words("N°19.169-590, hola") == ["N", "19", "169", "590", "hola"]
 
 
-def test_ut_cnf_07_proportional_formula_example():
-    """100 palabras, 5 cambiadas → 95% (el ejemplo de producto)."""
-    old = " ".join(f"p{i}" for i in range(100))
-    new = " ".join(("cambio" if i < 5 else f"p{i}") for i in range(100))
-    assert oc.confidence_after_edit(1.0, old, new) == 0.95
-    m = oc.edit_metrics(old, new)
-    assert m["total"] == 100 and m["changed"] == 5
+def test_ut_cnf_07_edit_metrics_counts_characters():
+    assert oc.edit_metrics("hola mundo", "hola mundo cruel") == {"total": 14, "changed": 5, "letters": 14}
+    assert oc.edit_metrics("abc", "abc") == {"total": 3, "changed": 0, "letters": 3}
 
 
-def test_ut_cnf_08_edit_metrics_counts_words_and_letters():
-    m = oc.edit_metrics("hola mundo", "hola mundo cruel")
-    assert m["total"] == 3 and m["changed"] == 1 and m["letters"] == 14
-    assert oc.edit_metrics("abc", "abc") == {"total": 1, "changed": 0, "letters": 3}
+def test_ut_cnf_08_confidence_keeps_five_decimals():
+    """La nueva precisión (numeric(6,5)) conserva bajadas pequeñas por letra."""
+    assert oc.confidence_after_edit(1.0, "pagos", "pagas") == 0.8
+    c = oc.confidence_after_edit(1.0, "x" * 1000, "x" * 999 + "y")  # 1 letra en 1000
+    assert c == round(1 - 1 / 1000, 5) == 0.999
