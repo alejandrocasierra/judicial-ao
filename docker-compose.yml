@@ -31,6 +31,7 @@ services:
     ports: ["3310:3310"]
     profiles: ["clamav"]
   api:
+    restart: unless-stopped
     image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
     env_file: ${ENV_FILE:-.env}
@@ -56,6 +57,7 @@ services:
       # Credenciales GCP: coloca tu service-account.json en ./gcp-credentials.json
       - ./gcp-credentials.json:/srv/gcp-credentials.json:ro
   worker:
+    restart: unless-stopped
     image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
     env_file: ${ENV_FILE:-.env}
@@ -110,6 +112,7 @@ services:
       retries: 3
       start_period: 20s
   mcp:
+    restart: unless-stopped
     image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
     env_file: ${ENV_FILE:-.env}
@@ -138,6 +141,7 @@ services:
       - storage:/srv/var
       - ./var/storage:/srv/var/storage
   web:
+    restart: unless-stopped
     image: ${REGISTRY_IMAGE:-judicial-ai}/web:${IMAGE_TAG:-latest}
     build: {context: ./apps/web, dockerfile: ../../infra/docker/web.Dockerfile}
     environment:
