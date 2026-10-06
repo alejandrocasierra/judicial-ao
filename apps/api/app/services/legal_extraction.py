@@ -236,6 +236,17 @@ def _record_model_run(
 _ALLOWED_ENTITY_TYPES = {"person", "organization", "contract", "asset", "account",
                          "place", "date", "money", "related_case", "legal_rule", "authority"}
 
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _safe_date(value: Any) -> str | None:
+    """Devuelve una fecha ISO válida (YYYY-MM-DD) o None (el modelo a veces manda 'unknown'/'' )."""
+    if isinstance(value, str):
+        v = value.strip()
+        if _DATE_RE.match(v):
+            return v
+    return None
+
 
 def _insert_entities(
     conn: Connection,
@@ -354,7 +365,7 @@ def _insert_events(
               confidence = EXCLUDED.confidence,
               participants = EXCLUDED.participants
             RETURNING id""",
-            id=eid, o=org_id, c=case_id, et=e["event_type"], ed=e.get("event_date"),
+            id=eid, o=org_id, c=case_id, et=e["event_type"], ed=_safe_date(e.get("event_date")),
             dp=e.get("date_precision") or "day", desc=e["description"],
             tc=e["timeline_confidence"], conf=e.get("confidence"),
             parts=_uuid_list(e.get("participants") or []))
@@ -818,7 +829,7 @@ def _insert_procedural_events(conn: Connection, org_id: str, case_id: str, docum
             id=eid, o=org_id, c=case_id, et=e.get("event_type") or "otro", st=e.get("subtype") or "otro",
             inst=e.get("instance"), act=e.get("actor"), auth=e.get("authority"),
             dt=e.get("date_type") or "actuacion", eff=e.get("procedural_effect"),
-            doc=document_id, pg=e.get("page_number"), ed=e.get("event_date"),
+            doc=document_id, pg=e.get("page_number"), ed=_safe_date(e.get("event_date")),
             dp=e.get("date_precision") or "day", desc=e["description"],
             tc=e.get("timeline_confidence") or "source_backed", conf=e.get("confidence"),
             parts=_uuid_list(e.get("participants") or []))
