@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -21,7 +22,7 @@ from app.security.deps import Principal, case_access, current_principal, require
 from app.services import audit, export, indexing, party_extraction, procedural_graph, purge
 from app.services import speakers as speakers_service
 from app.services.case_tools import read as ct_read
-from app.workers.dispatcher import enqueue_job
+from app.workers.dispatcher import create_job, enqueue_if_pending, enqueue_job
 from app.workers.handlers.file_ingest import enqueue_graph_refresh
 
 router = APIRouter(prefix="/cases", tags=["cases"])
@@ -558,13 +559,29 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
 
 
 @router.post("/{case_id}/timeline/build")
-def build_timeline(case_id: UUID, request: Request, llm: bool = False,
+def build_timeline(case_id: UUID, request: Request, llm: bool = False, background: bool = False,
                    p: Principal = Depends(current_principal)):
     """Recalcula el Process Graph: relaciones entre actuaciones, resolución de eventos referenciados
-    y marcas de revisión. Con `llm=true`, un segundo pase con IA propone relaciones causales."""
+    y marcas de revisión. Con `llm=true`, un segundo pase con IA propone relaciones causales.
+
+    Con `background=true` (y `llm=true`) se encola un job `procedural_links` y se responde de
+    inmediato: el pase IA puede tardar minutos y consumir tokens, así que no bloquea la petición."""
     case = case_access(p, case_id, "media.upload")
     if case["status"] == "ARCHIVED":
         raise AppError("INVALID_STATE_TRANSITION", 409)
+    if background and llm:
+        s = get_settings()
+        with tx(p.org_id, p.user_id) as c:
+            job = create_job(c, org_id=p.org_id, case_id=str(case_id), job_type="procedural_links",
+                             input_ids=[], actor_id=p.user_id,
+                             key_parts=["procedural_links", str(case_id), int(time.time() // 60)],
+                             pipeline_version=s.PIPELINE_VERSION, model_version=s.LLM_MODEL)
+            audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="timeline.build_queued",
+                         entity_type="case", entity_id=str(case_id),
+                         after={"job_id": str(job["id"]), "llm": True}, request=request)
+        enqueue_if_pending(job, p.org_id, p.user_id)
+        return {"background": True, "job_id": str(job["id"]), "status": job["status"],
+                "reused": bool(job.get("reused"))}
     with tx(p.org_id, p.user_id) as c:
         linked = procedural_graph.link_events(c, p.org_id, str(case_id))
         reviewed = procedural_graph.review_events(c, p.org_id, str(case_id))

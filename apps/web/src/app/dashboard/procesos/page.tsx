@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -92,6 +92,7 @@ export default function ProcesosPage() {
   const [tlActor, setTlActor] = useState<string>("all");
   const [docView, setDocView] = useState<{ caseId: string; id: string; page: number; name?: string | null } | null>(null);
   const [mediaView, setMediaView] = useState<{ caseId: string; id: string; ms: number; name?: string | null } | null>(null);
+  const [aiJobId, setAiJobId] = useState<string | null>(null);
 
   const { data: cases = [], isLoading } = useQuery({
     queryKey: ["cases"],
@@ -126,14 +127,52 @@ export default function ProcesosPage() {
   });
 
   const buildGraphAi = useMutation({
-    mutationFn: () => api.post<{ linked?: { relationships?: number }; ai_links?: { links?: number } }>(
-      `/cases/${timelineCase!.id}/timeline/build?llm=true`, {}),
+    mutationFn: () => api.post<{ background?: boolean; job_id?: string; status?: string; reused?: boolean;
+                                  linked?: { relationships?: number }; ai_links?: { links?: number } }>(
+      `/cases/${timelineCase!.id}/timeline/build?llm=true&background=true`, {}),
     onSuccess: (r) => {
-      toast.success(`IA: ${r?.ai_links?.links ?? 0} relaciones causales · ${r?.linked?.relationships ?? 0} por reglas`);
-      qc.invalidateQueries({ queryKey: ["timeline"] });
+      if (r?.background && r.job_id) {
+        if (r.reused) {
+          toast.info("Ya hay un análisis de causas con IA en curso para este expediente.");
+        } else {
+          toast.info("Causas con IA: el proceso va a comenzar y se ejecutará en SEGUNDO PLANO. " +
+            "Puedes seguir trabajando; te aviso al terminar.", { duration: 9000 });
+        }
+        setAiJobId(r.job_id);
+      } else {
+        toast.success(`IA: ${r?.ai_links?.links ?? 0} relaciones causales · ${r?.linked?.relationships ?? 0} por reglas`);
+        qc.invalidateQueries({ queryKey: ["timeline"] });
+      }
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "La IA no pudo proponer relaciones (¿modelo/cuota?)"),
   });
+
+  // Mientras el job de «Causas con IA» corre en segundo plano, se consulta su estado
+  // y al terminar se avisa y se refresca la línea de tiempo.
+  useEffect(() => {
+    const caseId = timelineCase?.id;
+    if (!aiJobId || !caseId) return;
+    const started = Date.now();
+    const iv = setInterval(async () => {
+      if (Date.now() - started > 15 * 60 * 1000) { clearInterval(iv); setAiJobId(null); return; }
+      try {
+        const p = await api.get<{ jobs: { id: string; status: string; job_type: string }[] }>(
+          `/cases/${caseId}/processing`);
+        const job = p.jobs.find((j) => j.id === aiJobId);
+        if (job && (job.status === "SUCCEEDED" || job.status === "FAILED")) {
+          clearInterval(iv);
+          setAiJobId(null);
+          if (job.status === "SUCCEEDED") {
+            toast.success("Causas con IA: listo. Se agregaron las relaciones causales.");
+            qc.invalidateQueries({ queryKey: ["timeline"] });
+          } else {
+            toast.error("Causas con IA: el proceso falló. Revisa el monitor de jobs.");
+          }
+        }
+      } catch { /* reintento silencioso */ }
+    }, 8000);
+    return () => clearInterval(iv);
+  }, [aiJobId, timelineCase?.id, qc]);
 
   const create = useMutation({
     mutationFn: () => {

@@ -30,7 +30,7 @@ def test_ut_wrk_02_stub_result_is_structured():
     job = {"job_type": "document_ocr", "input_ids": [uuid.uuid4(), uuid.uuid4()]}
     # Handlers ya implementados no devuelven stub; el resto sí.
     implemented = {"document_ocr", "document_classification", "media_asr", "legal_extraction",
-                   "embedding", "indexing", "graph_build", "file_ingest", "xlsx_ingest"}
+                   "embedding", "indexing", "graph_build", "file_ingest", "xlsx_ingest", "procedural_links"}
     stub_types = _schema_job_types() - implemented
     for jt in stub_types:
         result = HANDLERS[jt]({**job, "job_type": jt})
