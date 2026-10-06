@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy.engine import Connection
 
 from app.core.config import get_settings
-from app.core.db import rows
+from app.core.db import one, rows
 from app.services import answering, graph, markdown
 from app.services.case_tools import ToolContext, evidence_item, register
 
@@ -595,6 +595,147 @@ def list_low_confidence_pages(conn: Connection, case_id: str, ctx: ToolContext,
                           document_id=str(r["document_id"]), filename=r["filename"], page_number=r["page_number"],
                           folio=r["folio"], mode=r["mode"], confidence=float(r["ocr_confidence"]),
                           role=None) for r in pages]
+
+
+_REL_ES: dict[str, str] = {
+    "causes": "causa", "responds_to": "responde a", "appeals": "apela a", "confirms": "confirma",
+    "revokes": "revoca", "precedes": "precede", "refers_to": "refiere a", "same_as": "idéntico a",
+}
+_CAUSAL_RELS = ["causes", "responds_to", "appeals", "confirms", "revokes", "refers_to"]
+
+
+def event_code_map(conn: Connection, case_id: str) -> dict[str, str]:
+    """Código estable por actuación (EV-0001, EV-0002…) ordenando por fecha (procesales primero)."""
+    evs = rows(conn, """SELECT id FROM events WHERE case_id = :c
+                        ORDER BY (kind <> 'procedural'), event_date NULLS LAST, id""", c=case_id)
+    return {str(e["id"]): f"EV-{i:04d}" for i, e in enumerate(evs, 1)}
+
+
+def _resolve_event(conn: Connection, case_id: str, ref: str) -> dict[str, Any] | None:
+    """Resuelve una actuación por id, código (EV-0004) o texto."""
+    ref = (ref or "").strip()
+    if not ref:
+        return None
+    if re.fullmatch(r"[0-9a-fA-F-]{36}", ref):
+        e = one(conn, "SELECT id, event_date, subtype, instance, actor, description FROM events WHERE id = :i AND case_id = :c",
+                i=ref, c=case_id)
+        if e:
+            return e
+    m = re.fullmatch(r"(?i)ev-?0*(\d+)", ref)
+    if m:
+        want = f"EV-{int(m.group(1)):04d}"
+        for eid, code in event_code_map(conn, case_id).items():
+            if code == want:
+                return one(conn, "SELECT id, event_date, subtype, instance, actor, description FROM events WHERE id = :i AND case_id = :c",
+                           i=eid, c=case_id)
+    return one(conn, """SELECT id, event_date, subtype, instance, actor, description FROM events
+                        WHERE case_id = :c AND kind = 'procedural'
+                          AND (description ILIKE :q OR subtype ILIKE :q)
+                        ORDER BY event_date NULLS LAST LIMIT 1""", c=case_id, q=f"%{ref}%")
+
+
+@register("event_relations",
+          "Relaciones de una actuación en el Process Graph: a qué actuaciones LLEVA y de qué depende "
+          "(causes/responds_to/appeals/confirms/revokes/precedes/refers_to), con evidencia. "
+          "Acepta id, código EV-0004 o texto (p. ej. 'sentencia de segunda instancia').",
+          {"event": {"type": "string", "description": "id, EV-0004 o texto de la actuación"},
+           "relationship": {"type": "string", "description": "Opcional: filtrar por tipo de relación"},
+           "k": {"type": "integer", "default": 40}})
+def event_relations(conn: Connection, case_id: str, ctx: ToolContext, event: str,
+                    relationship: str | None = None, k: int = 40) -> list[dict[str, Any]]:
+    ev = _resolve_event(conn, case_id, event)
+    if not ev:
+        return _err("No encontré la actuación (pasa id, EV-0004 o texto).")
+    codes = event_code_map(conn, case_id)
+    me = codes.get(str(ev["id"]), "?")
+    rels = rows(conn, """
+        SELECT r.relationship, r.confidence, r.source_event_id, r.target_event_id,
+               se.event_date AS s_date, se.subtype AS s_subtype, se.description AS s_desc,
+               te.event_date AS t_date, te.subtype AS t_subtype, te.description AS t_desc
+        FROM event_relationships r
+        JOIN events se ON se.id = r.source_event_id
+        JOIN events te ON te.id = r.target_event_id
+        WHERE r.case_id = :c AND (r.source_event_id = :e OR r.target_event_id = :e)
+          AND (CAST(:rel AS text) IS NULL OR r.relationship = :rel)
+        ORDER BY r.relationship LIMIT :k""",
+        c=case_id, e=str(ev["id"]), rel=relationship, k=max(1, min(int(k or 40), 200)))
+    out: list[dict[str, Any]] = []
+    for r in rels:
+        is_out = str(r["source_event_id"]) == str(ev["id"])
+        other_id = str(r["target_event_id"]) if is_out else str(r["source_event_id"])
+        other_code = codes.get(other_id, "?")
+        desc = r["t_desc"] if is_out else r["s_desc"]
+        subtype = r["t_subtype"] if is_out else r["s_subtype"]
+        date = r["t_date"] if is_out else r["s_date"]
+        arrow = "→" if is_out else "←"
+        out.append(evidence_item("REL", "event_relation",
+                                 f"{me} {arrow} {_REL_ES.get(r['relationship'], r['relationship'])} {other_code}: "
+                                 f"{(desc or '')[:150]}",
+                                 event_id=str(ev["id"]), event_code=me, relationship=r["relationship"],
+                                 direction="out" if is_out else "in", other_id=other_id, other_code=other_code,
+                                 other_subtype=subtype, other_date=str(date) if date else None,
+                                 confidence=float(r["confidence"]) if r["confidence"] is not None else None))
+    return out
+
+
+@register("process_path",
+          "Reconstruye la CADENA de una actuación por las relaciones del Process Graph "
+          "(¿por qué se llegó a X?, ¿qué causó Y?): antecedentes (direction='to', por defecto) o "
+          "consecuencias (direction='from'). Acepta id, código EV-0004 o texto; devuelve la secuencia "
+          "cronológica con evidencia.",
+          {"event": {"type": "string", "description": "id, EV-0004 o texto de la actuación"},
+           "direction": {"type": "string", "enum": ["to", "from"], "default": "to",
+                         "description": "to = antecedentes; from = consecuencias"},
+           "depth": {"type": "integer", "default": 6},
+           "include_precedes": {"type": "boolean", "default": False}})
+def process_path(conn: Connection, case_id: str, ctx: ToolContext, event: str,
+                 direction: str = "to", depth: int = 6, include_precedes: bool = False) -> list[dict[str, Any]]:
+    target = _resolve_event(conn, case_id, event)
+    if not target:
+        return _err("No encontré la actuación (pasa id, EV-0004 o texto).")
+    rels_allowed = list(_CAUSAL_RELS) + (["precedes"] if include_precedes else [])
+    codes = event_code_map(conn, case_id)
+    seen = {str(target["id"])}
+    frontier = [str(target["id"])]
+    for _ in range(max(1, min(int(depth or 6), 12))):
+        nxt: list[str] = []
+        for nid in frontier:
+            if direction == "from":
+                rs = rows(conn, """SELECT target_event_id AS nid FROM event_relationships
+                                  WHERE case_id = :c AND source_event_id = :n AND relationship = ANY(:rels)""",
+                          c=case_id, n=nid, rels=rels_allowed)
+            else:
+                rs = rows(conn, """SELECT source_event_id AS nid FROM event_relationships
+                                  WHERE case_id = :c AND target_event_id = :n AND relationship = ANY(:rels)""",
+                          c=case_id, n=nid, rels=rels_allowed)
+            for r in rs:
+                o = str(r["nid"])
+                if o not in seen:
+                    seen.add(o)
+                    nxt.append(o)
+        frontier = nxt
+        if not frontier:
+            break
+    evs: list[dict[str, Any]] = []
+    for eid in seen:
+        e = one(conn, """SELECT id, event_date, subtype, instance, actor, description, document_id, page_number
+                         FROM events WHERE id = :i AND case_id = :c""", i=eid, c=case_id)
+        if e:
+            evs.append(e)
+    evs.sort(key=lambda e: (e["event_date"] is None, str(e["event_date"] or ""), str(e["id"])))
+    out: list[dict[str, Any]] = []
+    for e in evs:
+        code = codes.get(str(e["id"]), "?")
+        mark = " ★" if str(e["id"]) == str(target["id"]) else ""
+        out.append(evidence_item("EV", "event",
+                                 f"{code}{mark} · {e['event_date'] or 's/f'} | {e['subtype']} | {e['actor']} — "
+                                 f"{(e['description'] or '')[:170]}",
+                                 event_id=str(e["id"]), event_code=code,
+                                 event_date=str(e["event_date"]) if e["event_date"] else None,
+                                 subtype=e["subtype"], instance=e["instance"], actor=e["actor"],
+                                 document_id=str(e["document_id"]) if e["document_id"] else None,
+                                 page_number=e["page_number"]))
+    return out
 
 
 @register("search_transcripts",

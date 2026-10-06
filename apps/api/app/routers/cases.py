@@ -518,9 +518,11 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
             c=str(case_id), kind=kind, instance=instance, actor=actor)]
         rels = rows(c, """SELECT source_event_id, target_event_id, relationship, confidence
                           FROM event_relationships WHERE case_id = :c""", c=str(case_id))
-    for i, e in enumerate(evs, 1):
-        e["seq"] = i
-        e["code"] = f"EV-{i:04d}"
+        code_map = ct_read.event_code_map(c, str(case_id))
+    for e in evs:
+        code = code_map.get(str(e["id"]))
+        e["code"] = code
+        e["seq"] = int(code.split("-")[1]) if code else None
     idx = {str(e["id"]): e for e in evs}
     links_map: dict[str, list[dict[str, object]]] = {k: [] for k in idx}
     for r in rels:
