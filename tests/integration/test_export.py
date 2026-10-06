@@ -35,8 +35,12 @@ def test_it_exp_03_export_returns_zip(client, auth, ids):
     assert "entities/parties.jsonl" in names
     assert "entities/claims.jsonl" in names
     assert "documents/documents.jsonl" in names
+    assert "documents/document_pages.jsonl" in names
     assert "chunks/chunks.jsonl" in names
-    assert any(n.startswith("documents/markdown/") and n.endswith(".md") for n in names)
+    assert any(n.startswith("documents/") and n.endswith("/document.md") for n in names)
+    assert any(n.startswith("documents/") and "/pages/" in n and n.endswith(".json") for n in names)
+    assert "events/timeline.json" in names
+    assert "README.md" in names
     assert "graph/nodes.jsonl" in names
     assert "audit/audit_logs.jsonl" in names
 

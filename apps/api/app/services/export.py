@@ -55,7 +55,10 @@ def export_case(conn: Connection, case_id: UUID) -> bytes:
           (SELECT count(*) FROM document_pages p JOIN documents d ON d.id = p.document_id WHERE d.case_id = :c) AS pages,
           (SELECT count(*) FROM media WHERE case_id = :c) AS media_files,
           (SELECT coalesce(sum(m.duration_ms), 0) / 3600000.0 FROM media m WHERE m.case_id = :c) AS media_hours,
-          (SELECT count(*) FROM chunks WHERE case_id = :c) AS chunks
+          (SELECT count(*) FROM chunks WHERE case_id = :c) AS chunks,
+          (SELECT count(*) FROM evidence WHERE case_id = :c) AS evidence,
+          (SELECT count(*) FROM events WHERE case_id = :c AND kind = 'procedural') AS procedural_events,
+          (SELECT count(*) FROM event_relationships WHERE case_id = :c) AS relationships
     """, c=cid)
 
     manifest = {
@@ -67,8 +70,21 @@ def export_case(conn: Connection, case_id: UUID) -> bytes:
         "media_files": stats["media_files"],
         "media_hours": round(float(stats["media_hours"]), 2),
         "chunks": stats["chunks"],
+        "evidence": stats["evidence"],
+        "procedural_events": stats["procedural_events"],
+        "relationships": stats["relationships"],
         "pipeline_version": s.PIPELINE_VERSION,
         "schema_version": s.SCHEMA_VERSION,
+        "layout": {
+            "documents/<id>/document.json": "metadatos del documento",
+            "documents/<id>/document.md": "Markdown semántico (contexto para el agente)",
+            "documents/<id>/pages/<n>.json": "página: texto + layout/bbox + procedencia",
+            "chunks/chunks.jsonl": "unidades de recuperación (RAG/embeddings) con procedencia",
+            "events/timeline.json": "línea de tiempo PROCESAL (actuaciones + relaciones)",
+            "entities/*.jsonl": "partes, entidades, claims, facts, evidencia, decisiones, speakers…",
+            "graph/*.jsonl": "nodos y aristas del knowledge graph",
+        },
+        "nota": "El PDF/video original es la FUENTE DE VERDAD; los formatos derivados no lo reemplazan.",
     }
 
     # Caso
@@ -106,11 +122,38 @@ def export_case(conn: Connection, case_id: UUID) -> bytes:
         JOIN media m ON m.id = s.media_id
         WHERE m.case_id = :c""", c=cid))
 
-    # Markdown por documento (representación legible/semántica: RAW → DOCUMENT → SEMANTIC)
-    for d in rows(conn, "SELECT id FROM documents WHERE case_id = :c ORDER BY created_at", c=cid):
-        md = markdown.document_markdown(conn, cid, str(d["id"]))
+    # Documentos: una carpeta por documento (document.json + document.md + pages/NNN.json + ocr_versions)
+    docs = rows(conn, """SELECT id, filename, mime_type, document_type, document_type_confidence, document_date,
+                                page_count, ocr_mode, processing_status, sha256, folio_start, created_at
+                         FROM documents WHERE case_id = :c ORDER BY filename""", c=cid)
+    for d in docs:
+        did = str(d["id"])
+        files[f"documents/{did}/document.json"] = json.dumps(
+            dict(d), ensure_ascii=False, indent=2, default=_json_default).encode("utf-8")
+        md = markdown.document_markdown(conn, cid, did)
         if md:
-            files[f"documents/markdown/{d['id']}.md"] = md.encode("utf-8")
+            files[f"documents/{did}/document.md"] = md.encode("utf-8")
+        for p in rows(conn, """SELECT page_number, folio, text, ocr_confidence, needs_review, human_corrected, layout_json
+                               FROM document_pages WHERE document_id = :d ORDER BY page_number""", d=did):
+            layout = None
+            if p["layout_json"]:
+                try:
+                    layout = json.loads(p["layout_json"]) if isinstance(p["layout_json"], str) else p["layout_json"]
+                except (TypeError, ValueError):
+                    layout = None
+            page_obj = {
+                "page": p["page_number"], "folio": p["folio"], "text": p["text"],
+                "ocr_confidence": float(p["ocr_confidence"]) if p["ocr_confidence"] is not None else None,
+                "needs_review": p["needs_review"], "human_corrected": p["human_corrected"],
+                "layout": layout,
+                "source": {"document_id": did, "document": d["filename"], "page": p["page_number"]},
+            }
+            files[f"documents/{did}/pages/{p['page_number']:03d}.json"] = json.dumps(
+                page_obj, ensure_ascii=False, indent=2, default=_json_default).encode("utf-8")
+        versions = rows(conn, """SELECT page_number, mode, text, ocr_confidence FROM document_ocr_versions
+                                 WHERE document_id = :d ORDER BY mode, page_number""", d=did)
+        if versions:
+            files[f"documents/{did}/ocr_versions.jsonl"] = _jsonl(versions)
 
     # Chunks: unidades de recuperación (texto + metadatos + procedencia). Se omite el
     # vector (grande y regenerable con indexación).
@@ -119,6 +162,51 @@ def export_case(conn: Connection, case_id: UUID) -> bytes:
                embedding_model, embedding_version, (embedding IS NOT NULL) AS has_embedding, created_at
         FROM chunks WHERE case_id = :c
         ORDER BY document_id, page_number, start_ms""", c=cid))
+
+    # Eventos PROCESALES: línea de tiempo + relaciones (Process Graph).
+    pevs = rows(conn, """SELECT id, kind, event_date, subtype, instance, actor, authority, date_type,
+                                procedural_effect, description, document_id, page_number, duplicate_of, review_flags
+                         FROM events WHERE case_id = :c
+                         ORDER BY (kind <> 'procedural'), event_date NULLS LAST, id""", c=cid)
+    code_by_id = {str(e["id"]): f"EV-{i:04d}" for i, e in enumerate(pevs, 1)}
+    rels = rows(conn, """SELECT source_event_id, target_event_id, relationship, confidence
+                         FROM event_relationships WHERE case_id = :c""", c=cid)
+    ev_links: dict[str, list] = {}
+    for r in rels:
+        s_id, t_id = str(r["source_event_id"]), str(r["target_event_id"])
+        conf = float(r["confidence"]) if r["confidence"] is not None else None
+        ev_links.setdefault(s_id, []).append({"relationship": r["relationship"], "direction": "out",
+                                              "other_id": t_id, "other_code": code_by_id.get(t_id), "confidence": conf})
+        ev_links.setdefault(t_id, []).append({"relationship": r["relationship"], "direction": "in",
+                                              "other_id": s_id, "other_code": code_by_id.get(s_id), "confidence": conf})
+    timeline = []
+    for e in pevs:
+        if e["kind"] != "procedural":
+            continue
+        item = dict(e)
+        item["code"] = code_by_id.get(str(e["id"]))
+        item["links"] = ev_links.get(str(e["id"]), [])
+        timeline.append(item)
+    files["events/timeline.json"] = json.dumps(timeline, ensure_ascii=False, indent=2, default=_json_default).encode("utf-8")
+    files["events/relationships.jsonl"] = _jsonl(rels)
+
+    files["README.md"] = (
+        "# Case Knowledge Package (CKP)\n\n"
+        "Representaciones del mismo expediente para distintas funciones. "
+        "**El PDF/video original sigue siendo la fuente de verdad.**\n\n"
+        "Pipeline: PDF/video → OCR/ACR/STT → RAW TEXT → DOCUMENT (json+md) → SEMANTIC (chunks/entidades) → "
+        "EVIDENCE → KNOWLEDGE GRAPH → búsqueda (vector + texto + grafo) → agente.\n\n"
+        "## Carpetas\n"
+        "- `documents/<id>/document.json` — metadatos del documento\n"
+        "- `documents/<id>/document.md` — Markdown semántico (contexto para el agente)\n"
+        "- `documents/<id>/pages/<n>.json` — página: texto + `layout`/bbox + procedencia\n"
+        "- `documents/<id>/ocr_versions.jsonl` — texto por motor (basico / document_ai)\n"
+        "- `chunks/chunks.jsonl` — unidades de recuperación con procedencia (embeddings/RAG)\n"
+        "- `events/timeline.json` — línea de tiempo PROCESAL (actuaciones + relaciones del Process Graph)\n"
+        "- `events/relationships.jsonl` — relaciones (precede/causes/responds_to/appeals/…)\n"
+        "- `entities/*.jsonl` — partes, entidades, claims, hechos, evidencia, decisiones, speakers, normas\n"
+        "- `citations/`, `graph/`, `media/`, `jobs/`, `audit/` — citas, grafo, media+transcripción, jobs y auditoría\n"
+    ).encode("utf-8")
 
     # Citas y vínculos
     files["citations/citations.jsonl"] = _jsonl(rows(conn, "SELECT * FROM citations WHERE case_id = :c", c=cid))
