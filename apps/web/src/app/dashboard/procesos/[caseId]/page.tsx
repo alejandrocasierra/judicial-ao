@@ -16,7 +16,7 @@ import { useChatStore } from "@/lib/chat-store";
 import {
   Folder, FolderOpen, FolderPlus, Upload, ChevronRight, ArrowLeft,
   FileText, FileSpreadsheet, FileImage, Video, File as FileIcon,
-  Download, Pencil, Trash2, Eye, MessageSquare,
+  Download, Pencil, Trash2, Eye, MessageSquare, Database,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -68,6 +68,7 @@ export default function ProcesoDetallePage() {
   const [viewerMedia, setViewerMedia] = useState<FileItem | null>(null);
   const [ocrDialog, setOcrDialog] = useState<{ files: File[] | null; mode: string }>({ files: null, mode: "none" });
   const [exporting, setExporting] = useState(false);
+  const [savingCkp, setSavingCkp] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function downloadCkp() {
@@ -86,6 +87,21 @@ export default function ProcesoDetallePage() {
       toast.error(e instanceof Error ? e.message : "No se pudo exportar el CKP");
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function persistCkp() {
+    if (!caseId || savingCkp) return;
+    setSavingCkp(true);
+    try {
+      const r = await api.post<{ snapshot: string; files: number; bytes: number; prefix: string }>(
+        `/cases/${caseId}/ckp/persist`);
+      const mb = (r.bytes / 1048576).toFixed(1);
+      toast.success(`CKP guardado en storage: ${r.files} archivos (${mb} MB) · ${r.prefix}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar el CKP en storage");
+    } finally {
+      setSavingCkp(false);
     }
   }
 
@@ -298,6 +314,9 @@ export default function ProcesoDetallePage() {
           </Button>
           <Button variant="outline" onClick={downloadCkp} disabled={exporting}>
             <Download className="mr-2 h-4 w-4" />{exporting ? "Exportando…" : "Exportar CKP"}
+          </Button>
+          <Button variant="outline" onClick={persistCkp} disabled={savingCkp}>
+            <Database className="mr-2 h-4 w-4" />{savingCkp ? "Guardando…" : "Guardar CKP"}
           </Button>
           <input
             ref={fileInput} type="file" multiple accept={ACCEPT} className="hidden"

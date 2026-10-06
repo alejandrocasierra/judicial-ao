@@ -43,8 +43,14 @@ def _zip_bytes(files: dict[str, bytes]) -> bytes:
     return buf.getvalue()
 
 
-def export_case(conn: Connection, case_id: UUID) -> bytes:
-    """Genera el CKP completo de un expediente."""
+def build_package_files(conn: Connection, case_id: UUID) -> dict[str, bytes]:
+    """Construye el CKP completo de un expediente como mapa {ruta: bytes}.
+
+    Es la representación portable del expediente: documentos (JSON + Markdown +
+    páginas con procedencia), chunks (unidades de recuperación), timeline procesal,
+    entidades, grafo, citas, jobs y auditoría. Reutilizado por el ZIP y la
+    persistencia en storage.
+    """
     s = get_settings()
     cid = str(case_id)
 
@@ -242,7 +248,55 @@ def export_case(conn: Connection, case_id: UUID) -> bytes:
     files["jobs/jobs.jsonl"] = _jsonl(rows(conn, "SELECT * FROM jobs WHERE case_id = :c", c=cid))
     files["jobs/model_runs.jsonl"] = _jsonl(rows(conn, "SELECT * FROM model_runs WHERE case_id = :c", c=cid))
 
-    return _zip_bytes(files)
+    return files
+
+
+def export_case(conn: Connection, case_id: UUID) -> bytes:
+    """Genera el CKP completo de un expediente como ZIP."""
+    return _zip_bytes(build_package_files(conn, case_id))
+
+
+def persist_case_package(conn: Connection, case_id: UUID) -> dict:
+    """Persiste el CKP del expediente como archivos sueltos en el object storage.
+
+    Escribe un snapshot inmutable en `cases/{case_id}/ckp/{timestamp}/…` (misma
+    estructura que el ZIP) y apunta `cases/{case_id}/ckp/latest.json` al último.
+    El PDF/video original sigue siendo la fuente de verdad.
+    """
+    from app.services import storage as storage_mod  # import tardío: evita cargar boto3/gcs sin uso
+
+    cid = str(case_id)
+    files = build_package_files(conn, case_id)
+    snapshot = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    base = f"cases/{cid}/ckp/{snapshot}"
+    st = storage_mod.storage()
+
+    base_uri: str | None = None
+    total = 0
+    for name, data in files.items():
+        uri = st.put(f"{base}/{name}", data)
+        if base_uri is None:
+            base_uri = uri.rsplit("/", 1)[0] if "/" in uri else uri
+        total += len(data)
+
+    pointer = {
+        "case_id": cid,
+        "snapshot": snapshot,
+        "prefix": base,
+        "uri": base_uri,
+        "files": len(files),
+        "bytes": total,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "package_version": CKP_VERSION,
+        "layout": "documents/<id>/{document.json,document.md,pages/<n>.json}, chunks/chunks.jsonl, "
+                  "events/timeline.json, entities/*.jsonl, graph/*.jsonl",
+    }
+    latest_uri = st.put(f"cases/{cid}/ckp/latest.json",
+                        json.dumps(pointer, ensure_ascii=False, indent=2).encode("utf-8"),
+                        overwrite=True)
+    result = dict(pointer)
+    result["latest_uri"] = latest_uri
+    return result
 
 
 def export_filename(case_id: UUID) -> str:

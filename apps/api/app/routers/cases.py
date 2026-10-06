@@ -449,6 +449,24 @@ def export_case(case_id: UUID, request: Request, p: Principal = Depends(current_
     )
 
 
+@router.post("/{case_id}/ckp/persist")
+def persist_ckp(case_id: UUID, request: Request, p: Principal = Depends(current_principal)):
+    """Persiste el CKP como archivos sueltos en el object storage (además del ZIP).
+
+    Crea un snapshot inmutable en `cases/{id}/ckp/{timestamp}/…` con la misma
+    estructura que el ZIP (document.md, chunks.jsonl, events/timeline.json, …) y
+    actualiza el puntero `cases/{id}/ckp/latest.json`.
+    """
+    case_access(p, case_id, "ai.export")
+    with tx(p.org_id, p.user_id) as c:
+        result = export.persist_case_package(c, case_id)
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="case.ckp_persisted",
+                     entity_type="case", entity_id=str(case_id),
+                     after={"snapshot": result["snapshot"], "files": result["files"], "bytes": result["bytes"]},
+                     request=request)
+    return result
+
+
 def _list(case_id: UUID, p: Principal, sql: str) -> list[dict]:
     case_access(p, case_id, "case.read")
     with tx(p.org_id, p.user_id) as c:

@@ -64,3 +64,40 @@ def test_it_exp_04_export_content_is_valid_jsonl(client, auth, ids):
             if content:
                 for line in content.splitlines():
                     json.loads(line)  # debe ser JSON válido
+
+
+def test_it_exp_05_persist_ckp_writes_files_to_storage(client, auth, ids):
+    """Además del ZIP, el CKP se persiste como archivos sueltos por expediente."""
+    r = client.post(f"/v1/cases/{ids['pago']}/ckp/persist", headers=auth("admin.alfa"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["files"] > 0
+    assert body["snapshot"]
+    assert body["prefix"] == f"cases/{ids['pago']}/ckp/{body['snapshot']}"
+
+    from app.services import storage
+    st = storage.storage()
+    latest = json.loads(st.get(f"cases/{ids['pago']}/ckp/latest.json").decode("utf-8"))
+    assert latest["snapshot"] == body["snapshot"]
+    assert latest["prefix"] == body["prefix"]
+    # document.md y chunks.jsonl quedan persistidos con la misma estructura que el ZIP
+    assert st.get(f"{body['prefix']}/manifest.json")
+    names = _package_names(st, body["prefix"])
+    assert "chunks/chunks.jsonl" in names
+    assert "events/timeline.json" in names
+    assert any(n.endswith("/document.md") for n in names)
+
+
+def test_it_exp_06_persist_ckp_requires_permission(client, auth, ids):
+    # ANALYST no tiene ai.export
+    r = client.post(f"/v1/cases/{ids['pago']}/ckp/persist", headers=auth("analista.alfa"))
+    assert r.status_code == 403
+
+
+def _package_names(st, prefix: str) -> list[str]:
+    """Nombres de archivo persistidos bajo un prefijo local (best-effort)."""
+    root = getattr(st, "root", None)
+    if root is None:
+        return []
+    base = root / prefix
+    return [str(p.relative_to(base)).replace("\\", "/") for p in base.rglob("*") if p.is_file()]

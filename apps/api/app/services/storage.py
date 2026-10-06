@@ -35,10 +35,10 @@ class LocalStorage:
             raise ValueError("storage key escapes root")
         return p
 
-    def put(self, key: str, data: bytes) -> str:
+    def put(self, key: str, data: bytes, overwrite: bool = False) -> str:
         p = self._p(key)
         p.parent.mkdir(parents=True, exist_ok=True)
-        if not p.exists():  # write-once: originales inmutables
+        if overwrite or not p.exists():  # write-once por defecto: originales inmutables
             p.write_bytes(data)
         return f"local://{key}"
 
@@ -98,7 +98,7 @@ class S3Storage:
     def _extra(self) -> dict:
         return {"ServerSideEncryption": self.sse} if self.sse else {}
 
-    def put(self, key: str, data: bytes) -> str:
+    def put(self, key: str, data: bytes, overwrite: bool = False) -> str:
         self.c.put_object(Bucket=self.bucket, Key=self._key(key), Body=data, **self._extra())
         return f"s3://{self.bucket}/{key}"
 
@@ -167,7 +167,7 @@ class GcsStorage:
     def _key(self, key: str) -> str:
         return prefixed(self.prefix, key)
 
-    def put(self, key: str, data: bytes) -> str:
+    def put(self, key: str, data: bytes, overwrite: bool = False) -> str:
         self.bucket.blob(self._key(key)).upload_from_string(data)
         return f"gs://{self.bucket_name}/{key}"
 
