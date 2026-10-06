@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, Merge, Pencil, X } from "lucide-react";
+import { Check, Merge, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 export interface Speaker {
@@ -41,6 +41,8 @@ export function SpeakerTags({
   const [mergeOpen, setMergeOpen] = useState(false);
   const [keepId, setKeepId] = useState<string | undefined>(undefined);
   const [mergeId, setMergeId] = useState<string | undefined>(undefined);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newName, setNewName] = useState("");
 
   const rename = useMutation({
     mutationFn: (spk: Speaker) =>
@@ -72,6 +74,18 @@ export function SpeakerTags({
     onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo fusionar"),
   });
 
+  // Alta de un hablante nuevo (aparece en los tags y en el selector de "quién lo dijo").
+  const create = useMutation({
+    mutationFn: () => api.post(`/cases/${caseId}/speakers`, { display_name: newName.trim() }),
+    onSuccess: () => {
+      toast.success("Hablante creado");
+      setCreateOpen(false);
+      setNewName("");
+      onRenamed?.();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo crear el hablante"),
+  });
+
   function start(spk: Speaker) {
     setEditingId(spk.id);
     setName(spk.display_name || spk.label);
@@ -87,6 +101,15 @@ export function SpeakerTags({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-2">
       <span className="text-xs font-medium text-muted-foreground">Hablantes:</span>
+      <Button
+        size="icon"
+        variant="outline"
+        className="h-6 w-6 rounded-full"
+        title="Nuevo hablante"
+        onClick={() => setCreateOpen(true)}
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </Button>
       {speakers.map((spk) =>
         editingId === spk.id ? (
           <span key={spk.id} className="flex items-center gap-1">
@@ -168,6 +191,31 @@ export function SpeakerTags({
             <Button size="sm" variant="outline" onClick={() => setMergeOpen(false)}>Cancelar</Button>
             <Button size="sm" disabled={!canMerge || merge.isPending} onClick={() => merge.mutate()}>
               <Merge className="mr-1 h-4 w-4" />Fusionar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nuevo hablante</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Crea un hablante que la diarización no detectó; quedará en la lista de hablantes y en el selector
+            de «quién lo dijo».
+          </p>
+          <Input
+            autoFocus
+            placeholder="Nombre del hablante"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && newName.trim()) create.mutate(); }}
+          />
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
+            <Button size="sm" disabled={!newName.trim() || create.isPending} onClick={() => create.mutate()}>
+              <Plus className="mr-1 h-4 w-4" />Crear
             </Button>
           </div>
         </DialogContent>
