@@ -51,7 +51,7 @@ else
   [ "$MALWARE" = "clamav" ] && DC+=(--profile clamav)
 fi
 
-echo "==> 1/4 Imágenes"
+echo "==> 1/5 Imágenes"
 if [ -n "$REGISTRY_IMAGE" ]; then
   echo "    pull desde $REGISTRY_IMAGE"
   "${DC[@]}" pull
@@ -60,10 +60,10 @@ else
   "${DC[@]}" build
 fi
 
-echo "==> 2/4 Levantando servicios"
+echo "==> 2/5 Levantando servicios"
 "${DC[@]}" up -d --remove-orphans "${UP_SERVICES[@]}"
 
-echo "==> 3/4 Migraciones de base de datos"
+echo "==> 3/5 Migraciones de base de datos"
 migrated=0
 for i in $(seq 1 30); do
   if "${DC[@]}" exec -T api alembic -c alembic.ini upgrade head; then migrated=1; break; fi
@@ -76,7 +76,15 @@ if [ "$SEED" = "1" ]; then
   "${DC[@]}" exec -T api python -m seeds.seed || echo "    (seed omitido/errores; revisa la salida)"
 fi
 
-echo "==> 4/4 Healthcheck"
+echo "==> 4/5 CORS del bucket de objetos (subida directa)"
+if [ "$(read_env STORAGE_BACKEND)" = "gcs" ]; then
+  ENV_FILE="$ENV_FILE" bash scripts/setup_gcs_cors.sh \
+    || echo "    ADVERTENCIA: no se pudo configurar el CORS del bucket (revisa permisos del service account)."
+else
+  echo "    STORAGE_BACKEND no es gcs; se omite."
+fi
+
+echo "==> 5/5 Healthcheck"
 ok=0
 for i in $(seq 1 30); do
   if curl -fsS "http://127.0.0.1:${API_PORT}/health" >/dev/null 2>&1; then ok=1; break; fi

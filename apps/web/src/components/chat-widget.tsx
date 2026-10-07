@@ -8,7 +8,7 @@
  * - Sesiones persistentes (backend Fase 3): historial sobrevive recargas.
  * - Respeta el proceso activo en pantalla (/dashboard/procesos/[caseId]). */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   MessageSquare, X, Send, Loader2, Bot, FileText, Video, Cpu, Plus,
@@ -22,6 +22,7 @@ import { api } from "@/lib/api";
 import { useChatStore } from "@/lib/chat-store";
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
+import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 
 interface Agent { id: string; name: string; is_system: boolean }
@@ -75,34 +76,6 @@ function formatSize(bytes?: number) {
   if (!bytes) return "";
   if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
   return `${Math.round(bytes / 1024)} KB`;
-}
-
-/** Markdown ligero: **negrita**, `código`, listas con "- " y saltos de línea. */
-function Markdown({ text }: { text: string }) {
-  const parts = (s: string, key: string) =>
-    s.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((seg, i) => {
-      if (seg.startsWith("**") && seg.endsWith("**")) return <strong key={`${key}-${i}`}>{seg.slice(2, -2)}</strong>;
-      if (seg.startsWith("`") && seg.endsWith("`"))
-        return <code key={`${key}-${i}`} className="rounded bg-background/60 px-1 text-xs">{seg.slice(1, -1)}</code>;
-      return <span key={`${key}-${i}`}>{seg}</span>;
-    });
-  const lines = text.split("\n");
-  const blocks: ReactNode[] = [];
-  let list: string[] = [];
-  const flush = (k: string) => {
-    if (list.length) {
-      blocks.push(<ul key={k} className="ml-4 list-disc space-y-0.5">{list.map((li, i) => <li key={i}>{parts(li, `${k}-${i}`)}</li>)}</ul>);
-      list = [];
-    }
-  };
-  lines.forEach((ln, i) => {
-    const t = ln.trim();
-    if (t.startsWith("- ") || t.startsWith("• ")) { list.push(t.slice(2)); return; }
-    flush(`l${i}`);
-    if (t) blocks.push(<p key={`p${i}`}>{parts(ln, `p${i}`)}</p>);
-  });
-  flush("end");
-  return <div className="space-y-1">{blocks}</div>;
 }
 
 /** El chat vive DENTRO de un proceso: sin expediente abierto no hay botón flotante.
@@ -361,7 +334,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          "fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105",
+          "fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 sm:bottom-6 sm:right-6 sm:h-14 sm:w-14",
           open && "rotate-90",
         )}
         aria-label="Chat IA"
@@ -370,7 +343,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
       </button>
 
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 flex h-[560px] w-[600px] flex-col rounded-lg border bg-background shadow-xl">
+        <div className="fixed inset-x-3 bottom-20 z-40 flex h-[min(560px,calc(100dvh-6rem))] flex-col rounded-lg border bg-background shadow-xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:h-[560px] sm:w-[600px]">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <h3 className="font-semibold">Chat IA</h3>
             <div className="flex items-center gap-1">

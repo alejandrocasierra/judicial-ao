@@ -1,21 +1,32 @@
 """Chunking jurídico (SSD §39).
 
-Un chunk nunca es un corte genérico de N tokens: se alinea a unidades procesales
-(página/folio, segmento de testimonio, claim, evento, decisión, prueba, norma).
-Cada chunk lleva metadata enriquecida (documento, página, folio, entidades,
-hablante, etc.) para filtros y citas verificables.
+Un chunk es una unidad pequeña y coherente alineada a unidades procesales. Para
+documentos OCR se parte cada página en fragmentos por sección (encabezados) de
+~200-500 palabras, para que un chunk no sea una página entera. Cada chunk lleva
+metadata enriquecida (documento, página, folio, entidades, hablante, parte) para
+filtros y citas verificables.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from sqlalchemy.engine import Connection
 
 from app.core.db import rows
+from app.services import markdown
 
 
 # Ventana para agrupar segmentos contiguos del mismo hablante (ms).
 _TESTIMONY_GAP_MS = 30_000
+
+# Tamaño objetivo de un chunk de documento (~200-500 palabras). Un chunk no corta a
+# mitad de un bloque: se agrupan secciones cortas y, si una sección es muy larga, se
+# parte por frases.
+_CHUNK_MIN_WORDS = 180
+_CHUNK_MAX_WORDS = 500
+# Mínimo de palabras de un cuerpo para poder cerrar un chunk en un nuevo encabezado.
+_MIN_BODY_WORDS = 40
 
 
 def _entities_for_page(conn: Connection, case_id: str, document_id: str, page_number: int) -> list[str]:
@@ -53,71 +64,178 @@ def _speaker_label(conn: Connection, speaker_id: str | None) -> str | None:
     return row[0].get("display_name") or row[0]["label"]
 
 
-def chunk_document(conn: Connection, org_id: str, case_id: str, document_id: str) -> list[dict[str, Any]]:
-    """Un chunk por página Y por motor OCR (basico / document_ai).
-
-    Se indexan AMBOS resultados (no solo el "actual") porque un expediente puede
-    tener documentos procesados sólo con un motor; el modo va en la metadata para
-    poder filtrar/comparar en la recuperación.
-    """
-    folios = {
-        r["page_number"]: r["folio"]
-        for r in rows(conn, "SELECT page_number, folio FROM document_pages WHERE document_id = :d", d=document_id)
+def _doc_chunk(org_id: str, case_id: str, document_id: str, page_number: int,
+               ocr_mode: str | None, folio: str | None, text: str, entities: list[str],
+               part: int | None = None, parts: int | None = None) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "folio": folio,
+        "ocr_mode": ocr_mode,
+        "entities": entities,
     }
+    if parts and parts > 1:
+        metadata["part"] = part
+        metadata["parts"] = parts
+    return {
+        "organization_id": org_id,
+        "case_id": case_id,
+        "chunk_type": "document_section",
+        "document_id": document_id,
+        "page_number": page_number,
+        "media_id": None,
+        "start_ms": None,
+        "end_ms": None,
+        "text": text,
+        "metadata": metadata,
+    }
+
+
+def _word_count(text: str) -> int:
+    return len(text.split())
+
+
+def _split_long_text(text: str, max_words: int) -> list[str]:
+    """Parte un texto largo en trozos <= max_words, cortando por frases (no a mitad de frase)."""
+    if _word_count(text) <= max_words:
+        return [text]
+    sentences = re.split(r"(?<=[.;:!?])\s+", text)
+    out: list[str] = []
+    cur: list[str] = []
+    cur_words = 0
+    for s in sentences:
+        w = _word_count(s)
+        if cur and cur_words + w > max_words:
+            out.append(" ".join(cur).strip())
+            cur, cur_words = [], 0
+        cur.append(s)
+        cur_words += w
+    if cur:
+        out.append(" ".join(cur).strip())
+    # Una sola frase que aún supere el máximo: corte duro por palabras.
+    result: list[str] = []
+    for piece in out:
+        ws = piece.split()
+        if len(ws) <= max_words:
+            result.append(piece)
+        else:
+            result.extend(" ".join(ws[i:i + max_words]) for i in range(0, len(ws), max_words))
+    return [p for p in result if p.strip()]
+
+
+def chunk_page_text(text: str) -> list[str]:
+    """Divide el texto de una página en fragmentos coherentes por sección.
+
+    Reutiliza la estructura Markdown (encabezados, listas, párrafos) para no cortar
+    a mitad de una idea. Agrupa secciones cortas hasta ~180 palabras y cierra el chunk
+    en un nuevo encabezado; una sección que supere ~500 palabras se parte por frases."""
+    md = markdown.text_to_markdown(text)
+    if not md:
+        return []
+
+    # Unidades: (es_encabezado, texto). Los párrafos/listas se agrupan entre líneas en blanco;
+    # un cuerpo muy largo se divide en varias unidades por frases.
+    units: list[tuple[bool, str]] = []
+    buffer: list[str] = []
+    for line in md.split("\n"):
+        if not line.strip():
+            if buffer:
+                units.extend((False, part) for part in _split_long_text("\n".join(buffer), _CHUNK_MAX_WORDS))
+                buffer = []
+        elif line.lstrip().startswith("#"):
+            if buffer:
+                units.extend((False, part) for part in _split_long_text("\n".join(buffer), _CHUNK_MAX_WORDS))
+                buffer = []
+            units.append((True, line.strip()))
+        else:
+            buffer.append(line)
+    if buffer:
+        units.extend((False, part) for part in _split_long_text("\n".join(buffer), _CHUNK_MAX_WORDS))
+
+    chunks: list[str] = []
+    cur: list[str] = []
+    cur_words = 0
+    cur_body_words = 0
+
+    def flush() -> None:
+        nonlocal cur, cur_words, cur_body_words
+        if cur:
+            text_block = "\n\n".join(cur).strip()
+            # Un fragmento sin cuerpo (solo encabezados) se anexa al anterior.
+            if cur_body_words == 0 < cur_words and chunks:
+                chunks[-1] = f"{chunks[-1]}\n\n{text_block}"
+            else:
+                chunks.append(text_block)
+        cur, cur_words, cur_body_words = [], 0, 0
+
+    for is_heading, block in units:
+        bw = _word_count(block)
+        if cur:
+            if cur_words + bw > _CHUNK_MAX_WORDS:
+                flush()
+            elif is_heading and cur_body_words >= _MIN_BODY_WORDS and cur_words >= _CHUNK_MIN_WORDS:
+                flush()
+        cur.append(block)
+        cur_words += bw
+        if not is_heading:
+            cur_body_words += bw
+    flush()
+    return [c for c in chunks if c.strip()]
+
+
+def _document_page_chunks(conn: Connection, org_id: str, case_id: str, document_id: str, page_number: int,
+                          ocr_mode: str | None, folio: str | None, text: str) -> list[dict[str, Any]]:
+    """Fragmenta el texto de una página en chunks por sección (uno o varios)."""
+    frags = chunk_page_text(text)
+    if not frags:
+        return []
+    entities = _entities_for_page(conn, case_id, document_id, page_number)
+    total = len(frags)
+    return [_doc_chunk(org_id, case_id, document_id, page_number, ocr_mode, folio, frag, entities, i + 1, total)
+            for i, frag in enumerate(frags)]
+
+
+def chunk_document(conn: Connection, org_id: str, case_id: str, document_id: str) -> list[dict[str, Any]]:
+    """Chunks de un documento: fragmentos por sección, por página y motor OCR.
+
+    Se indexan AMBOS resultados por motor (basico / document_ai) porque un expediente
+    puede tener documentos procesados sólo con un motor; el modo va en la metadata para
+    poder filtrar/comparar en la recuperación.
+
+    Las páginas SIN fila en `document_ocr_versions` (p. ej. corregidas directamente
+    sobre `document_pages`) se indexan igualmente desde su texto actual, con
+    `ocr_mode` nulo, para que ninguna hoja quede sin chunk."""
     versions = rows(conn, """
         SELECT page_number, mode, text FROM document_ocr_versions
         WHERE document_id = :d ORDER BY page_number, mode
     """, d=document_id)
+    versions_by_page: dict[int, list[dict[str, Any]]] = {}
+    for v in versions:
+        versions_by_page.setdefault(v["page_number"], []).append(v)
 
-    chunks: list[dict[str, Any]] = []
-    if versions:
-        for v in versions:
-            text = (v["text"] or "").strip()
-            if not text:
-                continue
-            chunks.append({
-                "organization_id": org_id,
-                "case_id": case_id,
-                "chunk_type": "document_section",
-                "document_id": document_id,
-                "page_number": v["page_number"],
-                "media_id": None,
-                "start_ms": None,
-                "end_ms": None,
-                "text": text,
-                "metadata": {
-                    "folio": folios.get(v["page_number"]),
-                    "ocr_mode": v["mode"],
-                    "entities": _entities_for_page(conn, case_id, document_id, v["page_number"]),
-                },
-            })
-        return chunks
-
-    # Compatibilidad: documentos sin versiones por motor -> texto actual de la página.
     pages = rows(conn, """
         SELECT page_number, folio, text FROM document_pages
         WHERE document_id = :d ORDER BY page_number
     """, d=document_id)
+
+    chunks: list[dict[str, Any]] = []
     for p in pages:
-        text = (p["text"] or "").strip()
-        if not text:
-            continue
-        chunks.append({
-            "organization_id": org_id,
-            "case_id": case_id,
-            "chunk_type": "document_section",
-            "document_id": document_id,
-            "page_number": p["page_number"],
-            "media_id": None,
-            "start_ms": None,
-            "end_ms": None,
-            "text": text,
-            "metadata": {
-                "folio": p["folio"],
-                "ocr_mode": None,
-                "entities": _entities_for_page(conn, case_id, document_id, p["page_number"]),
-            },
-        })
+        pn = p["page_number"]
+        page_versions = versions_by_page.pop(pn, None)
+        if page_versions:
+            for v in page_versions:
+                text = (v["text"] or "").strip()
+                if text:
+                    chunks.extend(_document_page_chunks(conn, org_id, case_id, document_id, pn, v["mode"], p["folio"], text))
+        else:
+            text = (p["text"] or "").strip()
+            if text:
+                chunks.extend(_document_page_chunks(conn, org_id, case_id, document_id, pn, None, p["folio"], text))
+
+    # Versiones de páginas que no estén en document_pages (caso raro): no perderlas.
+    for pn, page_versions in versions_by_page.items():
+        for v in page_versions:
+            text = (v["text"] or "").strip()
+            if text:
+                chunks.extend(_document_page_chunks(conn, org_id, case_id, document_id, pn, v["mode"], None, text))
     return chunks
 
 

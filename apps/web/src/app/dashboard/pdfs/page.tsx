@@ -60,13 +60,13 @@ export default function PdfsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">PDFs</h1>
           <p className="text-muted-foreground">Abre un cuadernillo, revisa el OCR por hoja y corrígelo</p>
         </div>
         <Select value={activeCaseId} onValueChange={(v) => { setCaseId(v); setListPage(1); }}>
-          <SelectTrigger className="w-80"><SelectValue placeholder="Selecciona expediente" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-80"><SelectValue placeholder="Selecciona expediente" /></SelectTrigger>
           <SelectContent>{cases.map((c) => <SelectItem key={c.id} value={c.id}>{c.case_number} — {c.title}</SelectItem>)}</SelectContent>
         </Select>
       </div>

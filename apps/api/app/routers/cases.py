@@ -15,11 +15,12 @@ from app.core.db import one, rows, tx
 from app.core.errors import AppError
 from app.domain import states
 from app.domain.jurisdiction import jurisdictions, validate_case_number
-from app.schemas import (CaseCreate, CasePatch, LegalHoldIn, MemberIn, PartyBulkIn, ProcessIn, SpeakerCreate,
+from app.schemas import (CaseCreate, CasePatch, LegalHoldIn, MemberIn, PartyBulkIn, PartyPatch, PartyRoleIn,
+                         PartyRolePatch, ProcessIn, SpeakerCreate,
                          SpeakerMergeIn, SpeakerPatch, SpeakerRoleAssign)
 from app.security import rbac
 from app.security.deps import Principal, case_access, current_principal, require_org
-from app.services import audit, export, indexing, party_extraction, procedural_graph, purge
+from app.services import audit, export, indexing, party_extraction, party_roles as party_roles_service, procedural_graph, purge
 from app.services import speakers as speakers_service
 from app.services.case_tools import read as ct_read
 from app.workers.dispatcher import create_job, enqueue_if_pending, enqueue_job
@@ -624,6 +625,134 @@ def create_parties(case_id: UUID, body: PartyBulkIn, request: Request, p: Princi
                      entity_id=str(case_id),
                      after={"count": len(created), "names": [x["name"] for x in created]}, request=request)
     return {"created": created}
+
+
+@router.patch("/{case_id}/parties/{party_id}")
+def update_party(case_id: UUID, party_id: UUID, body: PartyPatch, request: Request,
+                 p: Principal = Depends(current_principal)):
+    """Edita una parte: nombre, rol (code del catálogo del caso), tipo o alias."""
+    case = case_access(p, case_id, "case.write")
+    if case["status"] == "ARCHIVED":
+        raise AppError("INVALID_STATE_TRANSITION", 409)
+    with tx(p.org_id, p.user_id) as c:
+        cur = one(c, "SELECT id, name, role FROM parties WHERE id = :i AND case_id = :c",
+                  i=str(party_id), c=str(case_id))
+        if not cur:
+            raise AppError("NOT_FOUND", 404)
+        sets: list[str] = []
+        params: dict = {"i": str(party_id), "c": str(case_id)}
+        after: dict = {}
+        if body.name is not None:
+            name = body.name.strip()
+            sets += ["name = :n", "normalized_name = :nn"]
+            params["n"], params["nn"] = name, party_extraction.normalize_name(name)
+            after["name"] = name
+        if body.role is not None:
+            sets.append("role = :r")
+            params["r"] = body.role.strip() or "third_party"
+            after["role"] = params["r"]
+        if body.entity_type is not None:
+            sets.append("entity_type = :e")
+            params["e"] = body.entity_type
+            after["entity_type"] = body.entity_type
+        if body.aliases is not None:
+            sets.append("aliases = :al")
+            params["al"] = [a for a in body.aliases if a]
+            after["aliases"] = params["al"]
+        upd = cur
+        if sets:
+            upd = one(c, f"""UPDATE parties SET {', '.join(sets)} WHERE id = :i AND case_id = :c
+                             RETURNING id, name, role, entity_type, aliases""", **params)
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="party.updated", entity_type="party",
+                     entity_id=str(party_id), before={"name": cur["name"], "role": cur["role"]},
+                     after=after, request=request)
+    return upd
+
+
+@router.delete("/{case_id}/parties/{party_id}")
+def delete_party(case_id: UUID, party_id: UUID, request: Request, p: Principal = Depends(current_principal)):
+    """Elimina una parte y la desvincula de hablantes, entidades y claims."""
+    case_access(p, case_id, "case.write")
+    with tx(p.org_id, p.user_id) as c:
+        cur = one(c, "SELECT id, name FROM parties WHERE id = :i AND case_id = :c",
+                  i=str(party_id), c=str(case_id))
+        if not cur:
+            raise AppError("NOT_FOUND", 404)
+        for sql in (
+            "UPDATE speakers SET resolved_party_id = NULL WHERE resolved_party_id = :i",
+            "UPDATE entities SET party_id = NULL WHERE party_id = :i",
+            "UPDATE claims SET claimant_party_id = NULL WHERE claimant_party_id = :i",
+        ):
+            c.execute(text(sql), {"i": str(party_id)})
+        c.execute(text("DELETE FROM parties WHERE id = :i AND case_id = :c"),
+                  {"i": str(party_id), "c": str(case_id)})
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="party.deleted", entity_type="party",
+                     entity_id=str(party_id), before={"name": cur["name"]}, request=request)
+    return {"deleted": str(party_id)}
+
+
+# ---------------------------------------------------------------- roles de parte
+
+
+@router.get("/{case_id}/party-roles")
+def list_party_roles(case_id: UUID, p: Principal = Depends(current_principal)):
+    """Catálogo de roles de parte del caso (se siembran por defecto la primera vez)."""
+    case_access(p, case_id, "document.read")
+    with tx(p.org_id, p.user_id) as c:
+        party_roles_service.ensure_defaults(c, p.org_id, str(case_id))
+        return party_roles_service.list_roles(c, str(case_id))
+
+
+@router.post("/{case_id}/party-roles", status_code=201)
+def create_party_role(case_id: UUID, body: PartyRoleIn, request: Request,
+                      p: Principal = Depends(current_principal)):
+    """Crea un rol de parte para el caso."""
+    case_access(p, case_id, "case.write")
+    try:
+        with tx(p.org_id, p.user_id) as c:
+            role = party_roles_service.create_role(c, p.org_id, str(case_id), body.label, body.code)
+            audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="party_role.created",
+                         entity_type="party_role", entity_id=str(role["id"]),
+                         after={"code": role["code"], "label": role["label"]}, request=request)
+    except IntegrityError:
+        raise AppError("PARTY_ROLE_DUPLICATE", 409) from None
+    return role
+
+
+@router.patch("/{case_id}/party-roles/{role_id}")
+def update_party_role(case_id: UUID, role_id: UUID, body: PartyRolePatch, request: Request,
+                      p: Principal = Depends(current_principal)):
+    """Renombra un rol de parte."""
+    case_access(p, case_id, "case.write")
+    with tx(p.org_id, p.user_id) as c:
+        upd = one(c, """UPDATE party_roles SET label = :l WHERE id = :i AND case_id = :c
+                        RETURNING id, code, label, is_system, sort_order""",
+                  l=body.label.strip(), i=str(role_id), c=str(case_id))
+        if not upd:
+            raise AppError("NOT_FOUND", 404)
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="party_role.updated",
+                     entity_type="party_role", entity_id=str(role_id), after={"label": body.label}, request=request)
+    return upd
+
+
+@router.delete("/{case_id}/party-roles/{role_id}")
+def delete_party_role(case_id: UUID, role_id: UUID, request: Request, p: Principal = Depends(current_principal)):
+    """Elimina un rol de parte (bloqueado si alguna parte lo usa)."""
+    case_access(p, case_id, "case.write")
+    with tx(p.org_id, p.user_id) as c:
+        role = one(c, "SELECT id, code, label FROM party_roles WHERE id = :i AND case_id = :c",
+                   i=str(role_id), c=str(case_id))
+        if not role:
+            raise AppError("NOT_FOUND", 404)
+        used = party_roles_service.role_in_use(c, str(case_id), role["code"])
+        if used:
+            raise AppError("PARTY_ROLE_IN_USE", 409, {"count": used})
+        c.execute(text("DELETE FROM party_roles WHERE id = :i AND case_id = :c"),
+                  {"i": str(role_id), "c": str(case_id)})
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="party_role.deleted",
+                     entity_type="party_role", entity_id=str(role_id),
+                     before={"code": role["code"], "label": role["label"]}, request=request)
+    return {"deleted": str(role_id)}
 
 
 @router.get("/{case_id}/speakers")

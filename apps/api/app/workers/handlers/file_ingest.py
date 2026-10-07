@@ -136,4 +136,17 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
     if ok_ids:
         enqueue_legal_extraction(org_id, case_id, actor_id, ok_ids)
 
+    # 4. PARTES automáticas (OCR de documentos + hablantes ASR): crea las que falten y
+    #    omite las que ya existen (dedup por nombre normalizado).
+    if get_settings().AUTO_EXTRACT_PARTIES:
+        try:
+            from app.services import party_extraction
+            with tx(org_id, actor_id) as conn:
+                res = party_extraction.auto_extract_and_upsert(conn, org_id, case_id)
+            if res.get("created"):
+                log.info("partes automáticas: creadas=%s omitidas=%s (caso %s)",
+                         len(res["created"]), res.get("skipped"), case_id)
+        except Exception:  # noqa: BLE001
+            log.exception("extracción automática de partes falló (caso %s)", case_id)
+
     return {"processed": len(results), "errors": errors, "files": results}

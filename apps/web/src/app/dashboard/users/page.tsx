@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Download, RefreshCw, Eye, EyeOff, KeyRound } from "lucide-react";
+import { Plus, Search, Download, RefreshCw, Eye, EyeOff, KeyRound, Pencil, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
 interface User {
@@ -150,7 +150,7 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Usuarios</h1>
           <p className="text-muted-foreground">Gestión de usuarios de la organización</p>
@@ -325,73 +325,57 @@ export default function UsersPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="p-3 text-left font-medium">Nombre</th>
-                  <th className="p-3 text-left font-medium">Email</th>
-                  <th className="p-3 text-left font-medium">Rol</th>
-                  <th className="p-3 text-left font-medium">Idioma</th>
-                  <th className="p-3 text-left font-medium">Activo</th>
-                  <th className="p-3 text-left font-medium">Último login</th>
-                  <th className="p-3 text-left font-medium">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                      Cargando...
-                    </td>
-                  </tr>
-                ) : paginated.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                      No se encontraron usuarios
-                    </td>
-                  </tr>
-                ) : (
-                  paginated.map((u) => (
-                    <tr key={u.id} className="border-b hover:bg-muted/50">
-                      <td className="p-3 font-medium">{u.full_name}</td>
-                      <td className="p-3">{u.email}</td>
-                      <td className="p-3">
-                        <Badge variant="outline">{ROLES.find((r) => r.value === u.org_role)?.label || u.org_role}</Badge>
-                      </td>
-                      <td className="p-3">{u.locale}</td>
-                      <td className="p-3">
-                        <Badge variant={u.is_active ? "default" : "destructive"}>
-                          {u.is_active ? "Sí" : "No"}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-muted-foreground">
-                        {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString("es-CO") : "Nunca"}
-                      </td>
-                      <td className="p-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setEditingUser(u);
-                            setNewName(u.full_name);
-                            setNewEmail(u.email);
-                            setNewRole(u.org_role);
-                            setNewLocale(u.locale);
-                            setNewPassword("");
-                            setShowPw(false);
-                            setDialogOpen(true);
-                          }}
-                        >
-                          Editar
-                        </Button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          {isLoading ? (
+            <p className="py-8 text-center text-muted-foreground">Cargando...</p>
+          ) : paginated.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground">No se encontraron usuarios</p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {paginated.map((u) => (
+                <Card key={u.id}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex flex-wrap items-start justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <UserIcon className="h-5 w-5 shrink-0 text-primary" />
+                        <span className="min-w-0 break-words">{u.full_name}</span>
+                      </span>
+                      <Badge variant={u.is_active ? "default" : "destructive"}>
+                        {u.is_active ? "Activo" : "Inactivo"}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <p className="break-all text-muted-foreground">{u.email}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{ROLES.find((r) => r.value === u.org_role)?.label || u.org_role}</Badge>
+                      <Badge variant="secondary">{u.locale}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Último login: {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString("es-CO") : "Nunca"}
+                    </p>
+                    <div className="pt-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditingUser(u);
+                          setNewName(u.full_name);
+                          setNewEmail(u.email);
+                          setNewRole(u.org_role);
+                          setNewLocale(u.locale);
+                          setNewPassword("");
+                          setShowPw(false);
+                          setDialogOpen(true);
+                        }}
+                      >
+                        <Pencil className="mr-1 h-4 w-4" />Editar
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
           <div className="mt-4 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               Mostrando {paginated.length} de {filtered.length} usuarios

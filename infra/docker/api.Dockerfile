@@ -39,5 +39,5 @@ ENV REPO_ROOT=/srv
 RUN mkdir -p /srv/var && chown -R app:app /srv/var
 USER app
 WORKDIR /srv/apps/api
-HEALTHCHECK --interval=15s --timeout=3s --retries=5 CMD python -c "import os,urllib.request;urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"API_PORT\"]}/health')" || exit 1
+HEALTHCHECK --interval=15s --timeout=10s --start-period=30s --retries=5 CMD python -c "import os,urllib.request;urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"API_PORT\"]}/health')" || exit 1
 CMD ["sh", "-c", "exec uvicorn app.main:app --host \"$API_HOST\" --port \"$API_PORT\" --proxy-headers"]

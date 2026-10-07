@@ -64,4 +64,13 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
             except Exception:
                 log.exception("no se pudo marcar media %s como FAILED", media_id)
 
+    # Partes automáticas (hablantes ASR + encabezados OCR).
+    if get_settings().AUTO_EXTRACT_PARTIES:
+        try:
+            from app.services import party_extraction
+            with tx(org_id, user_id) as conn:
+                party_extraction.auto_extract_and_upsert(conn, org_id, case_id)
+        except Exception:  # noqa: BLE001
+            log.exception("extracción automática de partes falló (caso %s)", case_id)
+
     return {"processed": len(processed), "errors": errors, "media": processed}

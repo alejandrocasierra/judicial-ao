@@ -123,6 +123,8 @@ class Settings(BaseSettings):
     OCR_TESSERACT_LANG: str
     OCR_DPI: int = Field(gt=0)
     OCR_PREPROCESS: bool
+    # Extracción automática de PARTES al terminar OCR/ASR (encabezados + hablantes).
+    AUTO_EXTRACT_PARTIES: bool = True
     # Google Document AI (vacío = deshabilitado)
     GOOGLE_CLOUD_PROJECT: str
     GOOGLE_CLOUD_LOCATION: str

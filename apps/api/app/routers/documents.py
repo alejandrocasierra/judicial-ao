@@ -214,6 +214,38 @@ def get_document_markdown(case_id: UUID, document_id: UUID, p: Principal = Depen
     return {"document_id": str(document_id), "markdown": md}
 
 
+@router.get("/documents/{document_id}/chunks")
+def list_document_chunks(case_id: UUID, document_id: UUID, mode: str | None = None,
+                         p: Principal = Depends(current_principal)):
+    """Chunks RAG del documento (unidades indexadas), ordenados por página.
+
+    `mode` filtra por motor OCR (`basico`/`document_ai`); los chunks sin motor
+    (documentos antiguos, sin versiones por motor) también se incluyen. Cada chunk
+    se devuelve con su texto crudo y su representación Markdown para visualizarlo."""
+    case_access(p, case_id, "document.read")
+    with tx(p.org_id, p.user_id) as c:
+        doc = one(c, "SELECT id FROM documents WHERE id = :d AND case_id = :c",
+                  d=str(document_id), c=str(case_id))
+        if not doc:
+            raise AppError("DOCUMENT_NOT_FOUND", 404)
+        chunks = rows(c, """
+            SELECT id, chunk_type, page_number, start_ms, end_ms, text, metadata
+              FROM chunks
+             WHERE case_id = :c AND document_id = :d
+               AND (CAST(:m AS text) IS NULL OR metadata->>'ocr_mode' IS NULL OR metadata->>'ocr_mode' = CAST(:m AS text))
+             ORDER BY page_number NULLS LAST, COALESCE((metadata->>'part')::int, 0), created_at
+        """, c=str(case_id), d=str(document_id), m=mode)
+    for ch in chunks:
+        meta = ch.pop("metadata", None) or {}
+        ch["folio"] = meta.get("folio")
+        ch["ocr_mode"] = meta.get("ocr_mode")
+        ch["entities"] = meta.get("entities") or []
+        ch["part"] = meta.get("part")
+        ch["parts"] = meta.get("parts")
+        ch["markdown"] = markdown.text_to_markdown(ch.get("text"))
+    return {"document_id": str(document_id), "mode": mode, "chunks": chunks}
+
+
 @router.patch("/documents/{document_id}/pages/{page_number}")
 def update_page(case_id: UUID, document_id: UUID, page_number: int, body: DocumentPagePatch, request: Request,
                 p: Principal = Depends(current_principal)):

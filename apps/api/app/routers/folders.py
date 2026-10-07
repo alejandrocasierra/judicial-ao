@@ -84,14 +84,49 @@ def _folder_paths(c, case_id: str) -> dict[str, str]:
 
 @router.get("/folders")
 def list_folders(case_id: UUID, p: Principal = Depends(current_principal)):
+    """Árbol de carpetas con conteos RECURSIVOS (incluyen las subcarpetas).
+
+    - `subfolders`: subcarpetas directas.
+    - `files`: archivos de la carpeta y toda su descendencia, SIN contar videos
+      (case_files + documents). Incluye subcarpetas para que una carpeta contenedora
+      no aparezca con 0 archivos.
+    - `videos`: videos (.mp4 -> tabla media) de la carpeta y toda su descendencia.
+    """
     case_access(p, case_id, "document.read")
     with tx(p.org_id, p.user_id) as c:
-        return rows(c, """SELECT f.id, f.parent_id, f.name, f.created_at,
+        return rows(c, """
+            WITH RECURSIVE descendants AS (
+                SELECT f.id AS root_id, f.id AS folder_id
+                  FROM case_folders f WHERE f.case_id = :c
+                UNION ALL
+                SELECT d.root_id, ch.id
+                  FROM descendants d
+                  JOIN case_folders ch ON ch.parent_id = d.folder_id
+                 WHERE ch.case_id = :c
+            ),
+            entries AS (
+                SELECT folder_id, FALSE AS is_video FROM case_files WHERE case_id = :c
+                UNION ALL
+                SELECT folder_id, FALSE FROM documents WHERE case_id = :c
+                UNION ALL
+                SELECT folder_id, TRUE FROM media WHERE case_id = :c
+            ),
+            counts AS (
+                SELECT d.root_id,
+                       count(*) FILTER (WHERE NOT e.is_video) AS files,
+                       count(*) FILTER (WHERE e.is_video) AS videos
+                  FROM descendants d
+                  JOIN entries e ON e.folder_id = d.folder_id
+                 GROUP BY d.root_id
+            )
+            SELECT f.id, f.parent_id, f.name, f.created_at,
                 (SELECT count(*) FROM case_folders ch WHERE ch.parent_id = f.id) AS subfolders,
-                (SELECT count(*) FROM case_files cf WHERE cf.folder_id = f.id)
-              + (SELECT count(*) FROM documents d WHERE d.folder_id = f.id)
-              + (SELECT count(*) FROM media m WHERE m.folder_id = f.id) AS files
-            FROM case_folders f WHERE f.case_id = :c ORDER BY f.name""", c=str(case_id))
+                COALESCE(ct.files, 0) AS files,
+                COALESCE(ct.videos, 0) AS videos
+              FROM case_folders f
+              LEFT JOIN counts ct ON ct.root_id = f.id
+             WHERE f.case_id = :c
+             ORDER BY f.name""", c=str(case_id))
 
 
 @router.post("/folders", status_code=201)
@@ -261,13 +296,13 @@ def _already_registered(c, case_id: UUID, sha: str, filename: str) -> str | None
 
 
 @router.post("/files", status_code=201)
-async def upload_files(case_id: UUID, request: Request,
-                       uploads: list[UploadFile] | None = File(default=None),
-                       files_files: list[UploadFile] | None = File(default=None, alias="files"),
-                       file_single: list[UploadFile] | None = File(default=None, alias="file"),
-                       folder_id: str | None = Form(default=None),
-                       ocr_mode: str | None = Form(default=None),
-                       p: Principal = Depends(current_principal)):
+def upload_files(case_id: UUID, request: Request,
+                 uploads: list[UploadFile] | None = File(default=None),
+                 files_files: list[UploadFile] | None = File(default=None, alias="files"),
+                 file_single: list[UploadFile] | None = File(default=None, alias="file"),
+                 folder_id: str | None = Form(default=None),
+                 ocr_mode: str | None = Form(default=None),
+                 p: Principal = Depends(current_principal)):
     """Subida de archivos. `ocr_mode` controla si se procesa automáticamente:
     - None o "none": sube sin procesar (el usuario decide después)
     - "basico": OCR local (Tesseract/Docling)
@@ -299,7 +334,10 @@ async def upload_files(case_id: UUID, request: Request,
             is_media = files.extension(filename) in MEDIA_ROUTE_EXTS
             limit = s.UPLOAD_MAX_BYTES_MEDIA if is_media else s.UPLOAD_MAX_BYTES_DOCUMENT
             buf, total = bytearray(), 0
-            while chunk := await upload.read(1024 * 1024):
+            while True:
+                chunk = upload.file.read(1024 * 1024)
+                if not chunk:
+                    break
                 total += len(chunk)
                 if total > limit:
                     raise AppError("UPLOAD_TOO_LARGE", 413)

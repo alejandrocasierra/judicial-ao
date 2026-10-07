@@ -139,7 +139,7 @@ export function MediaTranscriptViewer({
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-6xl">
         <DialogHeader><DialogTitle>{filename}</DialogTitle></DialogHeader>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid min-w-0 gap-4 [&>*]:min-w-0 md:grid-cols-2">
           <div className="space-y-2">
             {videoUrl ? (
               <video

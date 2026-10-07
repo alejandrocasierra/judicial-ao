@@ -162,17 +162,37 @@ class SpeakerRoleAssign(Strict):
     assignments: list[SpeakerRoleItem] = Field(min_length=1, max_length=200)
 
 
-PartyRole = Literal["claimant", "defendant", "plaintiff", "respondent", "appellant", "appellee",
-                    "witness", "expert", "judge", "attorney", "representative", "third_party"]
-
-
 class PartyCreate(Strict):
     name: str = Field(min_length=2, max_length=200)
-    role: PartyRole = "third_party"
+    role: str = Field(default="third_party", max_length=60)
     entity_type: Literal["person", "organization"] | None = None
     aliases: list[str] | None = None
 
     _v = field_validator("name")(_no_control)
+
+
+class PartyPatch(Strict):
+    """Edición de una parte: nombre, rol (code del catálogo), tipo y alias."""
+    name: str | None = Field(default=None, min_length=2, max_length=200)
+    role: str | None = Field(default=None, max_length=60)
+    entity_type: Literal["person", "organization"] | None = None
+    aliases: list[str] | None = None
+
+    _v = field_validator("name")(_no_control)
+
+
+class PartyRoleIn(Strict):
+    """Nuevo rol de parte del caso. `code` se genera del label si no se indica."""
+    label: str = Field(min_length=1, max_length=60)
+    code: str | None = Field(default=None, max_length=60)
+
+    _v = field_validator("label", "code")(_no_control)
+
+
+class PartyRolePatch(Strict):
+    label: str = Field(min_length=1, max_length=60)
+
+    _v = field_validator("label")(_no_control)
 
 
 class PartyBulkIn(Strict):

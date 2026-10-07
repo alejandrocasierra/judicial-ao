@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Menu } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Header } from "@/components/header";
@@ -18,6 +19,7 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const { isAuthenticated, accessToken, hasHydrated } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Solo redirige cuando Zustand ya restauró la sesión desde localStorage.
   useEffect(() => {
@@ -40,11 +42,21 @@ export default function DashboardLayout({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="flex h-screen bg-background">
-        <AppSidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex h-dvh bg-background">
+        <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        {!sidebarOpen && (
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="fixed left-3 top-3 z-40 rounded-md border bg-background p-2 shadow-sm md:hidden"
+            aria-label="Abrir menú"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Header />
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+          <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6">{children}</main>
         </div>
         <ChatWidget />
         <Toaster />

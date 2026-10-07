@@ -56,4 +56,13 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
             except Exception:
                 log.exception("no se pudo marcar document %s como FAILED", document_id)
 
+    # Partes automáticas (encabezados OCR + hablantes ASR).
+    if get_settings().AUTO_EXTRACT_PARTIES:
+        try:
+            from app.services import party_extraction
+            with tx(org_id, user_id) as conn:
+                party_extraction.auto_extract_and_upsert(conn, org_id, case_id)
+        except Exception:  # noqa: BLE001
+            log.exception("extracción automática de partes falló (caso %s)", case_id)
+
     return {"processed": len(processed), "errors": errors, "documents": processed}

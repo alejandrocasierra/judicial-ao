@@ -7,21 +7,24 @@ import { api } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
 import { PartiesButton } from "@/components/parties-panel";
-import { useChatStore } from "@/lib/chat-store";
 import {
   Folder, FolderOpen, FolderPlus, Upload, ChevronRight, ArrowLeft,
   FileText, FileSpreadsheet, FileImage, Video, File as FileIcon,
-  Download, Pencil, Trash2, Eye, MessageSquare, Database, Search, X,
+  Download, Pencil, Trash2, Eye, Plus, Database, Search, X,
 } from "lucide-react";
 import { toast } from "sonner";
 
 interface Case { id: string; case_number: string; title: string; }
-interface FolderItem { id: string; parent_id: string | null; name: string; subfolders: number; files: number; }
+interface FolderItem { id: string; parent_id: string | null; name: string; subfolders: number; files: number; videos: number; }
 interface FileItem {
   kind: "file" | "document" | "media";
   id: string; filename: string; title?: string | null; mime_type: string;
@@ -33,6 +36,15 @@ interface SearchResults { query: string; folders: SearchFolder[]; items: SearchI
 interface UploadResult { filename: string; status: string; kind?: string; code?: string; processing?: string; ocr_mode?: string | null; }
 
 const ACCEPT = ".xlsx,.docx,.pdf,.jpg,.jpeg,.png,.svg,.mp4";
+
+// Extensiones que requieren procesamiento: documentos -> OCR, videos/audio -> ASR.
+const VIDEO_EXTS = ["mp4", "wav", "mp3", "webm", "m4a", "mov"];
+const DOC_OCR_EXTS = ["pdf", "png", "jpg", "jpeg", "tiff", "tif"];
+const PROCESS_EXTS = [...DOC_OCR_EXTS, ...VIDEO_EXTS];
+
+function extOf(name: string) {
+  return name.split(".").pop()?.toLowerCase() ?? "";
+}
 
 function fmtSize(bytes: number) {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
@@ -62,7 +74,6 @@ export default function ProcesoDetallePage() {
   const { caseId } = useParams<{ caseId: string }>();
   const router = useRouter();
   const qc = useQueryClient();
-  const openChat = useChatStore((s) => s.openChat);
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [folderDialog, setFolderDialog] = useState<"create" | "rename" | null>(null);
   const [folderName, setFolderName] = useState("");
@@ -70,6 +81,10 @@ export default function ProcesoDetallePage() {
   const [viewerDoc, setViewerDoc] = useState<FileItem | null>(null);
   const [viewerMedia, setViewerMedia] = useState<FileItem | null>(null);
   const [ocrDialog, setOcrDialog] = useState<{ files: File[] | null; mode: string }>({ files: null, mode: "none" });
+  const [deleteTarget, setDeleteTarget] = useState<{ kind: "document" | "media" | "file" | "folder"; id: string; filename: string } | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [renamingFile, setRenamingFile] = useState<{ id: string; filename: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [exporting, setExporting] = useState(false);
   const [savingCkp, setSavingCkp] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -128,6 +143,11 @@ export default function ProcesoDetallePage() {
       (query.state.data?.items ?? []).some((i) => ACTIVE_STATUSES.includes(i.processing_status ?? "")) ? 4000 : false,
   });
   const items = filesData?.items ?? [];
+
+  // Flags de la selección en el diálogo de subida: documentos (OCR) vs videos (ASR).
+  const dialogFiles = ocrDialog.files ?? [];
+  const dialogHasVideo = dialogFiles.some((f) => VIDEO_EXTS.includes(extOf(f.name)));
+  const dialogHasDoc = dialogFiles.some((f) => DOC_OCR_EXTS.includes(extOf(f.name)));
 
   // Buscador del proceso: filtra carpetas, archivos, documentos y videos en TODAS
   // las subcarpetas (debounce 300 ms).
@@ -214,8 +234,9 @@ export default function ProcesoDetallePage() {
         try {
           const r = await uploadDirect(f, ocrMode, currentFolder);
           if (r) results.push(r); else normal.push(f);  // storage local -> multipart
-        } catch (e) {
-          results.push({ filename: f.name, status: "error", code: e instanceof Error ? e.message : "UPLOAD_ERROR" });
+        } catch {
+          // La subida directa puede fallar por CORS del bucket; reintentamos por la API.
+          normal.push(f);
         }
       }
       if (normal.length) {
@@ -252,13 +273,13 @@ export default function ProcesoDetallePage() {
     // Copiamos a un array ANTES de resetear el input: el FileList se vacía al
     // hacer `e.target.value = ""`, así que no se puede conservar la referencia.
     const picked = Array.from(files);
-    // Detectar si hay archivos que necesitan OCR (PDF, imágenes, videos).
-    const needsOcr = picked.some((f) => {
-      const ext = f.name.split(".").pop()?.toLowerCase() ?? "";
-      return ["pdf", "png", "jpg", "jpeg", "tiff", "mp4", "wav", "mp3", "webm"].includes(ext);
-    });
-    if (needsOcr) {
-      setOcrDialog({ files: picked, mode: "none" });
+    // Archivos que necesitan procesamiento: documentos (OCR) o videos/audio (ASR).
+    const exts = picked.map((f) => extOf(f.name));
+    const hasVideo = exts.some((e) => VIDEO_EXTS.includes(e));
+    const needsProcess = exts.some((e) => PROCESS_EXTS.includes(e));
+    if (needsProcess) {
+      // Si hay videos, por defecto se transcriben (ASR); si no, se pregunta.
+      setOcrDialog({ files: picked, mode: hasVideo ? "basico" : "none" });
     } else {
       upload.mutate({ files: picked, ocrMode: "none" });
     }
@@ -327,7 +348,7 @@ export default function ProcesoDetallePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Button variant="outline" size="icon" onClick={() => router.push("/dashboard/procesos")} title="Volver a procesos">
             <ArrowLeft className="h-4 w-4" />
@@ -337,18 +358,27 @@ export default function ProcesoDetallePage() {
             <p className="font-mono text-xs text-muted-foreground">{proc?.case_number}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" title="Más acciones">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel>Opciones del proceso</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => downloadCkp()} disabled={exporting}>
+                <Download className="h-4 w-4" />
+                {exporting ? "Exportando…" : "Exportar CKP"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => persistCkp()} disabled={savingCkp}
+                title="Guarda el paquete como archivos en el storage del servidor (no descarga nada)">
+                <Database className="h-4 w-4" />
+                {savingCkp ? "Guardando…" : "Guardar en storage"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <PartiesButton caseId={caseId} />
-          <Button variant="outline" onClick={() => openChat(caseId)}>
-            <MessageSquare className="mr-2 h-4 w-4" />Chat del proceso
-          </Button>
-          <Button variant="outline" onClick={downloadCkp} disabled={exporting}>
-            <Download className="mr-2 h-4 w-4" />{exporting ? "Exportando…" : "Exportar CKP"}
-          </Button>
-          <Button variant="outline" onClick={persistCkp} disabled={savingCkp}
-            title="Guarda el paquete como archivos en el storage del servidor (no descarga nada)">
-            <Database className="mr-2 h-4 w-4" />{savingCkp ? "Guardando…" : "Guardar en storage"}
-          </Button>
           <input
             ref={fileInput} type="file" multiple accept={ACCEPT} className="hidden"
             onChange={(e) => { if (e.target.files?.length) handleFileSelect(e.target.files); e.target.value = ""; }}
@@ -362,7 +392,7 @@ export default function ProcesoDetallePage() {
         </div>
       </div>
 
-      <nav className="flex items-center gap-1 text-sm text-muted-foreground">
+      <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
         <button className="hover:text-foreground" onClick={() => setCurrentFolder(null)}>Raíz del proceso</button>
         {breadcrumb.map((f) => (
           <span key={f.id} className="flex items-center gap-1">
@@ -457,29 +487,26 @@ export default function ProcesoDetallePage() {
       ) : (
         <>
       {subfolders.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-w-0 gap-4 [&>*]:min-w-0 md:grid-cols-2 lg:grid-cols-3">
           {subfolders.map((f) => (
             <Card key={f.id} className="group transition-colors hover:border-primary/60">
-              <CardContent className="flex items-center justify-between gap-2 p-4">
+              <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left"
                   onClick={() => setCurrentFolder(f.id)}>
                   <FolderOpen className="h-8 w-8 shrink-0 text-primary" />
                   <span className="min-w-0">
-                    <span className="block truncate font-medium">{f.name}</span>
+                    <span className="block break-words font-medium sm:truncate">{f.name}</span>
                     <span className="block text-xs text-muted-foreground">
-                      {f.subfolders} carpeta(s) · {f.files} archivo(s)
+                      {f.subfolders} carpeta(s) · {f.files} archivo(s) · {f.videos} video(s)
                     </span>
                   </span>
                 </button>
-                <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="flex shrink-0 items-center gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                   <Button variant="ghost" size="icon" title="Renombrar" onClick={() => openRenameFolder(f)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="icon" title="Eliminar"
-                    onClick={() => {
-                      if (window.confirm(`¿Eliminar la carpeta "${f.name}"? Sólo puede eliminarse si está vacía.`))
-                        deleteFolder.mutate(f.id);
-                    }}>
+                    onClick={() => setDeleteTarget({ kind: "folder", id: f.id, filename: f.name })}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -505,7 +532,7 @@ export default function ProcesoDetallePage() {
               {items.map((it) => {
                 const Icon = fileIcon(it.mime_type);
                 return (
-                  <div key={`${it.kind}-${it.id}`} className="flex items-center justify-between rounded-md border p-3 hover:bg-muted/50">
+                  <div key={`${it.kind}-${it.id}`} className="flex flex-col gap-3 rounded-md border p-3 hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-center gap-3">
                       <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
                       <div className="min-w-0">
@@ -517,22 +544,16 @@ export default function ProcesoDetallePage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
                       <Badge variant="outline">{typeLabel(it.mime_type)}</Badge>
                       {it.kind === "file" && (
                         <>
                           <Button variant="ghost" size="icon" title="Renombrar"
-                            onClick={() => {
-                              const name = window.prompt("Nuevo nombre del archivo", it.filename);
-                              if (name && name.trim() && name.trim() !== it.filename)
-                                renameFile.mutate({ id: it.id, filename: name.trim() });
-                            }}>
+                            onClick={() => { setRenameValue(it.filename); setRenamingFile({ id: it.id, filename: it.filename }); }}>
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="icon" title="Eliminar"
-                            onClick={() => {
-                              if (window.confirm(`¿Eliminar "${it.filename}"?`)) deleteFile.mutate(it.id);
-                            }}>
+                            onClick={() => setDeleteTarget({ kind: "file", id: it.id, filename: it.filename })}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </>
@@ -544,13 +565,7 @@ export default function ProcesoDetallePage() {
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="icon" title="Solicitar eliminación"
-                            onClick={() => {
-                              const reason = window.prompt(
-                                `Motivo de la solicitud de eliminación de "${it.filename}"\n` +
-                                "(la evidencia no se borra directamente; queda marcada para eliminación):");
-                              if (reason && reason.trim())
-                                requestDocDeletion.mutate({ id: it.id, reason: reason.trim() });
-                            }}>
+                            onClick={() => { setDeleteReason(""); setDeleteTarget({ kind: "document", id: it.id, filename: it.filename }); }}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </>
@@ -562,13 +577,7 @@ export default function ProcesoDetallePage() {
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="icon" title="Solicitar eliminación"
-                            onClick={() => {
-                              const reason = window.prompt(
-                                `Motivo de la solicitud de eliminación de "${it.filename}"\n` +
-                                "(la evidencia no se borra directamente; queda marcada para eliminación):");
-                              if (reason && reason.trim())
-                                requestMediaDeletion.mutate({ id: it.id, reason: reason.trim() });
-                            }}>
+                            onClick={() => { setDeleteReason(""); setDeleteTarget({ kind: "media", id: it.id, filename: it.filename }); }}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </>
@@ -605,14 +614,116 @@ export default function ProcesoDetallePage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={deleteTarget !== null} onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteReason(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {deleteTarget?.kind === "folder" ? "Eliminar carpeta"
+                : deleteTarget?.kind === "file" ? "Eliminar archivo"
+                : "Solicitar eliminación"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {deleteTarget?.kind === "folder" ? (
+              <p className="text-sm text-muted-foreground">
+                ¿Eliminar la carpeta <b className="break-all text-foreground">{deleteTarget.filename}</b>?
+                Sólo puede eliminarse si está vacía.
+              </p>
+            ) : deleteTarget?.kind === "file" ? (
+              <p className="text-sm text-muted-foreground">
+                ¿Eliminar el archivo <b className="break-all text-foreground">{deleteTarget.filename}</b>?
+                Esta acción no se puede deshacer.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Vas a registrar una solicitud de eliminación de{" "}
+                  <b className="break-all text-foreground">{deleteTarget?.filename}</b>.
+                  La evidencia no se borra directamente: queda marcada para eliminación y se bloquea si
+                  el proceso tiene una medida de conservación.
+                </p>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Motivo</label>
+                  <Textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} rows={3}
+                    placeholder="Explica por qué se debe eliminar este archivo" />
+                </div>
+              </>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteReason(""); }}>
+                Cancelar
+              </Button>
+              {deleteTarget?.kind === "folder" ? (
+                <Button variant="destructive" disabled={deleteFolder.isPending}
+                  onClick={() => { if (deleteTarget) deleteFolder.mutate(deleteTarget.id); setDeleteTarget(null); }}>
+                  {deleteFolder.isPending ? "Eliminando…" : "Eliminar carpeta"}
+                </Button>
+              ) : deleteTarget?.kind === "file" ? (
+                <Button variant="destructive" disabled={deleteFile.isPending}
+                  onClick={() => { if (deleteTarget) deleteFile.mutate(deleteTarget.id); setDeleteTarget(null); }}>
+                  {deleteFile.isPending ? "Eliminando…" : "Eliminar archivo"}
+                </Button>
+              ) : (
+                <Button variant="destructive"
+                  disabled={!deleteReason.trim() || requestDocDeletion.isPending || requestMediaDeletion.isPending}
+                  onClick={() => {
+                    const reason = deleteReason.trim();
+                    if (!deleteTarget || !reason) return;
+                    if (deleteTarget.kind === "document") requestDocDeletion.mutate({ id: deleteTarget.id, reason });
+                    else requestMediaDeletion.mutate({ id: deleteTarget.id, reason });
+                    setDeleteTarget(null);
+                    setDeleteReason("");
+                  }}>
+                  {requestDocDeletion.isPending || requestMediaDeletion.isPending ? "Enviando…" : "Solicitar eliminación"}
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={renamingFile !== null} onOpenChange={(o) => { if (!o) setRenamingFile(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renombrar archivo</DialogTitle>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={(e) => {
+            e.preventDefault();
+            const name = renameValue.trim();
+            if (renamingFile && name && name !== renamingFile.filename) renameFile.mutate({ id: renamingFile.id, filename: name });
+            setRenamingFile(null);
+          }}>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Nuevo nombre</label>
+              <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setRenamingFile(null)}>Cancelar</Button>
+              <Button type="submit" disabled={!renameValue.trim() || renameFile.isPending}>
+                {renameFile.isPending ? "Guardando…" : "Guardar"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={ocrDialog.files !== null} onOpenChange={(o) => { if (!o) setOcrDialog({ files: null, mode: "none" }); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Procesar con OCR</DialogTitle>
+            <DialogTitle>
+              {dialogHasVideo && !dialogHasDoc ? "Procesar video(s)"
+                : dialogHasDoc && !dialogHasVideo ? "Procesar documento(s)"
+                : "Procesar archivos"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Los archivos seleccionados incluyen PDFs, imágenes o videos que pueden procesarse con OCR para extraer texto.
+              {dialogHasVideo && (
+                <>Los videos/audios se transcriben automáticamente con ASR (Whisper local), no con OCR. </>
+              )}
+              {dialogHasDoc && (
+                <>Los PDFs e imágenes se procesan con OCR para extraer texto. </>
+              )}
               Elige el método de procesamiento:
             </p>
             <div className="space-y-2">
@@ -626,7 +737,7 @@ export default function ProcesoDetallePage() {
                   className="mt-1"
                 />
                 <div>
-                  <p className="font-medium">Sin OCR</p>
+                  <p className="font-medium">Sin procesar</p>
                   <p className="text-sm text-muted-foreground">
                     Solo subir los archivos. Podrás procesarlos después con &quot;Reprocesar&quot;.
                   </p>
@@ -642,28 +753,39 @@ export default function ProcesoDetallePage() {
                   className="mt-1"
                 />
                 <div>
-                  <p className="font-medium">OCR Básico</p>
+                  <p className="font-medium">
+                    {dialogHasVideo && !dialogHasDoc ? "Transcribir (ASR local con Whisper)"
+                      : dialogHasDoc && dialogHasVideo ? "Procesar local (OCR + ASR)"
+                      : "OCR Básico (Tesseract/Docling)"}
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    Procesamiento local con Tesseract/Docling. Rápido y privado, pero puede tener menor precisión en manuscritos.
+                    {dialogHasVideo && !dialogHasDoc
+                      ? "Convierte el audio de los videos a texto con Whisper local. Rápido y privado."
+                      : dialogHasDoc && dialogHasVideo
+                        ? "OCR local para PDFs/imágenes y transcripción (ASR) de los videos, todo en el servidor."
+                        : "Procesamiento local con Tesseract/Docling. Rápido y privado, pero puede tener menor precisión en manuscritos."}
                   </p>
                 </div>
               </label>
-              <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/50">
-                <input
-                  type="radio"
-                  name="ocr_mode"
-                  value="document_ai"
-                  checked={ocrDialog.mode === "document_ai"}
-                  onChange={() => setOcrDialog((d) => ({ ...d, mode: "document_ai" }))}
-                  className="mt-1"
-                />
-                <div>
-                  <p className="font-medium">OCR Document AI (Google Cloud)</p>
-                  <p className="text-sm text-muted-foreground">
-                    Procesamiento en la nube con Google Document AI. Mayor precisión, especialmente en formularios y manuscritos. Requiere credenciales configuradas.
-                  </p>
-                </div>
-              </label>
+              {dialogHasDoc && (
+                <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/50">
+                  <input
+                    type="radio"
+                    name="ocr_mode"
+                    value="document_ai"
+                    checked={ocrDialog.mode === "document_ai"}
+                    onChange={() => setOcrDialog((d) => ({ ...d, mode: "document_ai" }))}
+                    className="mt-1"
+                  />
+                  <div>
+                    <p className="font-medium">OCR Document AI (Google Cloud)</p>
+                    <p className="text-sm text-muted-foreground">
+                      {dialogHasVideo && "Solo aplica a PDFs/imágenes; los videos se transcriben igual con ASR local. "}
+                      Mayor precisión, especialmente en formularios y manuscritos. Requiere credenciales configuradas.
+                    </p>
+                  </div>
+                </label>
+              )}
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setOcrDialog({ files: null, mode: "none" })}>

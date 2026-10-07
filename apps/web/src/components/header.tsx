@@ -19,9 +19,9 @@ export function Header() {
   }, []);
 
   return (
-    <header className="flex h-14 items-center justify-between border-b bg-background px-4">
-      <div className="flex items-center gap-4">
-        <span className="text-sm font-medium text-muted-foreground">
+    <header className="flex h-14 items-center justify-between gap-2 border-b bg-background px-4 pl-14 md:pl-4">
+      <div className="flex min-w-0 items-center gap-4">
+        <span className="hidden truncate text-sm font-medium text-muted-foreground sm:inline">
           {user?.organization_id ? `Org: ${user.organization_id.slice(0, 8)}…` : ""}
         </span>
       </div>

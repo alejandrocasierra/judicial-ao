@@ -218,7 +218,7 @@ export default function ProcesosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Procesos</h1>
           <p className="text-muted-foreground">Cada proceso organiza sus carpetas y archivos (PDFs, videos, Excel, Word, imágenes)</p>
@@ -259,13 +259,13 @@ export default function ProcesosPage() {
           {cases.map((c) => (
             <Card key={c.id} className="group transition-colors hover:border-primary/60">
               <CardHeader>
-                <CardTitle className="flex items-center justify-between gap-2">
+                <CardTitle className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <Link href={`/dashboard/procesos/${c.id}`} className="flex min-w-0 items-center gap-2 hover:text-primary">
                     <FolderKanban className="h-5 w-5 shrink-0 text-primary" />
-                    <span className="truncate">{c.title}</span>
+                    <span className="break-words sm:truncate">{c.title}</span>
                   </Link>
                   <span className="flex shrink-0 items-center gap-1">
-                    <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <span className="flex items-center gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                       <Button variant="ghost" size="icon" title="Ver línea de tiempo procesal" onClick={() => setTimelineCase(c)}>
                         <Activity className="h-4 w-4" />
                       </Button>
@@ -339,7 +339,7 @@ export default function ProcesosPage() {
       </Dialog>
 
       <Dialog open={timelineCase !== null} onOpenChange={(o) => { if (!o) setTimelineCase(null); }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-6xl">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary" />Línea de tiempo procesal</span>

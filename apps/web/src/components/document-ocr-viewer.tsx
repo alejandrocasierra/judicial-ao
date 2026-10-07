@@ -14,8 +14,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Save, ChevronLeft, ChevronRight, Bot, ZoomIn, ZoomOut, Maximize,
-  Columns2, Image as ImageIcon, Download, RefreshCw, FileText, FileCode,
+  Columns2, Image as ImageIcon, Layers, RefreshCw, FileText, FileCode,
 } from "lucide-react";
+import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 
 interface PageMeta {
@@ -64,7 +65,20 @@ interface PageLayout {
   structured?: StructuredFields;
 }
 
-type ViewMode = "split" | "pdf" | "text";
+interface DocumentChunk {
+  id: string;
+  chunk_type: string;
+  page_number: number | null;
+  text: string;
+  markdown: string;
+  folio?: string | null;
+  ocr_mode?: string | null;
+  entities?: string[];
+  part?: number | null;
+  parts?: number | null;
+}
+
+type ViewMode = "split" | "pdf" | "text" | "chunks";
 
 /** Palabras (letras/dígitos), igual que el backend (ocr_confidence.words). */
 function ocrWords(t: string): string[] {
@@ -154,6 +168,18 @@ export function DocumentOcrViewer({
     queryFn: () => api.get<OcrVersionsResponse>(`/cases/${caseId}/documents/${documentId}/ocr-versions`),
     enabled: !!documentId,
   });
+  // Chunks RAG del documento (unidades indexadas). Se cargan sólo al abrir la vista Chunks.
+  const effectiveOcrMode = viewOcrMode === "current" ? docInfo?.ocr_mode ?? null : viewOcrMode;
+  const { data: chunks, isFetching: loadingChunks } = useQuery({
+    queryKey: ["chunks", caseId, documentId, effectiveOcrMode],
+    queryFn: () => {
+      const params = effectiveOcrMode ? `?mode=${effectiveOcrMode}` : "";
+      return api.get<{ chunks: DocumentChunk[] }>(`/cases/${caseId}/documents/${documentId}/chunks${params}`).then((r) => r.chunks);
+    },
+    enabled: !!documentId && viewMode === "chunks",
+  });
+  // Chunks de la hoja que se está viendo (la vista Chunks es por hoja, no del documento).
+  const pageChunks = (chunks ?? []).filter((c) => c.page_number === page);
 
   // Ajuste en render al cambiar de documento o de cita (sin efecto de estado):
   // hoja inicial (o de la cita), vista dividida y zoom/encuadre reiniciados.
@@ -302,21 +328,6 @@ export function DocumentOcrViewer({
     },
   });
 
-  async function downloadDoc() {
-    if (!documentId) return;
-    try {
-      const blob = await api.blob(`/cases/${caseId}/documents/${documentId}/download`);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename || "documento.pdf";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error("No se pudo descargar el PDF");
-    }
-  }
-
   async function downloadMarkdown() {
     if (!documentId) return;
     try {
@@ -339,7 +350,7 @@ export function DocumentOcrViewer({
         <DialogHeader><DialogTitle>{filename}</DialogTitle></DialogHeader>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <Button variant="outline" size="icon" onClick={() => setPage((p) => Math.max(1, p - 1))}><ChevronLeft className="h-4 w-4" /></Button>
             <Select value={String(page)} onValueChange={(v) => setPage(Number(v))}>
               <SelectTrigger className="w-[230px]"><SelectValue placeholder={`Hoja ${page}`} /></SelectTrigger>
@@ -392,7 +403,7 @@ export function DocumentOcrViewer({
                 </SelectContent>
               </Select>
             )}
-            <div className="flex items-center rounded-md border">
+            <div className="flex flex-wrap items-center rounded-md border">
               <Button variant={viewMode === "pdf" ? "default" : "ghost"} size="sm" className="rounded-r-none"
                 onClick={() => setViewMode("pdf")} title="Ver solo el PDF, sin texto">
                 <ImageIcon className="mr-1 h-4 w-4" />Solo PDF
@@ -401,17 +412,18 @@ export function DocumentOcrViewer({
                 onClick={() => setViewMode("text")} title="Ver solo el texto extraído">
                 <FileText className="mr-1 h-4 w-4" />Solo texto
               </Button>
-              <Button variant={viewMode === "split" ? "default" : "ghost"} size="sm" className="rounded-l-none"
+              <Button variant={viewMode === "split" ? "default" : "ghost"} size="sm" className="rounded-none border-x"
                 onClick={() => setViewMode("split")} title="Ver el texto extraído por hoja junto al PDF">
                 <Columns2 className="mr-1 h-4 w-4" />Texto por hoja
               </Button>
+              <Button variant={viewMode === "chunks" ? "default" : "ghost"} size="sm" className="rounded-l-none"
+                onClick={() => setViewMode("chunks")} title="Ver los chunks indexados (Markdown) junto al PDF">
+                <Layers className="mr-1 h-4 w-4" />Chunks
+              </Button>
             </div>
-            {viewMode !== "pdf" && (
+            {(viewMode === "split" || viewMode === "text") && (
               <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}><Save className="mr-1 h-4 w-4" />Guardar</Button>
             )}
-            <Button variant="outline" size="sm" onClick={downloadDoc} title="Descargar el PDF original">
-              <Download className="mr-1 h-4 w-4" />Descargar
-            </Button>
             <Button variant="outline" size="sm" onClick={downloadMarkdown} title="Descargar el texto en Markdown (con jerarquía)">
               <FileCode className="mr-1 h-4 w-4" />Markdown
             </Button>
@@ -422,8 +434,8 @@ export function DocumentOcrViewer({
           </div>
         </div>
 
-        <div className={viewMode === "split" ? "grid gap-4 md:grid-cols-2" : "grid gap-4"}>
-          {viewMode !== "pdf" && (
+        <div className={(viewMode === "split" || viewMode === "chunks") ? "grid min-w-0 gap-4 [&>*]:min-w-0 md:grid-cols-2" : "grid min-w-0 gap-4 [&>*]:min-w-0"}>
+          {(viewMode === "split" || viewMode === "text") && (
             <div className="space-y-2">
               <Textarea value={text} onChange={(e) => setTextDraft(e.target.value)}
                 rows={viewMode === "text" ? 26 : 18} className="font-mono text-xs leading-relaxed" />
@@ -439,6 +451,57 @@ export function DocumentOcrViewer({
                   (confianza = 100% − caracteres cambiados ÷ caracteres totales; cambiar una letra pesa menos que reescribir una palabra)
                 </span>
               </p>
+            </div>
+          )}
+
+          {viewMode === "chunks" && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Chunks de la hoja {page} ({pageChunks.length})
+                </p>
+                <span className="text-xs text-muted-foreground">Clic en un chunk para ir a su hoja</span>
+              </div>
+              <div className="h-[520px] space-y-2 overflow-auto rounded-md border bg-muted/20 p-3">
+                {loadingChunks && !chunks ? (
+                  <p className="text-sm text-muted-foreground">Cargando chunks…</p>
+                ) : (chunks?.length ?? 0) === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Este documento aún no tiene chunks indexados. Guarda una corrección o usa «Reprocesar» para reindexarlo.
+                  </p>
+                ) : pageChunks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Esta hoja no tiene chunk (texto vacío o aún no indexada).
+                  </p>
+                ) : (
+                  pageChunks.map((ch) => (
+                    <div
+                      key={ch.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => { if (ch.page_number != null) setPage(ch.page_number); }}
+                      onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && ch.page_number != null) { e.preventDefault(); setPage(ch.page_number); } }}
+                      title={ch.page_number != null ? `Ir a la hoja ${ch.page_number}` : undefined}
+                      className={`cursor-pointer rounded-md border bg-background p-3 text-sm transition-colors hover:border-primary/60 ${ch.page_number === page ? "border-primary/60" : ""}`}
+                    >
+                      <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        <Badge variant="outline">{ch.chunk_type}</Badge>
+                        {ch.page_number != null && (
+                          <span>Hoja {ch.page_number}{ch.folio ? ` · folio ${ch.folio}` : ""}</span>
+                        )}
+                        {ch.parts != null && ch.parts > 1 && (
+                          <span>· fragmento {ch.part}/{ch.parts}</span>
+                        )}
+                        {ch.ocr_mode && (
+                          <span>· {ch.ocr_mode === "document_ai" ? "Document AI" : "Básico"}</span>
+                        )}
+                        {(ch.entities?.length ?? 0) > 0 && <span>· {ch.entities!.length} entidad(es)</span>}
+                      </div>
+                      <Markdown text={ch.markdown} className="text-sm" />
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
 

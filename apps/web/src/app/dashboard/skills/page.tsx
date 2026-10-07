@@ -39,7 +39,7 @@ export default function SkillsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Skills</h1>
           <p className="text-muted-foreground">Habilidades reutilizables para los agentes</p>
@@ -67,7 +67,7 @@ export default function SkillsPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {skills.map((s) => (
             <Card key={s.id}>
-              <CardHeader><CardTitle className="flex items-center justify-between">
+              <CardHeader><CardTitle className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex items-center gap-2"><Wrench className="h-5 w-5" />{s.name}
                   {s.is_system && <Badge variant="outline">Sistema</Badge>}</span>
                 <span className="flex gap-1">
