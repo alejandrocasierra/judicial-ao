@@ -30,6 +30,15 @@ celery_app.conf.update(
     # la cola general. Ver `queue_for_job_type` en app/workers/dispatcher.py.
     task_default_queue="default",
     task_create_missing_queues=True,
+    # Prioridades (Redis): permite que la diarización (prioridad 9) salte por delante de
+    # las ingestas en cola (prioridad 5) y así cada video se procesa completo, de a uno.
+    task_queue_max_priority=10,
+    task_default_priority=5,
+    broker_transport_options={
+        "priority_steps": list(range(10)),
+        "queue_order_strategy": "priority",
+        "visibility_timeout": max(3600, _settings.MEDIA_JOB_TIME_LIMIT_SECONDS + 600),
+    },
     beat_schedule={
         # Sweeper de jobs huérfanos: cada media vida del umbral (con JOB_STALE_MINUTES=120,
         # cada 60 min). Requiere `celery -A app.workers.celery_app beat` (o --beat en el worker).

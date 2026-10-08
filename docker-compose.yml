@@ -77,7 +77,7 @@ services:
     # bloquea la transcripción/diarización.
     # --beat: el sweeper de jobs huérfanos (beat_schedule) corre dentro del worker;
     # al escalar a más réplicas, mover beat a un proceso dedicado.
-    command: ["sh", "-c", "python /srv/scripts/reap_orphans_startup.py || true; exec celery -A app.workers.celery_app worker -Q default --beat --concurrency=1 --max-tasks-per-child=1 --loglevel=INFO"]
+    command: ["sh", "-c", "python /srv/scripts/reap_orphans_startup.py || true; exec celery -A app.workers.celery_app worker -Q default --beat --concurrency=1 --max-tasks-per-child=1 --prefetch-multiplier=1 --loglevel=INFO"]
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
@@ -139,7 +139,7 @@ services:
     mem_limit: ${WORKER_MEDIA_MEM_LIMIT:-5g}
     # --concurrency=1 + --max-tasks-per-child=1: un solo proceso pesado a la vez y se
     # recicla en cada tarea (libera Whisper antes de cargar pyannote -> sin OOM).
-    command: ["sh", "-c", "exec celery -A app.workers.celery_app worker -Q media --concurrency=1 --max-tasks-per-child=1 --loglevel=INFO"]
+    command: ["sh", "-c", "exec celery -A app.workers.celery_app worker -Q media --concurrency=1 --max-tasks-per-child=1 --prefetch-multiplier=1 --loglevel=INFO"]
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"

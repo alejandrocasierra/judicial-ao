@@ -21,7 +21,10 @@ log = logging.getLogger(__name__)
 # cola general. El resto de jobs van a la cola "default".
 MEDIA_QUEUE = "media"
 DEFAULT_QUEUE = "default"
-_MEDIA_JOB_TYPES = {"media_asr", "media_diarize"}
+# Jobs PESADOS (CPU/RAM): OCR, ASR y diarización. Van a la MISMA cola ("media") para que
+# UN solo worker los ejecute de a uno; así dos trabajos pesados nunca corren a la vez
+# (en la e2-medium eso saturaría la CPU). Los jobs ligeros (LLM, grafo) van a "default".
+_MEDIA_JOB_TYPES = {"file_ingest", "document_ocr", "media_asr", "media_diarize"}
 
 
 def queue_for_job_type(job_type: str | None) -> str:
@@ -62,7 +65,11 @@ def enqueue_job(job_id: UUID | str, org_id: UUID | str, actor_id: UUID | str,
     queue = queue_for_job_type(job_type)
     # Los medios usan la tarea con time_limit amplio (`jobs.run_media`).
     task = run_media if queue == MEDIA_QUEUE else run_job
+    # Prioridad (Redis): la DIARIZACIÓN (etapa 2) salta por delante de las ingestas/OCR que
+    # estén en cola, de modo que un video termina TODO su ciclo (ASR→diarización) antes de
+    # empezar el siguiente. Con un solo worker pesado => nunca se solapan dos jobs pesados.
+    priority = 9 if job_type == "media_diarize" else 5
     try:
-        task.apply_async(args=[str(job_id), str(org_id), str(actor_id)], queue=queue)
+        task.apply_async(args=[str(job_id), str(org_id), str(actor_id)], queue=queue, priority=priority)
     except Exception:  # broker inalcanzable: el job queda QUEUED, no se pierde
         log.exception("no se pudo encolar el job %s; queda QUEUED", job_id)
