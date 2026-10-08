@@ -250,6 +250,9 @@ function JobCard({
   const isActive = ["QUEUED", "RUNNING", "RETRYING"].includes(job.status);
   const isFailed = job.status === "FAILED";
   const isCancelled = job.status === "CANCELLED";
+  // Detalle del paso en curso (p. ej. "Diarizando hablantes… (tramo 2/9 · embeddings 30%)")
+  // para mostrarlo en la fila del job SIN necesidad de expandirlo.
+  const activeDetail = job.items.find((i) => i.detail)?.detail;
 
   return (
     <div className={`rounded-lg border ${isFailed ? "border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20" : ""} ${isCancelled ? "opacity-60" : ""}`}>
@@ -273,6 +276,7 @@ function JobCard({
           </div>
           <p className="text-xs text-muted-foreground">
             {job.items.length} archivo(s) · Iniciado hace {elapsedSince(job.created_at)}
+            {activeDetail && ` · ${activeDetail}`}
             {job.error_code && ` · Error: ${job.error_code}`}
           </p>
         </div>

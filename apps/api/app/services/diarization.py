@@ -85,13 +85,15 @@ def _load_pipeline(token: str):
     return pipeline
 
 
-def _pyannote_hook(progress_cb: Any | None, base: float = 0.0, span: float = 1.0):
-    """Hook de pyannote -> avance en [base, base+span] (se compone con el del pipeline)."""
+def _pyannote_hook(progress_cb: Any | None, base: float = 0.0, span: float = 1.0,
+                   prefix: str = ""):
+    """Hook de pyannote -> avance en [base, base+span] (se compone con el del pipeline).
+    `prefix` se antepone al nombre del paso (p. ej. "tramo 2/9 · ")."""
     def _hook(step_name, step_artifact, file=None, total=None, completed=None, **_kw):
         if progress_cb is not None and total:
             try:
                 frac = max(0.0, min(1.0, float(completed or 0) / float(total)))
-                progress_cb(str(step_name), base + span * frac, 1.0)
+                progress_cb(f"{prefix}{step_name}", base + span * frac, 1.0)
             except Exception:  # noqa: BLE001 — el progreso no debe tumbar la diarización
                 pass
     return _hook
@@ -168,7 +170,8 @@ def _pyannote_diarization_chunked(wav_path: Path, pipeline, chunk_s: int,
         if waveform.shape[0] > 1:
             waveform = waveform.mean(dim=0, keepdim=True)
         output = pipeline({"waveform": waveform, "sample_rate": sr},
-                          hook=_pyannote_hook(progress_cb, base=ci / n_chunks, span=1.0 / n_chunks))
+                          hook=_pyannote_hook(progress_cb, base=ci / n_chunks, span=1.0 / n_chunks,
+                                              prefix=f"tramo {ci + 1}/{n_chunks} · "))
         annotation = getattr(output, "exclusive_speaker_diarization", output)
         sd = getattr(output, "speaker_diarization", annotation)
         embs = getattr(output, "speaker_embeddings", None)
