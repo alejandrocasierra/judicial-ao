@@ -50,6 +50,21 @@ def _load_prompt(prompt_id: str, locale: str, version: int = 1) -> tuple[str, st
     return body.strip().replace("{{LOCALE}}", locale), pid, ver
 
 
+def _load_extraction_prompt(conn: Connection, org_id: str | None, prompt_id: str,
+                            locale: str, version: int = 1) -> tuple[str, str, str]:
+    """Prompt de extracción desde el AGENTE editable del dashboard (si existe) o, si no,
+    desde el archivo versionado. Así los prompts se editan en /dashboard/agents."""
+    from app.services.builtin_agents import EXTRACTION_AGENTS  # perezoso (evita ciclo)
+    agent_name = next((n for (n, pid, _v) in EXTRACTION_AGENTS if pid == prompt_id), None)
+    if agent_name and conn is not None and org_id:
+        row = one(conn, "SELECT system_prompt, updated_at FROM agents "
+                        "WHERE organization_id = :o AND name = :n", o=org_id, n=agent_name)
+        if row and row.get("system_prompt"):
+            return (str(row["system_prompt"]).replace("{{LOCALE}}", locale),
+                    prompt_id, f"agent:{row.get('updated_at')}")
+    return _load_prompt(prompt_id, locale, version=version)
+
+
 def _source_label(it: dict[str, Any]) -> str:
     if it["source_type"] == "document_page":
         return f"document:{it['document_id']} page:{it['page_number']}"
@@ -546,7 +561,7 @@ def link_evidence(
 ) -> dict[str, Any]:
     """Crea registros evidence para un source y los vincula con facts del caso."""
     locale = locale or get_settings().DEFAULT_LOCALE
-    system, prompt_id, prompt_version = _load_prompt("link_evidence", locale)
+    system, prompt_id, prompt_version = _load_extraction_prompt(conn, org_id, "link_evidence", locale)
     items, input_hash = build_evidence_blocks(conn, case_id, source_type, source_id)
     if not items:
         return {"evidence": 0, "links": 0, "model_run": None, "warning": "no_evidence"}
@@ -708,7 +723,7 @@ def extract_entities(
     """Extrae entidades de un documento o media y las persiste."""
     locale = locale or get_settings().DEFAULT_LOCALE
     # v2: ignora etiquetas de formulario/ruido y exige tipos consistentes (menos duplicados).
-    system, prompt_id, prompt_version = _load_prompt("extract_entities", locale, version=2)
+    system, prompt_id, prompt_version = _load_extraction_prompt(conn, org_id, "extract_entities", locale, version=2)
     all_items, input_hash = build_evidence_blocks(conn, case_id, source_type, source_id)
     if not all_items:
         return {"entities": 0, "citations": 0, "model_run": None, "warning": "no_evidence"}
@@ -752,7 +767,8 @@ def extract_claims(
 ) -> dict[str, Any]:
     """Extrae claims de un documento o media y los persiste."""
     locale = locale or get_settings().DEFAULT_LOCALE
-    system, prompt_id, prompt_version = _load_prompt("extract_claims", locale)
+    # v2: anti-ruido (sin encabezados/formularios) y anti-duplicado (una fila por aserción).
+    system, prompt_id, prompt_version = _load_extraction_prompt(conn, org_id, "extract_claims", locale, version=2)
     all_items, input_hash = build_evidence_blocks(conn, case_id, source_type, source_id)
     if not all_items:
         return {"claims": 0, "citations": 0, "model_run": None, "warning": "no_evidence"}
@@ -791,7 +807,8 @@ def extract_events(
 ) -> dict[str, Any]:
     """Extrae eventos de un documento o media y los persiste."""
     locale = locale or get_settings().DEFAULT_LOCALE
-    system, prompt_id, prompt_version = _load_prompt("extract_events", locale)
+    # v2: anti-ruido (sin leyes/fechas de documento/encabezados) y anti-duplicado.
+    system, prompt_id, prompt_version = _load_extraction_prompt(conn, org_id, "extract_events", locale, version=2)
     all_items, input_hash = build_evidence_blocks(conn, case_id, source_type, source_id)
     if not all_items:
         return {"events": 0, "citations": 0, "model_run": None, "warning": "no_evidence"}
@@ -863,7 +880,8 @@ def extract_procedural_events(
 ) -> dict[str, Any]:
     """Extrae ACTUACIONES PROCESALES del documento/media y las persiste (kind='procedural')."""
     locale = locale or get_settings().DEFAULT_LOCALE
-    system, prompt_id, prompt_version = _load_prompt("extract_procedural_events", locale)
+    # v2: anti-ruido (sin encabezados/sellos) y anti-duplicado (una fila por actuación).
+    system, prompt_id, prompt_version = _load_extraction_prompt(conn, org_id, "extract_procedural_events", locale, version=2)
     all_items, input_hash = build_evidence_blocks(conn, case_id, source_type, source_id)
     if not all_items:
         return {"events": 0, "citations": 0, "model_run": None, "warning": "no_evidence"}
@@ -905,7 +923,7 @@ def extract_decisions(
     if source_type != "document":
         return {"decisions": 0, "facts": 0, "citations": 0, "warning": "decisions_only_from_documents"}
     locale = locale or get_settings().DEFAULT_LOCALE
-    system, prompt_id, prompt_version = _load_prompt("extract_decisions", locale)
+    system, prompt_id, prompt_version = _load_extraction_prompt(conn, org_id, "extract_decisions", locale)
     all_items, input_hash = build_evidence_blocks(conn, case_id, source_type, source_id)
     if not all_items:
         return {"decisions": 0, "facts": 0, "citations": 0, "model_run": None, "warning": "no_evidence"}
@@ -950,7 +968,7 @@ def detect_contradictions(
 ) -> dict[str, Any]:
     """Detecta contradicciones entre los claims ya extraídos del caso."""
     locale = locale or get_settings().DEFAULT_LOCALE
-    system, prompt_id, prompt_version = _load_prompt("detect_contradictions", locale)
+    system, prompt_id, prompt_version = _load_extraction_prompt(conn, org_id, "detect_contradictions", locale)
 
     claims = rows(conn, """
         SELECT id, text, claim_type, claimant_party_id, confidence

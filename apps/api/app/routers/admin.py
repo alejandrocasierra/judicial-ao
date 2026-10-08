@@ -214,6 +214,7 @@ def list_agents(p: Principal = Depends(require_org("user.manage"))):
         builtin_agents.ensure_builtin_agents(c, p.org_id, p.user_id)
         builtin_agents.ensure_task_agents(c, p.org_id, p.user_id)
         builtin_agents.ensure_chat_agents(c, p.org_id, p.user_id)
+        builtin_agents.ensure_extraction_agents(c, p.org_id, p.user_id)
         return rows(c, """SELECT id, name, system_prompt, skills, is_system, kind, created_at, updated_at
                           FROM agents ORDER BY is_system DESC, kind, name""")
 

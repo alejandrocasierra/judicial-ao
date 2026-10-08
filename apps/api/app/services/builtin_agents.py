@@ -147,6 +147,43 @@ def ensure_task_agents(conn: Connection, org_id: str, user_id: str | None) -> No
         )
 
 
+# Prompts de EXTRACCIÓN gestionables desde /dashboard/agents: (nombre del agente, prompt_id,
+# versión base del archivo). Al crearlos, su system_prompt es el del archivo; a partir de ahí
+# el usuario puede editarlos y la extracción los leerá del agente (fallback al archivo).
+EXTRACTION_AGENTS: list[tuple[str, str, int]] = [
+    ("Extracción · Entidades", "extract_entities", 2),
+    ("Extracción · Pretensiones", "extract_claims", 2),
+    ("Extracción · Eventos", "extract_events", 2),
+    ("Extracción · Actuaciones", "extract_procedural_events", 2),
+    ("Extracción · Decisiones", "extract_decisions", 1),
+    ("Vinculación de evidencia", "link_evidence", 1),
+    ("Detección de contradicciones", "detect_contradictions", 1),
+]
+
+
+def ensure_extraction_agents(conn: Connection, org_id: str, user_id: str | None) -> None:
+    """Crea (idempotente por nombre) un agente por prompt de EXTRACCIÓN con su system_prompt
+    del archivo base. Así TODOS los prompts de extracción quedan visibles y EDITABLES en
+    /dashboard/agents. No pisa los que el usuario haya editado."""
+    from app.services.legal_extraction import _load_prompt  # perezoso (evita ciclo de import)
+    for agent_name, prompt_id, version in EXTRACTION_AGENTS:
+        exists = conn.execute(
+            text("SELECT 1 FROM agents WHERE organization_id = :o AND name = :n"),
+            {"o": org_id, "n": agent_name},
+        ).first()
+        if exists:
+            continue
+        try:
+            body, _pid, _ver = _load_prompt(prompt_id, "es", version=version)
+        except FileNotFoundError:
+            continue
+        conn.execute(
+            text("""INSERT INTO agents (organization_id, name, system_prompt, skills, created_by, is_system, kind)
+                    VALUES (:o, :n, :sp, :sk, :u, true, 'extraction')"""),
+            {"o": org_id, "n": agent_name, "sp": body, "sk": [], "u": user_id},
+        )
+
+
 # ---------------------------------------------------------------------------
 # Fase 5 — Skills y agentes del Chat IA (estilo catálogo MCP: propósito, tools,
 # flujos y anti-patrones dentro del system prompt que se fusiona al agente).

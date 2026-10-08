@@ -23,7 +23,17 @@ log = logging.getLogger(__name__)
 
 
 def consolidate_case_entities(conn: Connection, org_id: str, case_id: str) -> dict:
-    """Deduplica las entidades del caso por `normalized_name`. Devuelve estadísticas."""
+    """Limpia (filtra ruido) y deduplica las entidades del caso. Devuelve estadísticas."""
+    # 1) Filtro de RUIDO: entidades cuyo nombre es texto de relleno/placeholder, no una
+    #    entidad real (p. ej. "No aplica", "No se identifican cuentas", "sin identificar").
+    noise = conn.execute(text("""
+        DELETE FROM entities
+        WHERE case_id = :c AND (
+            normalized_name ~ '^(no aplica|no especific|sin identificar|no se identific|no informad|no hay|ningun|na)$'
+            OR normalized_name ~ '^(no aplica|no se identific|sin identificar|no especific)[^a-z]'
+        ) RETURNING id
+    """), {"c": case_id}).rowcount
+
     groups = rows(conn, """
         SELECT normalized_name FROM entities
         WHERE case_id = :c AND coalesce(normalized_name, '') <> ''
@@ -60,10 +70,10 @@ def consolidate_case_entities(conn: Connection, org_id: str, case_id: str) -> di
         conn.execute(text("UPDATE entities SET aliases = :a WHERE id = :i"),
                      {"a": sorted(aliases), "i": str(canonical["id"])})
         merged += 1
-    if merged:
-        log.info("consolidación entidades caso %s: grupos=%s fusionados=%s borradas=%s",
-                 case_id, len(groups), merged, deleted)
-    return {"groups": len(groups), "merged": merged, "deleted": deleted}
+    if merged or noise:
+        log.info("consolidación entidades caso %s: ruido=%s grupos=%s fusionados=%s borradas=%s",
+                 case_id, noise, len(groups), merged, deleted)
+    return {"groups": len(groups), "merged": merged, "deleted": deleted, "noise": noise}
 
 
 def consolidate_all_cases(conn: Connection) -> dict:
