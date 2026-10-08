@@ -133,6 +133,9 @@ class Settings(BaseSettings):
     OCR_PREPROCESS: bool
     # Extracción automática de PARTES al terminar OCR/ASR (encabezados + hablantes).
     AUTO_EXTRACT_PARTIES: bool = True
+    # Máximo de hechos que se envían al LLM en cada llamada de `link_evidence` (evita el
+    # coste O(fuentes × hechos): antes se mandaban TODOS los hechos del caso en cada fuente).
+    LINK_EVIDENCE_MAX_FACTS: int = Field(default=120, ge=1)
     # Google Document AI (vacío = deshabilitado)
     GOOGLE_CLOUD_PROJECT: str
     GOOGLE_CLOUD_LOCATION: str

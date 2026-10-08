@@ -551,10 +551,15 @@ def link_evidence(
     if not items:
         return {"evidence": 0, "links": 0, "model_run": None, "warning": "no_evidence"}
 
+    # Coste: antes se enviaban TODOS los facts del caso en CADA llamada (O(fuentes×facts);
+    # p. ej. 6.4M tokens). Se priorizan los facts SIN evidencia vinculada y se acota el
+    # número enviado (config LINK_EVIDENCE_MAX_FACTS).
     facts = rows(conn, """
-        SELECT id, proposition FROM facts
-        WHERE case_id = :c AND review_status <> 'REJECTED'
-        ORDER BY updated_at""", c=case_id)
+        SELECT f.id, f.proposition FROM facts f
+        WHERE f.case_id = :c AND f.review_status <> 'REJECTED'
+        ORDER BY (EXISTS (SELECT 1 FROM evidence_links el WHERE el.fact_id = f.id)) ASC,
+                 f.updated_at DESC
+        LIMIT :n""", c=case_id, n=get_settings().LINK_EVIDENCE_MAX_FACTS)
     if not facts:
         return {"evidence": 0, "links": 0, "model_run": None, "warning": "no_facts"}
 
@@ -702,7 +707,8 @@ def extract_entities(
 ) -> dict[str, Any]:
     """Extrae entidades de un documento o media y las persiste."""
     locale = locale or get_settings().DEFAULT_LOCALE
-    system, prompt_id, prompt_version = _load_prompt("extract_entities", locale)
+    # v2: ignora etiquetas de formulario/ruido y exige tipos consistentes (menos duplicados).
+    system, prompt_id, prompt_version = _load_prompt("extract_entities", locale, version=2)
     all_items, input_hash = build_evidence_blocks(conn, case_id, source_type, source_id)
     if not all_items:
         return {"entities": 0, "citations": 0, "model_run": None, "warning": "no_evidence"}
