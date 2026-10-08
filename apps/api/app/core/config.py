@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     CELERY_TASK_ALWAYS_EAGER: bool
     JOB_STALE_MINUTES: int = Field(gt=0)
     JOB_TIME_LIMIT_SECONDS: int = Field(gt=0)
+    # Límite de tiempo de las tareas de MEDIOS (ASR/diarización). Mucho mayor que el
+    # general: diarizar horas de audio con pyannote en CPU tarda mucho. Estos jobs NO
+    # pasan por el sweeper de huérfanos (migración 0037), así que no exigen respetar
+    # JOB_STALE_MINUTES.
+    MEDIA_JOB_TIME_LIMIT_SECONDS: int = Field(default=21600, gt=0)
+    # Al arrancar el worker, reencola los jobs RUNNING más antiguos que esto (recupera
+    # huérfanos tras un reinicio). Con varios workers en paralelo, súbelo.
+    STARTUP_REAP_MINUTES: int = 1
 
     JWT_SECRET: str
     JWT_ALGORITHM: Literal["HS256", "HS384", "HS512"]
@@ -140,6 +148,22 @@ class Settings(BaseSettings):
     ASR_COMPUTE_TYPE: Literal["int8", "float16", "float32"]
     ASR_BEAM_SIZE: int = Field(ge=1)
     ASR_BEST_OF: int = Field(ge=1)
+    # ASR por tramos: faster-whisper consume memoria proporcional a la duración del audio
+    # (~55 MB/min). Un audio de 2 h en una sola pasada ~8 GB (OOM). Se trocea en tramos
+    # de N segundos (0 = sin trocear) para acotar el pico (~1 GB con 10 min).
+    ASR_CHUNK_SECONDS: int = Field(default=600, ge=0)
+    # Hilos de CPU para faster-whisper. 0 = automático (todos los núcleos). En VPS
+    # pequeñas conviene fijar 1-2 para no saturar la máquina (deja CPU al API/DB).
+    ASR_CPU_THREADS: int = Field(default=0, ge=0)
+    # Diarización POR TRAMOS (audios largos): pyannote sobre el audio completo es
+    # lentísimo y agota tiempo/memoria. Se parte en tramos de N segundos (con solape
+    # para no perder hablantes en los cortes) y se unifican hablantes por embeddings.
+    ASR_DIARIZATION_CHUNK_SECONDS: int = Field(default=900, ge=0)
+    ASR_DIARIZATION_OVERLAP_SECONDS: int = Field(default=10, ge=0)
+    # Distancia coseno máxima para considerar que dos voces son el MISMO hablante.
+    # Más alto = fusiona más (súbelo si la misma persona sale partida; bájalo si une a
+    # personas distintas). 0.5 es el equilibrado por defecto.
+    ASR_DIARIZATION_CLUSTER_THRESHOLD: float = Field(default=0.5, ge=0, le=2)
     ASR_VAD_FILTER: bool
     ASR_VAD_PARAMETERS: dict | None
     ASR_MIN_SPEECH_DURATION_MS: int = Field(ge=0)

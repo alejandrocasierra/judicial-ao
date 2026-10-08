@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
-from uuid import UUID
+from pathlib import Path
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
@@ -22,7 +24,7 @@ from app.core.errors import AppError
 from app.schemas import CaseFilePatch, FolderCreate, FolderPatch, UploadCompleteIn, UploadPresignIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import audit, files, ratelimit
-from app.services.storage import key_from_uri, original_key, storage
+from app.services.storage import incoming_dir, key_from_uri, original_key, storage, uri_for
 from app.workers.dispatcher import create_job, enqueue_if_pending
 
 router = APIRouter(prefix="/cases/{case_id}", tags=["folders"])
@@ -277,6 +279,28 @@ def _validate_upload(data: bytes, filename: str, declared: str | None) -> tuple[
     return real, EXTRA_MIME.get(real) or files.MIME[real]
 
 
+def _validate_upload_path(path: Path, filename: str, declared: str | None) -> tuple[str, str]:
+    """Como `_validate_upload` pero leyendo desde disco (streaming, sin cargar en RAM)."""
+    ext = files.extension(filename)
+    if ext not in ALLOWED_EXTS:
+        raise AppError("UPLOAD_TYPE_NOT_ALLOWED", 415)
+    if ext == "svg":
+        with open(path, "rb") as f:
+            head = f.read(4096)
+        if not _sniff_svg(head):
+            raise AppError("UPLOAD_CONTENT_MISMATCH", 415)
+        real = "svg"
+    else:
+        real = files.sniff_path(path)
+        if real != ext or (declared and declared not in (files.MIME[real], "application/octet-stream")):
+            raise AppError("UPLOAD_CONTENT_MISMATCH", 415)
+    try:
+        files.scan_file(path)
+    except files.MalwareFound:
+        raise AppError("UPLOAD_MALWARE_DETECTED", 422) from None
+    return real, EXTRA_MIME.get(real) or files.MIME[real]
+
+
 def _already_registered(c, case_id: UUID, sha: str, filename: str) -> str | None:
     """'document' | 'media' | 'file' si el mismo contenido Y nombre ya existe; None si no.
 
@@ -330,23 +354,38 @@ def upload_files(case_id: UUID, request: Request,
     ingest_jobs: list[dict] = []  # jobs file_ingest a encolar tras el commit de cada archivo
     for upload in batch:
         filename = files.sanitize_filename(upload.filename or "")
+        tmp = incoming_dir() / f"up-{uuid4().hex}"
+        local_path: Path | None = None
+        job = None
+        keep_local = False
         try:
             is_media = files.extension(filename) in MEDIA_ROUTE_EXTS
             limit = s.UPLOAD_MAX_BYTES_MEDIA if is_media else s.UPLOAD_MAX_BYTES_DOCUMENT
-            buf, total = bytearray(), 0
-            while True:
-                chunk = upload.file.read(1024 * 1024)
-                if not chunk:
-                    break
-                total += len(chunk)
-                if total > limit:
-                    raise AppError("UPLOAD_TOO_LARGE", 413)
-                buf.extend(chunk)
+            # Streaming a DISCO (no memoria): soporta archivos de varios GB.
+            h = hashlib.sha256()
+            total = 0
+            with open(tmp, "wb") as out:
+                while True:
+                    chunk = upload.file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > limit:
+                        raise AppError("UPLOAD_TOO_LARGE", 413)
+                    h.update(chunk)
+                    out.write(chunk)
             if total == 0:
                 raise AppError("UPLOAD_EMPTY", 422)
-            data = bytes(buf)
-            real, mime = _validate_upload(data, filename, upload.content_type)
-            sha = hashlib.sha256(data).hexdigest()
+            real, mime = _validate_upload_path(tmp, filename, upload.content_type)
+            sha = h.hexdigest()
+            # Copia local en carpeta COMPARTIDA (api<->worker) para que el worker procese
+            # (OCR/ASR) sin volver a descargar de GCS. El worker la borra al terminar.
+            local = incoming_dir() / sha
+            if local.exists():
+                tmp.unlink(missing_ok=True)
+            else:
+                os.replace(tmp, local)
+            local_path = local
             with tx(p.org_id, p.user_id) as c:
                 if fid:
                     _folder_or_404(c, case_id, fid)
@@ -354,39 +393,43 @@ def upload_files(case_id: UUID, request: Request,
                 if existing:
                     raise AppError("DOCUMENT_DUPLICATE", 409, {"existing_kind": existing})
                 if real in DOC_ROUTE_EXTS:
-                    uri = storage().put(original_key(str(case_id), sha, "document"), data)
+                    # El original se sube a GCS en el WORKER (tras procesar), para no
+                    # bloquear la respuesta si la subida servidor->GCS es lenta.
+                    uri = uri_for(original_key(str(case_id), sha, "document"))
                     row = one(c, """INSERT INTO documents (organization_id, case_id, folder_id, storage_uri, sha256,
                                         size_bytes, mime_type, filename, uploaded_by, ocr_mode)
                         VALUES (:o,:c,:f,:u,:h,:sz,:m,:fn,:by,:ocr_mode)
                         RETURNING id, processing_status""",
-                              o=p.org_id, c=str(case_id), f=fid, u=uri, h=sha, sz=len(data), m=mime, fn=filename,
+                              o=p.org_id, c=str(case_id), f=fid, u=uri, h=sha, sz=total, m=mime, fn=filename,
                               by=p.user_id, ocr_mode=ocr_mode_normalized)
                     kind = "document"
+                    keep_local = True
                 elif real in MEDIA_ROUTE_EXTS:
-                    uri = storage().put(original_key(str(case_id), sha, "media"), data)
+                    uri = uri_for(original_key(str(case_id), sha, "media"))
                     row = one(c, """INSERT INTO media (organization_id, case_id, folder_id, storage_uri, sha256,
                                         size_bytes, mime_type, filename, title, media_type, uploaded_by, asr_mode)
                         VALUES (:o,:c,:f,:u,:h,:sz,:m,:fn,:t,'video',:by,:asr_mode)
                         RETURNING id, processing_status""",
-                              o=p.org_id, c=str(case_id), f=fid, u=uri, h=sha, sz=len(data), m=mime, fn=filename,
+                              o=p.org_id, c=str(case_id), f=fid, u=uri, h=sha, sz=total, m=mime, fn=filename,
                               t=filename, by=p.user_id, asr_mode=ocr_mode_normalized)
                     kind = "media"
+                    keep_local = True
                 else:
-                    uri = storage().put(f"cases/{case_id}/files/{sha}", data)
+                    uri = storage().put_file(f"cases/{case_id}/files/{sha}", local)
                     row = one(c, """INSERT INTO case_files (organization_id, case_id, folder_id, storage_uri, sha256,
                                         size_bytes, mime_type, filename, uploaded_by)
                         VALUES (:o,:c,:f,:u,:h,:sz,:m,:fn,:by) RETURNING id""",
-                              o=p.org_id, c=str(case_id), f=fid, u=uri, h=sha, sz=len(data), m=mime, fn=filename,
+                              o=p.org_id, c=str(case_id), f=fid, u=uri, h=sha, sz=total, m=mime, fn=filename,
                               by=p.user_id)
                     kind = "file"
                 audit.record(c, org_id=p.org_id, actor_id=p.user_id, action=f"{kind}.uploaded", entity_type=kind,
-                             entity_id=str(row["id"]), after={"sha256": sha, "size": len(data), "folder_id": fid,
+                             entity_id=str(row["id"]), after={"sha256": sha, "size": total, "folder_id": fid,
                                                             "ocr_mode": ocr_mode_normalized},
                              request=request)
-                # PDF/MP4: procesamiento automático SÓLO si el usuario eligió un modo OCR.
+                # PDF/MP4: SIEMPRE se encola file_ingest (aunque sea "sin procesar"), para que
+                # el worker suba el original a GCS y borre la copia local.
                 # XLSX: ingesta automática del índice (no requiere OCR de contenido).
-                job = None
-                if kind in ("document", "media") and ocr_mode_normalized:
+                if kind in ("document", "media"):
                     job = create_job(c, org_id=p.org_id, case_id=str(case_id), job_type="file_ingest",
                                      input_ids=[str(row["id"])], actor_id=p.user_id,
                                      key_parts=["file_ingest", str(case_id), str(row["id"]), s.PIPELINE_VERSION],
@@ -406,6 +449,12 @@ def upload_files(case_id: UUID, request: Request,
         except Exception:
             log.exception("error subiendo %s al caso %s", filename, case_id)
             results.append({"filename": filename, "status": "error", "code": "INTERNAL_ERROR"})
+        finally:
+            tmp.unlink(missing_ok=True)
+            # Para documentos/media la copia local la usa y borra el worker (tras subir a
+            # GCS). Para el resto (case_files) se borra aquí. Disco limitado.
+            if local_path is not None and not keep_local:
+                local_path.unlink(missing_ok=True)
     # Tras los COMMIT de cada archivo: encolar los jobs de procesamiento (un broker
     # caído no rompe la subida; el sweeper re-encola los QUEUED huérfanos).
     for job in ingest_jobs:

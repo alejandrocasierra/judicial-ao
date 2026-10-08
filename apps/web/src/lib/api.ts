@@ -112,8 +112,28 @@ export function streamUrl(path: string): string {
   return `${apiUrl(path)}${token ? `${sep}token=${encodeURIComponent(token)}` : ""}`;
 }
 
-export const api = {
-  get: <T>(path: string, params?: Record<string, string>) =>
+/** Sube `multipart/form-data` por XHR para tener PROGRESO real (fetch no lo da). */
+export function apiUploadXhr<T>(path: string, form: FormData, onProgress?: (p: number) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", apiUrl(path));
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.timeout = 0; // sin límite: archivos grandes por internet lento
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+    xhr.onload = () => {
+      let body: { error?: { code?: string; message?: string }; results?: unknown } | null = null;
+      try { body = JSON.parse(xhr.responseText); } catch { /* respuesta no-JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body as T);
+      else reject(new ApiError(body?.error?.code || "INTERNAL_ERROR", xhr.status, body?.error?.message || xhr.statusText));
+    };
+    xhr.onerror = () => reject(new Error("Error de red al subir"));
+    xhr.ontimeout = () => reject(new Error("Tiempo de subida agotado"));
+    xhr.send(form);
+  });
+}
+
+export const api = {  get: <T>(path: string, params?: Record<string, string>) =>
     request<T>(path, { method: "GET", params }),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: JSON.stringify(body) }),

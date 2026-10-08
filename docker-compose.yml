@@ -61,12 +61,23 @@ services:
     image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
     build: {context: ., dockerfile: infra/docker/api.Dockerfile}
     env_file: ${ENV_FILE:-.env}
+    # Tope de memoria del worker general. Por defecto GENEROSO (local). La VPS e2-medium
+    # (4 GB) lo baja en SU .env (WORKER_MEM_LIMIT=1500m). Si se supera, muere SOLO el
+    # worker (el job se reintenta) y el API/Postgres siguen vivos.
+    mem_limit: ${WORKER_MEM_LIMIT:-5g}
     # --concurrency=1: cada proceso prefork carga torch+docling+faster-whisper
     # (cientos de MB). Con varios procesos por CPU se agota la RAM del contenedor
     # y el worker muere por OOM (SIGKILL) al procesar ASR pesado.
+    # --max-tasks-per-child=1: recicla el proceso en CADA tarea; así la memoria de
+    # Whisper (etapa ASR) se libera antes de cargar pyannote (etapa diarización) y
+    # no se acumulan picos entre jobs en un servidor con poca RAM.
+    # -Q default: este worker general atiende la cola "default" (OCR, extracción legal,
+    # graph_build, backups, beat). Los jobs de MEDIOS (ASR/diarización) van a la cola
+    # "media" que atiende `worker-media`: así la extracción legal (LLM, red) NUNCA
+    # bloquea la transcripción/diarización.
     # --beat: el sweeper de jobs huérfanos (beat_schedule) corre dentro del worker;
     # al escalar a más réplicas, mover beat a un proceso dedicado.
-    command: ["celery", "-A", "app.workers.celery_app", "worker", "--beat", "--concurrency=1", "--loglevel", "INFO"]
+    command: ["sh", "-c", "python /srv/scripts/reap_orphans_startup.py || true; exec celery -A app.workers.celery_app worker -Q default --beat --concurrency=1 --max-tasks-per-child=1 --loglevel=INFO"]
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
@@ -81,6 +92,8 @@ services:
       # (pyannote) sigue usando GPU si está disponible.
       ASR_DEVICE: cpu
       ASR_COMPUTE_TYPE: int8
+      # NOTA: los topes de hilos (OMP_NUM_THREADS, etc.) NO se fijan aquí. En local se usan
+      # todos los núcleos; la VPS los limita poniéndolos en SU .env (env_file los pasa).
       # En el contenedor se usa el FFmpeg del sistema (/usr/bin/ffmpeg), no la ruta Windows de .env
       FFMPEG_PATH: ""
       # Caché de modelos HF (pyannote) y whisper en volumen persistente.
@@ -104,6 +117,50 @@ services:
       - storage:/srv/var
       - ./var/storage:/srv/var/storage
       # Credenciales GCP: coloca tu service-account.json en ./gcp-credentials.json
+      - ./gcp-credentials.json:/srv/gcp-credentials.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # Worker DEDICADO a medios (ASR + diarización), cola "media". Es el que carga
+  # Whisper/pyannote. Al estar separado del worker general, la extracción legal (LLM,
+  # de red y muy larga) nunca bloquea la transcripción ni la diarización.
+  worker-media:
+    restart: unless-stopped
+    image: ${REGISTRY_IMAGE:-judicial-ai}/api:${IMAGE_TAG:-latest}
+    build: {context: ., dockerfile: infra/docker/api.Dockerfile}
+    env_file: ${ENV_FILE:-.env}
+    # Tope del worker de medios (carga pyannote). Por defecto GENEROSO (local). La VPS
+    # e2-medium (4 GB) lo baja en SU .env (WORKER_MEDIA_MEM_LIMIT=2500m). Si se supera,
+    # muere SOLO este worker (el job se reintenta) y la VM sigue viva.
+    mem_limit: ${WORKER_MEDIA_MEM_LIMIT:-5g}
+    # --concurrency=1 + --max-tasks-per-child=1: un solo proceso pesado a la vez y se
+    # recicla en cada tarea (libera Whisper antes de cargar pyannote -> sin OOM).
+    command: ["sh", "-c", "exec celery -A app.workers.celery_app worker -Q media --concurrency=1 --max-tasks-per-child=1 --loglevel=INFO"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: ${REDIS_URL_DOCKER:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL_DOCKER:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND_DOCKER:-redis://redis:6379/2}
+      CELERY_TASK_ALWAYS_EAGER: "false"
+      ASR_DEVICE: cpu
+      ASR_COMPUTE_TYPE: int8
+      # Los topes de hilos (OMP/MKL/...) NO se fijan aquí: local = todos los núcleos;
+      # la VPS los limita en SU .env (env_file los pasa al contenedor).
+      FFMPEG_PATH: ""
+      HF_HOME: /srv/var/hf-cache
+      WHISPER_CACHE_DIR: /srv/var/whisper-cache
+      GOOGLE_APPLICATION_CREDENTIALS: /srv/gcp-credentials.json
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+    volumes:
+      - storage:/srv/var
+      - ./var/storage:/srv/var/storage
       - ./gcp-credentials.json:/srv/gcp-credentials.json:ro
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d celery@$$HOSTNAME"]

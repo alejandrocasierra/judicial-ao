@@ -57,6 +57,11 @@ class LocalStorage:
     def get(self, key: str) -> bytes:
         return self._p(key).read_bytes()
 
+    def download_to(self, key: str, dest: Path) -> None:
+        """Copia el objeto a `dest` sin cargarlo en memoria cuando es posible."""
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(self._p(key), dest)
+
     def get_range(self, key: str, start: int, end: int) -> bytes:
         """Rango inclusivo [start, end] para streaming (HTTP Range)."""
         with open(self._p(key), "rb") as f:
@@ -69,6 +74,14 @@ class LocalStorage:
             for chunk in iter(lambda: f.read(1024 * 1024), b""):
                 h.update(chunk)
         return h.hexdigest()
+
+    def delete(self, key: str) -> int:
+        """Borra UN objeto (archivo). Devuelve 1 si existía, 0 si no."""
+        p = self._p(key)
+        if p.exists() and p.is_file():
+            p.unlink()
+            return 1
+        return 0
 
     def delete_prefix(self, prefix: str) -> int:
         """Borra todos los objetos bajo un prefijo (purga de expediente). Devuelve
@@ -117,6 +130,10 @@ class S3Storage:
     def get(self, key: str) -> bytes:
         return self.c.get_object(Bucket=self.bucket, Key=self._key(key))["Body"].read()
 
+    def download_to(self, key: str, dest: Path) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        self.c.download_file(self.bucket, self._key(key), str(dest))
+
     def get_range(self, key: str, start: int, end: int) -> bytes:
         """Rango inclusivo [start, end] (HTTP Range) directo desde S3."""
         return self.c.get_object(Bucket=self.bucket, Key=self._key(key),
@@ -135,6 +152,11 @@ class S3Storage:
         for chunk in body.iter_chunks(1024 * 1024):
             h.update(chunk)
         return h.hexdigest()
+
+    def delete(self, key: str) -> int:
+        """Borra UN objeto del bucket."""
+        self.c.delete_object(Bucket=self.bucket, Key=self._key(key))
+        return 1
 
     def delete_prefix(self, prefix: str) -> int:
         """Borra todos los objetos bajo un prefijo (purga de expediente)."""
@@ -185,6 +207,14 @@ class GcsStorage:
     def get(self, key: str) -> bytes:
         return self.bucket.blob(self._key(key)).download_as_bytes()
 
+    def download_to(self, key: str, dest: Path) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        blob = self.bucket.blob(self._key(key))
+        # Streaming por bloques: evita cargar el objeto en memoria y es más estable en
+        # archivos grandes que `download_to_filename` (que reinicia ante checksum).
+        with blob.open("rb", chunk_size=8 * 1024 * 1024) as src, open(dest, "wb") as out:
+            shutil.copyfileobj(src, out, length=8 * 1024 * 1024)
+
     def get_range(self, key: str, start: int, end: int) -> bytes:
         """Rango inclusivo [start, end] (HTTP Range); GCS usa fin exclusivo."""
         return self.bucket.blob(self._key(key)).download_as_bytes(start=start, end=end + 1)
@@ -204,6 +234,11 @@ class GcsStorage:
             for chunk in iter(lambda: f.read(1024 * 1024), b""):
                 h.update(chunk)
         return h.hexdigest()
+
+    def delete(self, key: str) -> int:
+        """Borra UN objeto del bucket."""
+        self.bucket.blob(self._key(key)).delete()
+        return 1
 
     def delete_prefix(self, prefix: str) -> int:
         count = 0
@@ -227,3 +262,27 @@ def key_from_uri(uri: str) -> str:
     if uri.startswith("local://"):
         return uri[len("local://"):]
     return uri.split("/", 3)[3]
+
+
+def uri_for(key: str) -> str:
+    """URI lógica del objeto SIN subirlo (para registrar la fila antes de subir a GCS).
+
+    El worker sube el original después (asíncrono respecto al cliente)."""
+    s = get_settings()
+    if s.STORAGE_BACKEND == "gcs":
+        return f"gs://{s.S3_BUCKET}/{key}"
+    if s.STORAGE_BACKEND == "s3":
+        return f"s3://{s.S3_BUCKET}/{key}"
+    return f"local://{key}"
+
+
+def incoming_dir() -> Path:
+    """Carpeta temporal COMPARTIDA entre api y worker (mismo volumen `/srv/var`).
+
+    La subida se guarda aquí y el worker procesa (OCR/ASR) desde el archivo local sin
+    volver a descargarlo de GCS. Se borra la copia al terminar el procesamiento."""
+    s = get_settings()
+    d = s.path(s.STORAGE_LOCAL_ROOT).parent / "incoming"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+

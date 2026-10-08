@@ -4,11 +4,15 @@ Con CELERY_TASK_ALWAYS_EAGER=true (tests/desarrollo sin broker) las tareas se
 ejecutan de forma síncrona en el proceso que las encola."""
 from __future__ import annotations
 
+import logging
+
 from celery import Celery
+from celery.signals import worker_ready
 
 from app.core.config import get_settings
 
 _settings = get_settings()
+log = logging.getLogger(__name__)
 
 celery_app = Celery(
     "judicial",
@@ -20,6 +24,12 @@ celery_app.conf.update(
     task_always_eager=_settings.CELERY_TASK_ALWAYS_EAGER,
     task_track_started=True,
     broker_connection_retry_on_startup=True,
+    # Cola por defecto = "default" (el worker general la consume). Los jobs de medios
+    # (ASR/diarización) se publican aparte en la cola "media" (ver dispatcher) para que
+    # un worker dedicado los corra y no queden detrás de la extracción legal (LLM) en
+    # la cola general. Ver `queue_for_job_type` en app/workers/dispatcher.py.
+    task_default_queue="default",
+    task_create_missing_queues=True,
     beat_schedule={
         # Sweeper de jobs huérfanos: cada media vida del umbral (con JOB_STALE_MINUTES=120,
         # cada 60 min). Requiere `celery -A app.workers.celery_app beat` (o --beat en el worker).
@@ -34,3 +44,16 @@ celery_app.conf.update(
         },
     },
 )
+
+
+@worker_ready.connect
+def _reap_orphans_on_startup(**_kwargs) -> None:
+    """Al arrancar el worker reencola los jobs RUNNING/RETRYING huérfanos de un reinicio
+    previo (p. ej. el worker murió por OOM). Evita que queden "Procesando 0%" para siempre."""
+    try:
+        from app.workers.executor import reap_orphans
+        n = reap_orphans(int(_settings.STARTUP_REAP_MINUTES))
+        if n:
+            log.warning("startup reap: %s job(s) huérfano(s) reencolado(s)", n)
+    except Exception:  # noqa: BLE001 — nunca debe impedir que el worker arranque
+        log.exception("no se pudieron reencolar jobs huérfanos al arrancar")

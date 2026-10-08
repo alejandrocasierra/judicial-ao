@@ -6,17 +6,20 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
+import tempfile
 from collections import Counter, defaultdict
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.core.config import get_settings
-from app.core.db import one
+from app.core.db import one, rows, tx
 from app.providers.asr import get_asr_provider
 from app.services.diarization import diarize
-from app.services.storage import key_from_uri, storage
+from app.services.storage import incoming_dir, key_from_uri, storage
 from app.services.teams_visual_id import extract_active_speaker_timeline
 
 log = logging.getLogger(__name__)
@@ -132,11 +135,19 @@ def _get_or_create_speaker(
     label: str,
     display_name: str | None,
 ) -> str:
-    """Crea el speaker o actualiza su display_name si se identificó un nombre."""
-    existing = one(conn, "SELECT id, display_name FROM speakers WHERE case_id = :c AND label = :l",
+    """Crea el speaker o ACTUALIZA su display_name cuando la resolución de máquina cambia.
+
+    Al re-diarizar, pyannote puede renumerar las etiquetas (`SPEAKER_00`, `SPEAKER_01`…).
+    Si solo rellenáramos nombres vacíos, quedarían nombres viejos cruzados. Se actualiza
+    el nombre resuelto por MÁQUINA (visual/auto-presentación) cuando difiere, pero NUNCA
+    se pisa un nombre confirmado por una persona (`resolution_status='CONFIRMED'` o
+    `resolution_source='human'`)."""
+    existing = one(conn, "SELECT id, display_name, resolution_status, resolution_source "
+                         "FROM speakers WHERE case_id = :c AND label = :l",
                    c=case_id, l=label)
     if existing:
-        if display_name and not existing["display_name"]:
+        human = existing["resolution_status"] == "CONFIRMED" or existing["resolution_source"] == "human"
+        if display_name and not human and display_name != existing["display_name"]:
             one(conn, """UPDATE speakers SET display_name = :n, resolution_status = 'PROBABLE',
                              resolution_source = 'teams_visual_id', confidence = 0.7
                          WHERE id = :i RETURNING id""",
@@ -155,21 +166,57 @@ def _get_or_create_speaker(
     return str(result["id"])
 
 
+def _progress_writer(org_id: str, user_id: str, media_id: str):
+    """Callback que publica el avance del ASR en `media_asr_progress`.
+
+    Usa una transacción aparte porque la transacción del pipeline bloquea la fila de
+    `media` hasta el commit final. Errores de progreso nunca tumban el ASR."""
+    def cb(fraction: float, detail: str = "") -> None:
+        pct = max(0, min(100, int(round(fraction * 100))))
+        try:
+            with tx(org_id, user_id) as c2:
+                one(c2, """
+                    INSERT INTO media_asr_progress (media_id, organization_id, pct, detail, updated_at)
+                    VALUES (:m, :o, :p, :det, now())
+                    ON CONFLICT (media_id) DO UPDATE
+                      SET pct = EXCLUDED.pct, detail = EXCLUDED.detail, updated_at = now()
+                    RETURNING media_id
+                """, m=media_id, o=org_id, p=pct, det=detail)
+        except Exception:  # noqa: BLE001
+            log.debug("no se pudo publicar el progreso ASR de %s", media_id, exc_info=True)
+    return cb
+
+
+def _clear_progress(org_id: str, user_id: str, media_id: str) -> None:
+    try:
+        with tx(org_id, user_id) as c2:
+            one(c2, "DELETE FROM media_asr_progress WHERE media_id = :m RETURNING media_id", m=media_id)
+    except Exception:  # noqa: BLE001
+        log.debug("no se pudo limpiar el progreso ASR de %s", media_id, exc_info=True)
+
+
 def process_media(
     conn: Connection,
     media_id: str,
     org_id: str,
     case_id: str,
     user_id: str,
+    do_diarization: bool = True,
 ) -> dict[str, Any]:
-    """Ejecuta ASR + diarización + identificación visual sobre un medio."""
+    """Ejecuta ASR (+ diarización/visión si `do_diarization`).
+
+    La diarización e identificación visual cargan pyannote + el audio completo en
+    memoria; ejecutarlas en el MISMO proceso que Whisper agota la RAM del servidor
+    (OOM/SIGKILL). Por eso `file_ingest`/`media_asr` las piden en una etapa aparte:
+    `process_media(..., do_diarization=False)` hace SOLO ASR y `apply_diarization`
+    (job/proceso separado) asigna los hablantes después."""
     s = get_settings()
     allowed_statuses = {"UPLOADED", "ASR_PENDING", "ASR_COMPLETE", "REVIEW_REQUIRED"}
     media = one(conn, """
         UPDATE media
         SET processing_status = 'ASR_RUNNING'
         WHERE id = :m AND case_id = :c AND processing_status = ANY(:allowed)
-        RETURNING id, storage_uri, filename, mime_type, media_type
+        RETURNING id, storage_uri, filename, mime_type, media_type, sha256
     """, m=media_id, c=case_id, allowed=list(allowed_statuses))
     if media is None:
         existing = one(conn, "SELECT processing_status FROM media WHERE id = :m AND case_id = :c", m=media_id, c=case_id)
@@ -181,49 +228,76 @@ def process_media(
     # Reprocesamiento idempotente: los segmentos son artefactos derivados.
     conn.execute(text("DELETE FROM transcript_segments WHERE media_id = :m"), {"m": media_id})
 
+    # Archivo local COMPARTIDO (api<->worker): si la subida lo dejó aquí, se procesa sin
+    # re-descargar de GCS (importante con internet lento). Se borra al terminar.
+    local = incoming_dir() / str(media["sha256"])
+    tmpdir: Path | None = None
     try:
-        key = key_from_uri(media["storage_uri"])
-        media_bytes = storage().get(key)
+        if local.exists():
+            media_path = local
+        else:
+            key = key_from_uri(media["storage_uri"])
+            tmpdir = Path(tempfile.mkdtemp(prefix="media-"))
+            media_path = tmpdir / "media.bin"
+            storage().download_to(key, media_path)
     except Exception as exc:
-        log.exception("no se pudo leer media %s desde storage", media_id)
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        log.exception("no se pudo preparar media %s", media_id)
         raise RuntimeError(f"storage error: {exc}") from exc
 
-    # 1. ASR
+    # 1. ASR (por RUTA: no carga el archivo completo en memoria) con progreso en vivo.
+    #    Progreso CONTINUO entre etapas: ASR = 0–85 %, diarización/visión = 85–99 %,
+    #    100 % solo cuando la etapa 2 commitea. Así el monitor sube y no marca 100 antes.
     provider = get_asr_provider()
-    asr_segments = provider.transcribe(media_bytes, media["mime_type"])
+    base_cb = _progress_writer(org_id, user_id, media_id)
+
+    def progress_cb(fraction: float, detail: str = "") -> None:
+        if do_diarization:
+            base_cb(fraction, detail)
+        else:
+            base_cb(min(0.60, float(fraction) * 0.60), detail)
+
+    progress_cb(0.01, "Preparando audio…")
+    asr_segments = provider.transcribe(media_path, media["mime_type"], progress_cb=progress_cb)
     log.info("ASR produjo %d segmentos para %s", len(asr_segments), media["filename"])
 
-    # 2. Diarización
+    # 2-4. Diarización + identificación visual + nombres. Si `do_diarization` es
+    # False (etapa ASR), los segmentos quedan con hablante "UNKNOWN" y la etapa 2
+    # (`apply_diarization`) los reasigna en su propio proceso.
     diarization: list[dict[str, Any]] = []
-    try:
-        diarization = diarize(media_bytes, media["mime_type"])
-        log.info("Diarización produjo %d segmentos para %s", len(diarization), media["filename"])
-    except Exception as exc:
-        log.warning("Diarización falló para %s: %s", media["filename"], exc)
-
-    # 3. Identificación visual del HABLANTE ACTIVO (Teams: nombre resaltado)
     timeline: list[dict[str, Any]] = []
-    if media["media_type"] == "video":
+    label_names: dict[str, str] = {}
+    if do_diarization:
         try:
-            timeline = extract_active_speaker_timeline(media_bytes, media["mime_type"])
-            log.info("Identificación visual produjo %d muestras de hablante activo para %s",
-                     len(timeline), media["filename"])
+            diarization = diarize(media_path, media["mime_type"])
+            log.info("Diarización produjo %d segmentos para %s", len(diarization), media["filename"])
         except Exception as exc:
-            log.warning("Identificación visual falló para %s: %s", media["filename"], exc)
+            log.warning("Diarización falló para %s: %s", media["filename"], exc)
 
-    # 4. Nombre por label (votación visual) y unión con los segmentos
-    label_names = _resolve_label_names(diarization, timeline)
+        # Identificación visual del HABLANTE ACTIVO (Teams: nombre resaltado)
+        if media["media_type"] == "video":
+            try:
+                timeline = extract_active_speaker_timeline(media_path, media["mime_type"])
+                log.info("Identificación visual produjo %d muestras de hablante activo para %s",
+                         len(timeline), media["filename"])
+            except Exception as exc:
+                log.warning("Identificación visual falló para %s: %s", media["filename"], exc)
+
+        label_names = _resolve_label_names(diarization, timeline)
+
     joined = _assign_speakers_to_segments(asr_segments, diarization, label_names)
 
     # 4b. Auto-presentaciones ("quien les habla, X") tienen prioridad: cubren a los
     # hablantes SIN video (p. ej. el juez con la cámara apagada), que no aparecen
     # resaltados en Teams y por tanto la identificación visual no puede resolver.
-    intro_names = _extract_self_intro_names(joined)
-    if intro_names:
-        label_names.update(intro_names)
-        for seg in joined:
-            seg["visual_name"] = label_names.get(seg["speaker_label"])
-    log.info("Nombres resueltos: %s (auto-presentados: %s)", label_names, intro_names)
+    if do_diarization:
+        intro_names = _extract_self_intro_names(joined)
+        if intro_names:
+            label_names.update(intro_names)
+            for seg in joined:
+                seg["visual_name"] = label_names.get(seg["speaker_label"])
+        log.info("Nombres resueltos: %s (auto-presentados: %s)", label_names, intro_names)
 
     # 5. Guardar speakers y segmentos
     needs_review_count = 0
@@ -254,6 +328,14 @@ def process_media(
         RETURNING id
     """, s=status, m=media_id, d=max(seg["end_ms"] for seg in joined) if joined else 0)
 
+    if do_diarization:
+        _clear_progress(org_id, user_id, media_id)
+    else:
+        # Etapa 2 pendiente: dejar el progreso en 60 % (no limpiar) para que el monitor
+        # NO muestre 100 % hasta que la diarización termine.
+        base_cb(0.60, "Transcripción lista; diarizando hablantes…")
+    if tmpdir:
+        shutil.rmtree(tmpdir, ignore_errors=True)
     return {
         "segments": len(joined),
         "speakers": len({seg["speaker_label"] for seg in joined}),
@@ -261,5 +343,138 @@ def process_media(
         "label_names": label_names,
         "needs_review_count": needs_review_count,
         "duration_ms": max(seg["end_ms"] for seg in joined) if joined else 0,
+        "status": status,
+        "needs_diarization": not do_diarization,
+    }
+
+
+def apply_diarization(
+    conn: Connection,
+    media_id: str,
+    org_id: str,
+    case_id: str,
+    user_id: str,
+) -> dict[str, Any]:
+    """Etapa 2 del pipeline de medios: diarización + identificación visual.
+
+    Toma los `transcript_segments` ya creados por el ASR y les asigna el hablante
+    correcto (creando/actualizando `speakers`). Corre en su PROPIO job/proceso,
+    sin Whisper cargado, para no agotar la RAM (OOM/SIGKILL).
+    """
+    s = get_settings()
+    media = one(conn, """
+        UPDATE media
+        SET processing_status = 'ASR_RUNNING'
+        WHERE id = :m AND case_id = :c AND processing_status = ANY(:allowed)
+        RETURNING id, storage_uri, filename, mime_type, media_type, sha256
+    """, m=media_id, c=case_id, allowed=["ASR_COMPLETE", "REVIEW_REQUIRED", "ASR_PENDING", "UPLOADED"])
+    if media is None:
+        existing = one(conn, "SELECT processing_status FROM media WHERE id = :m AND case_id = :c",
+                       m=media_id, c=case_id)
+        if existing is None:
+            raise ValueError(f"media {media_id} not found")
+        log.info("media %s no está listo para diarizar (status=%s); skipping", media_id, existing["processing_status"])
+        _clear_progress(org_id, user_id, media_id)
+        return {"segments": 0, "skipped": True, "reason": str(existing["processing_status"])}
+
+    segs = rows(conn, """
+        SELECT id, start_ms, end_ms, text, confidence
+        FROM transcript_segments WHERE media_id = :m ORDER BY start_ms
+    """, m=media_id)
+    if not segs:
+        log.info("media %s sin segmentos ASR; se omite la diarización", media_id)
+        one(conn, "UPDATE media SET processing_status = 'ASR_COMPLETE' WHERE id = :m RETURNING id", m=media_id)
+        _clear_progress(org_id, user_id, media_id)
+        return {"segments": 0, "skipped": True, "reason": "no_segments"}
+
+    local = incoming_dir() / str(media["sha256"])
+    tmpdir: Path | None = None
+    used_local = local.exists()
+    try:
+        if used_local:
+            media_path = local
+        else:
+            key = key_from_uri(media["storage_uri"])
+            tmpdir = Path(tempfile.mkdtemp(prefix="media-"))
+            media_path = tmpdir / "media.bin"
+            storage().download_to(key, media_path)
+    except Exception as exc:
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        log.exception("no se pudo preparar media %s para diarización", media_id)
+        raise RuntimeError(f"storage error: {exc}") from exc
+
+    progress = _progress_writer(org_id, user_id, media_id)
+    try:
+        progress(0.60, "Diarizando hablantes…")
+
+        def _diar_progress(step_name: str, completed: Any, total: Any) -> None:
+            if not total:
+                return
+            frac = max(0.0, min(1.0, float(completed or 0) / float(total)))
+            # La diarización ocupa 60–95 % (es la etapa más lenta): así la barra se mueve.
+            progress(0.60 + 0.35 * frac, f"Diarizando hablantes… ({step_name} {int(frac * 100)}%)")
+
+        diarization: list[dict[str, Any]] = []
+        try:
+            diarization = diarize(media_path, media["mime_type"], progress_cb=_diar_progress)
+            log.info("Diarización produjo %d segmentos para %s", len(diarization), media["filename"])
+        except Exception as exc:
+            log.warning("Diarización falló para %s: %s", media["filename"], exc)
+        progress(0.95, "Diarización lista; identificando hablantes…")
+
+        timeline: list[dict[str, Any]] = []
+        if media["media_type"] == "video":
+            progress(0.97, "Identificando hablantes (video)…")
+            try:
+                timeline = extract_active_speaker_timeline(media_path, media["mime_type"])
+            except Exception as exc:
+                log.warning("Identificación visual falló para %s: %s", media["filename"], exc)
+
+        label_names = _resolve_label_names(diarization, timeline)
+
+        def _best_label(start_ms: int, end_ms: int) -> str:
+            best = None
+            best_overlap = 0
+            for d in diarization:
+                overlap = max(0, min(end_ms, d["end_ms"]) - max(start_ms, d["start_ms"]))
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best = d
+            return best["label"] if best else "UNKNOWN"
+
+        # Auto-presentaciones ("quien les habla, X") sobre el texto ya transcrito.
+        joined_pre = [{"start_ms": sg["start_ms"], "end_ms": sg["end_ms"], "text": sg["text"],
+                       "speaker_label": _best_label(sg["start_ms"], sg["end_ms"])} for sg in segs]
+        intro_names = _extract_self_intro_names(joined_pre)
+        if intro_names:
+            label_names.update(intro_names)
+        log.info("Diarización etapa 2: %d segmentos, nombres=%s", len(segs), label_names)
+
+        needs_review_count = 0
+        labels_seen: set[str] = set()
+        for sg, pre in zip(segs, joined_pre):
+            label = pre["speaker_label"]
+            labels_seen.add(label)
+            speaker_id = _get_or_create_speaker(conn, org_id, case_id, label, label_names.get(label))
+            one(conn, "UPDATE transcript_segments SET speaker_id = :spk WHERE id = :i RETURNING id",
+                spk=speaker_id, i=str(sg["id"]))
+            if (sg["confidence"] or 0.0) < s.ASR_CONFIDENCE_THRESHOLD:
+                needs_review_count += 1
+
+        status = "REVIEW_REQUIRED" if needs_review_count else "ASR_COMPLETE"
+        one(conn, "UPDATE media SET processing_status = :s WHERE id = :m RETURNING id", s=status, m=media_id)
+    finally:
+        _clear_progress(org_id, user_id, media_id)
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        # La copia local NO se borra aquí: el handler sube el original a GCS tras
+        # commitear los hablantes y entonces la libera (así la subida no retrasa nada).
+
+    return {
+        "segments": len(segs),
+        "speakers": len(labels_seen),
+        "named_speakers": len(label_names),
+        "label_names": label_names,
         "status": status,
     }

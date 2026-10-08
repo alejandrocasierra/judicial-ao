@@ -178,7 +178,7 @@ def process(case_id: UUID, body: ProcessIn, request: Request, p: Principal = Dep
     # El executor es idempotente; un fallo de broker no rompe la petición (dispatcher).
     for j in out:
         if not j["reused"] or j["status"] == "QUEUED":
-            enqueue_job(j["id"], p.org_id, p.user_id)
+            enqueue_job(j["id"], p.org_id, p.user_id, j.get("job_type"))
     return {"jobs": out}
 
 
@@ -239,14 +239,33 @@ def active_processing(p: Principal = Depends(current_principal)):
 
                 # Medias
                 medias = rows(c, """
-                    SELECT m.id, m.filename, m.processing_status
-                    FROM media m WHERE m.id = ANY(:ids)
+                    SELECT m.id, m.filename, m.processing_status,
+                           pr.pct AS live_pct, pr.detail AS live_detail
+                    FROM media m
+                    LEFT JOIN media_asr_progress pr ON pr.media_id = m.id
+                    WHERE m.id = ANY(:ids)
                 """, ids=input_ids)
                 for m in medias:
-                    progress = 100 if m["processing_status"] in ("ASR_COMPLETE", "REVIEW_REQUIRED") else 50
+                    progress = 0
+                    detail = None
+                    status = m["processing_status"]
+                    if m["processing_status"] == "FAILED":
+                        progress = 0
+                    elif m["live_pct"] is not None:
+                        # Progreso en vivo (tabla aparte; la tx del pipeline aún no commitea).
+                        # Va antes de "completado": durante la etapa 2 (diarización) el medio
+                        # sigue con processing_status ASR_COMPLETE, pero el job está corriendo;
+                        # mostrar el live_pct evita el falso "100%".
+                        progress = min(99, int(m["live_pct"]))
+                        detail = m["live_detail"]
+                        status = "ASR_RUNNING"
+                    elif m["processing_status"] in ("ASR_COMPLETE", "REVIEW_REQUIRED"):
+                        progress = 100
+                    else:
+                        progress = 2
                     items.append({
                         "id": str(m["id"]), "filename": m["filename"],
-                        "status": m["processing_status"], "progress": progress,
+                        "status": status, "progress": progress, "detail": detail,
                         "kind": "media",
                     })
 
@@ -316,9 +335,11 @@ def ocr_processing_status(case_id: UUID, p: Principal = Depends(current_principa
 
             # Medias del job (ASR).
             medias = rows(c, """
-                SELECT m.id, m.filename, m.processing_status, m.duration_ms,
+                SELECT m.id, m.filename, m.processing_status, m.duration_ms, m.folder_id,
+                       pr.pct AS live_pct,
                        (SELECT count(*) FROM transcript_segments s WHERE s.media_id = m.id) AS segments_done
                 FROM media m
+                LEFT JOIN media_asr_progress pr ON pr.media_id = m.id
                 WHERE m.id = ANY(:ids)
             """, ids=input_ids)
 
@@ -355,16 +376,23 @@ def ocr_processing_status(case_id: UUID, p: Principal = Depends(current_principa
             for m in medias:
                 folder_path = _folder_path(c, m["folder_id"]) if m["folder_id"] else "Raíz del proceso"
                 progress = 0
-                if m["processing_status"] in ("ASR_COMPLETE", "REVIEW_REQUIRED"):
+                status = m["processing_status"]
+                if m["processing_status"] == "FAILED":
+                    progress = 0
+                elif m["live_pct"] is not None:
+                    # Progreso en vivo primero (ver nota en active_processing).
+                    progress = min(99, int(m["live_pct"]))
+                    status = "ASR_RUNNING"
+                elif m["processing_status"] in ("ASR_COMPLETE", "REVIEW_REQUIRED"):
                     progress = 100
-                elif m["processing_status"] == "ASR_RUNNING":
-                    progress = 50  # ASR no tiene páginas; estimación simple.
+                else:
+                    progress = 2
                 items.append({
                     "id": str(m["id"]),
                     "kind": "media",
                     "filename": m["filename"],
                     "folder_path": folder_path,
-                    "status": m["processing_status"],
+                    "status": status,
                     "progress": progress,
                     "duration_ms": m["duration_ms"],
                     "segments_done": m["segments_done"],
@@ -891,6 +919,11 @@ def update_speaker(case_id: UUID, speaker_id: UUID, body: SpeakerPatch, request:
             sets.append("display_name = :n")
             params["n"] = (body.display_name or "").strip() or None
             after["display_name"] = params["n"]
+            # Una edición humana marca el nombre como CONFIRMADO: la re-diarización
+            # automática no lo pisará (ver _get_or_create_speaker).
+            if params["n"]:
+                sets.append("resolution_status = 'CONFIRMED'")
+                sets.append("resolution_source = 'human'")
         if "speaker_role" in body.model_fields_set:
             sets.append("speaker_role = :r")
             params["r"] = (body.speaker_role or "").strip() or None

@@ -39,13 +39,17 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
     media_ids = [str(r["id"]) for r in media_rows]
 
     processed: list[dict[str, Any]] = []
+    asr_ok_ids: list[str] = []
     errors = 0
     provider = get_settings().ASR_PROVIDER
     for media_id in media_ids:
         try:
             with metrics.track_stage("media_asr", org_id):
                 with tx(org_id, user_id) as conn:
-                    result = process_media(conn, media_id, org_id, case_id, user_id)
+                    # Solo ASR; la diarización/visión se encola aparte (media_diarize)
+                    # para no agotar la memoria con pyannote en el mismo proceso.
+                    result = process_media(conn, media_id, org_id, case_id, user_id, do_diarization=False)
+                    asr_ok_ids.append(media_id)
                     result["media_id"] = media_id
                     result["status"] = "ok"
                     processed.append(result)
@@ -63,6 +67,14 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
                     one(conn, "UPDATE media SET processing_status = 'FAILED' WHERE id = :m RETURNING id", m=media_id)
             except Exception:
                 log.exception("no se pudo marcar media %s como FAILED", media_id)
+
+    # Etapa 2: diarización + identificación visual en job/proceso aparte.
+    if asr_ok_ids:
+        try:
+            from app.workers.handlers.media_diarize import enqueue_media_diarization
+            enqueue_media_diarization(org_id, case_id, user_id, asr_ok_ids)
+        except Exception:  # noqa: BLE001
+            log.exception("no se pudo encolar la diarización (caso %s)", case_id)
 
     # Partes automáticas (hablantes ASR + encabezados OCR).
     if get_settings().AUTO_EXTRACT_PARTIES:

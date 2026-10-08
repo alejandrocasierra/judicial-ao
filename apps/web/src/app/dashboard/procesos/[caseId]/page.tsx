@@ -4,10 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { enqueueUploads } from "@/lib/uploader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -82,7 +82,6 @@ export default function ProcesoDetallePage() {
   const [viewerMedia, setViewerMedia] = useState<FileItem | null>(null);
   const [ocrDialog, setOcrDialog] = useState<{ files: File[] | null; mode: string }>({ files: null, mode: "none" });
   const [deleteTarget, setDeleteTarget] = useState<{ kind: "document" | "media" | "file" | "folder"; id: string; filename: string } | null>(null);
-  const [deleteReason, setDeleteReason] = useState("");
   const [renamingFile, setRenamingFile] = useState<{ id: string; filename: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -202,72 +201,7 @@ export default function ProcesoDetallePage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error"),
   });
 
-  async function sha256Hex(file: File): Promise<string> {
-    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
-
-  /** Sube un archivo grande directo al storage (GCS/S3) y lo registra. null si storage local. */
-  async function uploadDirect(file: File, ocrMode: string, folderId: string | null): Promise<UploadResult | null> {
-    const sha256 = await sha256Hex(file);
-    const contentType = file.type || "application/octet-stream";
-    const pre = await api.post<{ mode: string; upload_url?: string }>(`/cases/${caseId}/uploads/presign`,
-      { filename: file.name, sha256, size_bytes: file.size, content_type: contentType });
-    if (pre.mode !== "direct" || !pre.upload_url) return null;
-    const put = await fetch(pre.upload_url, { method: "PUT", headers: { "Content-Type": contentType }, body: file });
-    if (!put.ok) throw new Error(`No se pudo subir ${file.name} al storage (${put.status})`);
-    return api.post<UploadResult>(`/cases/${caseId}/uploads/complete`, {
-      filename: file.name, sha256, size_bytes: file.size, mime_type: contentType,
-      folder_id: folderId || null, ocr_mode: ocrMode && ocrMode !== "none" ? ocrMode : null,
-    });
-  }
-
-  const upload = useMutation({
-    mutationFn: async ({ files, ocrMode }: { files: File[]; ocrMode: string }) => {
-      // Archivos > 90 MB: subida DIRECTA al storage por URL prefirmada (evita el límite
-      // de 100 MB de Cloudflare). Si el storage es local, cae a la subida normal.
-      const direct: File[] = [];
-      const normal: File[] = [];
-      for (const f of files) (f.size > 90 * 1024 * 1024 ? direct : normal).push(f);
-      const results: UploadResult[] = [];
-      for (const f of direct) {
-        try {
-          const r = await uploadDirect(f, ocrMode, currentFolder);
-          if (r) results.push(r); else normal.push(f);  // storage local -> multipart
-        } catch {
-          // La subida directa puede fallar por CORS del bucket; reintentamos por la API.
-          normal.push(f);
-        }
-      }
-      if (normal.length) {
-        const form = new FormData();
-        for (const f of normal) form.append("uploads", f);
-        if (currentFolder) form.append("folder_id", currentFolder);
-        if (ocrMode && ocrMode !== "none") form.append("ocr_mode", ocrMode);
-        const res = await api.upload<{ results: UploadResult[] }>(`/cases/${caseId}/files`, form);
-        results.push(...res.results);
-      }
-      return { results };
-    },
-    onSuccess: (r) => {
-      invalidate();
-      const ok = r.results.filter((x) => x.status === "uploaded").length;
-      const queued = r.results.filter((x) => x.processing === "QUEUED").length;
-      const noOcr = r.results.filter((x) => x.status === "uploaded" && !x.processing).length;
-      const failed = r.results.filter((x) => x.status === "error");
-      if (ok) toast.success(`${ok} archivo(s) subido(s)`);
-      if (queued) toast.info(`${queued} archivo(s) en procesamiento: OCR (PDF), transcripción (video) y análisis de índice (Excel). El estado se actualiza solo.`);
-      if (noOcr) toast.info(`${noOcr} archivo(s) subidos sin OCR. Usa "Reprocesar" cuando quieras extraer texto.`);
-      for (const f of failed) toast.error(`${f.filename}: ${f.code ?? "error"}`);
-      // Los análisis de índice (AnalisisIA_*.md) aparecen al terminar el job: refresco diferido.
-      if (queued) {
-        setTimeout(invalidate, 15000);
-        setTimeout(invalidate, 45000);
-      }
-      setOcrDialog({ files: null, mode: "none" });
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Error al subir"),
-  });
+  // La subida (directa con progreso + fallback) vive en el gestor global `lib/uploader.ts`.
 
   function handleFileSelect(files: FileList) {
     // Copiamos a un array ANTES de resetear el input: el FileList se vacía al
@@ -281,13 +215,14 @@ export default function ProcesoDetallePage() {
       // Si hay videos, por defecto se transcriben (ASR); si no, se pregunta.
       setOcrDialog({ files: picked, mode: hasVideo ? "basico" : "none" });
     } else {
-      upload.mutate({ files: picked, ocrMode: "none" });
+      enqueueUploads(caseId, picked, "none", currentFolder);
     }
   }
 
   function confirmUpload(mode: string) {
     if (ocrDialog.files) {
-      upload.mutate({ files: ocrDialog.files, ocrMode: mode });
+      enqueueUploads(caseId, ocrDialog.files, mode, currentFolder);
+      setOcrDialog({ files: null, mode: "none" });
     }
   }
 
@@ -304,22 +239,18 @@ export default function ProcesoDetallePage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Error"),
   });
 
-  // PDFs: la evidencia no se borra directamente; se registra una solicitud de
-  // eliminación (bloqueada si el caso tiene medida de conservación / legal hold).
-  const requestDocDeletion = useMutation({
-    mutationFn: (args: { id: string; reason: string }) =>
-      api.post(`/cases/${caseId}/documents/${args.id}/deletion-request`, { reason: args.reason }),
-    onSuccess: () => { invalidate(); toast.success("Solicitud de eliminación registrada"); },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo solicitar la eliminación"),
+  // PDFs y videos/audios: se eliminan INMEDIATAMENTE (BD + pgvector + grafo + storage).
+  // Bloqueado solo si el proceso tiene medida de conservación (legal hold).
+  const deleteDoc = useMutation({
+    mutationFn: (id: string) => api.delete(`/cases/${caseId}/documents/${id}`),
+    onSuccess: () => { invalidate(); toast.success("Documento eliminado"); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo eliminar"),
   });
 
-  // Videos/audios: igual que los PDFs, la evidencia no se borra directo; se registra
-  // una solicitud (bloqueada si el caso tiene medida de conservación / legal hold).
-  const requestMediaDeletion = useMutation({
-    mutationFn: (args: { id: string; reason: string }) =>
-      api.post(`/cases/${caseId}/media/${args.id}/deletion-request`, { reason: args.reason }),
-    onSuccess: () => { invalidate(); toast.success("Solicitud de eliminación registrada"); },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo solicitar la eliminación"),
+  const deleteMedia = useMutation({
+    mutationFn: (id: string) => api.delete(`/cases/${caseId}/media/${id}`),
+    onSuccess: () => { invalidate(); toast.success("Video/audio eliminado"); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo eliminar"),
   });
 
   async function download(item: FileItem) {
@@ -386,8 +317,8 @@ export default function ProcesoDetallePage() {
           <Button variant="outline" onClick={() => { setSelectedFolder(null); setFolderName(""); setFolderDialog("create"); }}>
             <FolderPlus className="mr-2 h-4 w-4" />Nueva carpeta
           </Button>
-          <Button onClick={() => fileInput.current?.click()} disabled={upload.isPending}>
-            <Upload className="mr-2 h-4 w-4" />{upload.isPending ? "Subiendo…" : "Subir archivos"}
+          <Button onClick={() => fileInput.current?.click()}>
+            <Upload className="mr-2 h-4 w-4" />Subir archivos
           </Button>
         </div>
       </div>
@@ -564,8 +495,8 @@ export default function ProcesoDetallePage() {
                             onClick={() => setViewerDoc(it)}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" title="Solicitar eliminación"
-                            onClick={() => { setDeleteReason(""); setDeleteTarget({ kind: "document", id: it.id, filename: it.filename }); }}>
+                          <Button variant="ghost" size="icon" title="Eliminar documento"
+                            onClick={() => setDeleteTarget({ kind: "document", id: it.id, filename: it.filename })}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </>
@@ -576,8 +507,8 @@ export default function ProcesoDetallePage() {
                             onClick={() => setViewerMedia(it)}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" title="Solicitar eliminación"
-                            onClick={() => { setDeleteReason(""); setDeleteTarget({ kind: "media", id: it.id, filename: it.filename }); }}>
+                          <Button variant="ghost" size="icon" title="Eliminar video/audio"
+                            onClick={() => setDeleteTarget({ kind: "media", id: it.id, filename: it.filename })}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </>
@@ -614,13 +545,14 @@ export default function ProcesoDetallePage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteTarget !== null} onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteReason(""); } }}>
+      <Dialog open={deleteTarget !== null} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {deleteTarget?.kind === "folder" ? "Eliminar carpeta"
                 : deleteTarget?.kind === "file" ? "Eliminar archivo"
-                : "Solicitar eliminación"}
+                : deleteTarget?.kind === "document" ? "Eliminar documento"
+                : "Eliminar video/audio"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -635,22 +567,17 @@ export default function ProcesoDetallePage() {
                 Esta acción no se puede deshacer.
               </p>
             ) : (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Vas a registrar una solicitud de eliminación de{" "}
-                  <b className="break-all text-foreground">{deleteTarget?.filename}</b>.
-                  La evidencia no se borra directamente: queda marcada para eliminación y se bloquea si
-                  el proceso tiene una medida de conservación.
-                </p>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Motivo</label>
-                  <Textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} rows={3}
-                    placeholder="Explica por qué se debe eliminar este archivo" />
-                </div>
-              </>
+              <p className="text-sm text-muted-foreground">
+                ¿Eliminar definitivamente <b className="break-all text-foreground">{deleteTarget?.filename}</b>?
+                Se borrarán también {deleteTarget?.kind === "document"
+                  ? "su texto OCR y sus páginas"
+                  : "su transcripción, hablantes y segmentos"}, los fragmentos de búsqueda (embeddings)
+                y su relación en el grafo, y el original se elimina del almacenamiento.{" "}
+                <b className="text-foreground">Esta acción no se puede deshacer.</b>
+              </p>
             )}
             <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteReason(""); }}>
+              <Button variant="outline" onClick={() => setDeleteTarget(null)}>
                 Cancelar
               </Button>
               {deleteTarget?.kind === "folder" ? (
@@ -663,18 +590,15 @@ export default function ProcesoDetallePage() {
                   onClick={() => { if (deleteTarget) deleteFile.mutate(deleteTarget.id); setDeleteTarget(null); }}>
                   {deleteFile.isPending ? "Eliminando…" : "Eliminar archivo"}
                 </Button>
+              ) : deleteTarget?.kind === "document" ? (
+                <Button variant="destructive" disabled={deleteDoc.isPending}
+                  onClick={() => { if (deleteTarget) deleteDoc.mutate(deleteTarget.id); setDeleteTarget(null); }}>
+                  {deleteDoc.isPending ? "Eliminando…" : "Eliminar documento"}
+                </Button>
               ) : (
-                <Button variant="destructive"
-                  disabled={!deleteReason.trim() || requestDocDeletion.isPending || requestMediaDeletion.isPending}
-                  onClick={() => {
-                    const reason = deleteReason.trim();
-                    if (!deleteTarget || !reason) return;
-                    if (deleteTarget.kind === "document") requestDocDeletion.mutate({ id: deleteTarget.id, reason });
-                    else requestMediaDeletion.mutate({ id: deleteTarget.id, reason });
-                    setDeleteTarget(null);
-                    setDeleteReason("");
-                  }}>
-                  {requestDocDeletion.isPending || requestMediaDeletion.isPending ? "Enviando…" : "Solicitar eliminación"}
+                <Button variant="destructive" disabled={deleteMedia.isPending}
+                  onClick={() => { if (deleteTarget) deleteMedia.mutate(deleteTarget.id); setDeleteTarget(null); }}>
+                  {deleteMedia.isPending ? "Eliminando…" : "Eliminar video/audio"}
                 </Button>
               )}
             </div>
@@ -791,8 +715,8 @@ export default function ProcesoDetallePage() {
               <Button variant="outline" onClick={() => setOcrDialog({ files: null, mode: "none" })}>
                 Cancelar
               </Button>
-              <Button onClick={() => confirmUpload(ocrDialog.mode)} disabled={upload.isPending}>
-                {upload.isPending ? "Subiendo…" : "Subir archivos"}
+              <Button onClick={() => confirmUpload(ocrDialog.mode)}>
+                Subir archivos
               </Button>
             </div>
           </div>
@@ -810,6 +734,7 @@ export default function ProcesoDetallePage() {
         caseId={caseId}
         mediaId={viewerMedia?.id ?? null}
         filename={viewerMedia?.title || viewerMedia?.filename}
+        processingStatus={viewerMedia?.processing_status ?? null}
         onClose={() => setViewerMedia(null)}
       />
     </div>

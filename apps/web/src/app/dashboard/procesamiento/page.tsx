@@ -11,11 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import {
   Loader2, CheckCircle2, XCircle, Clock, AlertTriangle, Ban,
   FileText, Folder, Video, ChevronDown, ChevronUp, ExternalLink,
-  Activity,
+  Activity, Upload,
 } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useUploadStore } from "@/lib/upload-store";
 
 interface ProcessingItem {
   id: string;
@@ -24,6 +25,7 @@ interface ProcessingItem {
   folder_path?: string;
   status: string;
   progress: number;
+  detail?: string | null;
   page_count?: number;
   pages_done?: number;
   human_corrected_pages?: number;
@@ -141,6 +143,7 @@ export default function ProcesamientoPage() {
 
   const jobs = data?.jobs ?? [];
   const activeJobs = jobs.filter((j) => ["QUEUED", "RUNNING", "RETRYING"].includes(j.status));
+  const uploads = useUploadStore((s) => s.tasks);
 
   return (
     <div className="space-y-6">
@@ -161,6 +164,35 @@ export default function ProcesamientoPage() {
           </Badge>
         )}
       </div>
+
+      {uploads.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Upload className="h-5 w-5" /> Subidas en curso ({uploads.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {uploads.map((u) => (
+              <div key={u.id} className="space-y-1">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate">{u.filename}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {u.stage === "uploading" ? `${u.pct}%`
+                      : u.stage === "processing" ? (u.detail || "Procesando…")
+                      : u.stage === "done" ? "Listo"
+                      : (u.detail || "Error")}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
+                  <div className={`h-full transition-all ${u.stage === "error" ? "bg-destructive" : "bg-primary"}`}
+                    style={{ width: `${u.stage === "error" ? 100 : u.pct}%` }} />
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-3">
@@ -246,13 +278,20 @@ function JobCard({
         <div className="flex shrink-0 items-center gap-2">
           {isActive && (
             <div className="w-24">
-              <div className="h-2 w-full rounded-full bg-muted">
-                <div
-                  className="h-2 rounded-full bg-primary transition-all"
-                  style={{ width: `${job.progress}%` }}
-                />
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                {job.items.length === 0 ? (
+                  // Jobs sin ítems (p. ej. graph_build): progreso indeterminado.
+                  <div className="h-2 w-1/3 animate-pulse rounded-full bg-primary" />
+                ) : (
+                  <div
+                    className="h-2 rounded-full bg-primary transition-all"
+                    style={{ width: `${job.progress}%` }}
+                  />
+                )}
               </div>
-              <p className="mt-0.5 text-center text-xs text-muted-foreground">{job.progress}%</p>
+              <p className="mt-0.5 text-center text-xs text-muted-foreground">
+                {job.items.length === 0 ? "En curso…" : `${job.progress}%`}
+              </p>
             </div>
           )}
 
@@ -317,6 +356,9 @@ function JobCard({
                     <div className="flex items-center gap-1.5">
                       {statusIcon(item.status, "h-3.5 w-3.5")}
                       <span className="text-xs">{statusLabel(item.status)}</span>
+                      {item.detail ? (
+                        <span className="text-xs text-muted-foreground">· {item.detail}</span>
+                      ) : null}
                       {item.human_corrected_pages ? (
                         <Badge variant="secondary" className="text-[10px]">
                           {item.human_corrected_pages} corregida(s)

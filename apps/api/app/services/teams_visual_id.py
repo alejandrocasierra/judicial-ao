@@ -123,15 +123,22 @@ def detect_active_speaker_name(image: Image.Image) -> str | None:
 
 
 def extract_active_speaker_timeline(
-    media_bytes: bytes,
+    media: bytes | Path,
     mime_type: str,
     step_s: float = _DEFAULT_STEP_S,
     progress_cb: Any | None = None,
 ) -> list[dict[str, Any]]:
-    """Línea de tiempo [{timestamp_ms, name}] del nombre resaltado en cada frame."""
-    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as src:
-        src.write(media_bytes)
-        src_path = Path(src.name)
+    """Línea de tiempo [{timestamp_ms, name}] del nombre resaltado en cada frame.
+
+    Acepta los bytes del video **o una ruta** a un archivo ya descargado."""
+    cleanup_src: Path | None = None
+    if isinstance(media, (bytes, bytearray)):
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as src:
+            src.write(media)
+            src_path = Path(src.name)
+        cleanup_src = src_path
+    else:
+        src_path = Path(media)
 
     try:
         duration_s = _get_duration(src_path)
@@ -158,7 +165,8 @@ def extract_active_speaker_timeline(
                     log.debug("progress_cb falló en frame %s: %s", i + 1, exc)
         return results
     finally:
-        src_path.unlink(missing_ok=True)
+        if cleanup_src:
+            cleanup_src.unlink(missing_ok=True)
 
 
 # Compatibilidad: la versión anterior devolvía todos los nombres de la franja

@@ -14,8 +14,8 @@ from app.core.db import one, rows, tx
 from app.core.errors import AppError
 from app.schemas import DeletionRequestIn, DocumentPagePatch, TranscriptSegmentPatch
 from app.security.deps import Principal, case_access, current_principal, download_principal, require_org
-from app.services import audit, files, indexing, markdown, ocr_confidence, ocr_lexicon, ratelimit
-from app.services.storage import key_from_uri, original_key, storage
+from app.services import audit, file_delete, files, indexing, markdown, ocr_confidence, ocr_lexicon, ratelimit
+from app.services.storage import incoming_dir, key_from_uri, original_key, storage
 from app.workers.dispatcher import create_job, enqueue_if_pending
 from app.workers.handlers.file_ingest import enqueue_graph_refresh
 
@@ -70,6 +70,12 @@ async def _ingest(kind: str, case_id: UUID, file: UploadFile, request: Request, 
         if dup:
             raise AppError("DOCUMENT_DUPLICATE", 409, {"existing_id": str(dup["id"])})
         uri = storage().put(original_key(str(case_id), sha, kind), data)
+        # Copia local compartida (api<->worker): el worker hace OCR/ASR sin re-descargar
+        # de GCS y la borra al terminar (disco limitado).
+        try:
+            (incoming_dir() / sha).write_bytes(data)
+        except Exception:  # noqa: BLE001
+            log.debug("no se pudo dejar copia local de %s", filename, exc_info=True)
         if kind == "document":
             row = one(c, """INSERT INTO documents (organization_id, case_id, storage_uri, sha256, size_bytes, mime_type, filename, uploaded_by)
                 VALUES (:o,:c,:u,:h,:sz,:m,:f,:by) RETURNING id, sha256, size_bytes, mime_type, filename, processing_status, created_at""",
@@ -564,10 +570,43 @@ def download(case_id: UUID, document_id: UUID, request: Request, p: Principal = 
 
 
 @router.delete("/documents/{document_id}")
-def delete_document(case_id: UUID, document_id: UUID, p: Principal = Depends(current_principal)):
-    """SSD §128: la evidencia nunca se borra desde la API estándar."""
-    case_access(p, case_id, "document.read")
-    raise AppError("DOCUMENT_IMMUTABLE", 405)
+def delete_document(case_id: UUID, document_id: UUID, request: Request,
+                    p: Principal = Depends(require_org("evidence.deletion_request"))):
+    """Elimina el documento INMEDIATAMENTE: BD + pgvector + grafo + storage.
+
+    Respeta el legal hold (409 si el proceso tiene medida de conservación)."""
+    case = case_access(p, case_id, "case.read")
+    if case["legal_hold"]:
+        raise AppError("LEGAL_HOLD_ACTIVE", 409, {"detail": "El proceso tiene medida de conservación (legal hold)."})
+    with tx(p.org_id, p.user_id) as c:
+        try:
+            info = file_delete.delete_document(c, p.org_id, str(case_id), str(document_id))
+        except ValueError:
+            raise AppError("DOCUMENT_NOT_FOUND", 404)
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="document.deleted", entity_type="document",
+                     entity_id=str(document_id), request=request)
+    file_delete.delete_storage(info)
+    enqueue_graph_refresh(p.org_id, str(case_id), p.user_id, correction=True)  # grafo al día
+    return {"document_id": str(document_id), "status": "deleted"}
+
+
+@router.delete("/media/{media_id}")
+def delete_media(case_id: UUID, media_id: UUID, request: Request,
+                 p: Principal = Depends(require_org("evidence.deletion_request"))):
+    """Elimina un video/audio INMEDIATAMENTE: segmentos + chunks + citas + storage + grafo."""
+    case = case_access(p, case_id, "case.read")
+    if case["legal_hold"]:
+        raise AppError("LEGAL_HOLD_ACTIVE", 409, {"detail": "El proceso tiene medida de conservación (legal hold)."})
+    with tx(p.org_id, p.user_id) as c:
+        try:
+            info = file_delete.delete_media(c, p.org_id, str(case_id), str(media_id))
+        except ValueError:
+            raise AppError("MEDIA_NOT_FOUND", 404)
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="media.deleted", entity_type="media",
+                     entity_id=str(media_id), request=request)
+    file_delete.delete_storage(info)
+    enqueue_graph_refresh(p.org_id, str(case_id), p.user_id, correction=True)  # grafo al día
+    return {"media_id": str(media_id), "status": "deleted"}
 
 
 @router.post("/documents/{document_id}/deletion-request", status_code=202)

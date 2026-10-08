@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from app.workers.handlers import document_classification, document_ocr, embedding, file_ingest, graph_build, indexing, legal_extraction, media_asr, procedural_links, xlsx_ingest
+from app.workers.handlers import document_classification, document_ocr, embedding, file_ingest, graph_build, indexing, legal_extraction, media_asr, media_diarize, procedural_links, xlsx_ingest
 
 # Un handler recibe el job (dict de la fila `jobs`) y devuelve el resultado
 # que el executor persiste.
@@ -49,6 +49,7 @@ HANDLERS: dict[str, Handler] = {
     "document_ocr": document_ocr.handle,
     "document_classification": document_classification.handle,
     "media_asr": media_asr.handle,
+    "media_diarize": media_diarize.handle,
     "legal_extraction": legal_extraction.handle,
     "embedding": embedding.handle,
     "indexing": indexing.handle,

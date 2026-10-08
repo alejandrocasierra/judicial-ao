@@ -23,6 +23,7 @@ from app.core.db import one, rows, tx
 from app.services import indexing, metrics
 from app.services.document_pipeline import process_document
 from app.services.media_pipeline import process_media
+from app.services.storage import incoming_dir, key_from_uri, storage
 from app.workers.dispatcher import create_job, enqueue_if_pending
 
 log = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
             c=case_id, ids=[UUID(i) for i in input_ids])}
 
     results: list[dict[str, Any]] = []
+    media_ok_ids: list[str] = []
     errors = 0
     for source_id in input_ids:
         kind = "document" if source_id in doc_ids else "media" if source_id in media_ids else None
@@ -101,33 +103,63 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
             results.append({"id": source_id, "status": "error", "error": "source_not_found"})
             errors += 1
             continue
+        table = "documents" if kind == "document" else "media"
+        mode_col = "ocr_mode" if kind == "document" else "asr_mode"
+        mrow: dict | None = None
+        do_process = False
         try:
+            with tx(org_id, actor_id) as conn:
+                mrow = one(conn, f"SELECT {mode_col} AS mode, sha256, storage_uri FROM {table} WHERE id = :i",
+                           i=source_id)
+            do_process = bool(mrow and mrow.get("mode"))
             with metrics.track_stage(f"file_ingest_{kind}", org_id):
-                # 1. OCR / ASR (cada uno en su propia transacción, como los handlers base)
-                with tx(org_id, actor_id) as conn:
-                    if kind == "document":
-                        pipeline_result = process_document(conn, source_id, org_id, case_id, actor_id)
-                    else:
-                        pipeline_result = process_media(conn, source_id, org_id, case_id, actor_id)
-                # 2. pgvector: chunks + embeddings (reindexación idempotente)
-                with tx(org_id, actor_id) as conn:
-                    if kind == "document":
-                        index_result = indexing.index_document(conn, org_id, case_id, source_id, actor_id)
-                    else:
-                        index_result = indexing.index_media(conn, org_id, case_id, source_id, actor_id)
-            results.append({"id": source_id, "kind": kind, "status": "ok",
+                if do_process:
+                    with tx(org_id, actor_id) as conn:
+                        if kind == "document":
+                            pipeline_result = process_document(conn, source_id, org_id, case_id, actor_id)
+                        else:
+                            # Solo ASR aquí; la diarización/visión va en un job aparte
+                            # (media_diarize) para no sumar su pico de memoria al de Whisper.
+                            pipeline_result = process_media(conn, source_id, org_id, case_id, actor_id,
+                                                            do_diarization=False)
+                    with tx(org_id, actor_id) as conn:
+                        if kind == "document":
+                            index_result = indexing.index_document(conn, org_id, case_id, source_id, actor_id)
+                        else:
+                            index_result = indexing.index_media(conn, org_id, case_id, source_id, actor_id)
+                else:
+                    pipeline_result = {"skipped": True, "reason": "sin_procesar"}
+                    index_result = {"chunks": 0}
+            results.append({"id": source_id, "kind": kind, "status": "ok", "processed": do_process,
                             "pipeline": pipeline_result, "chunks": index_result.get("chunks", 0)})
+            if kind == "media" and do_process:
+                media_ok_ids.append(source_id)
         except Exception as exc:  # noqa: BLE001
             log.exception("file_ingest falló para %s (%s)", source_id, kind)
             errors += 1
             results.append({"id": source_id, "kind": kind, "status": "error", "error": str(exc)})
             try:
                 with tx(org_id, actor_id) as conn:
-                    table = "documents" if kind == "document" else "media"
                     one(conn, f"UPDATE {table} SET processing_status = 'FAILED' WHERE id = :i RETURNING id",
                         i=source_id)
             except Exception:
                 log.exception("no se pudo marcar %s como FAILED", source_id)
+        finally:
+            # Documentos y medios NO procesados: sube el original a GCS y borra la copia
+            # local. Los medios SÍ procesados suben su original en la etapa 2 (diarización),
+            # DESPUÉS de asignar hablantes: así la subida (lenta con internet lento) no
+            # retrasa la diarización y la copia local se reutiliza sin re-descargar.
+            if not (kind == "media" and do_process):
+                _store_original(org_id, actor_id, source_id, mrow)
+
+    # 2b. Etapa 2 de los medios (diarización + identificación visual) en job/proceso
+    #     aparte: así no se suma su pico de memoria (~2-3 GB) al de Whisper.
+    if media_ok_ids:
+        try:
+            from app.workers.handlers.media_diarize import enqueue_media_diarization
+            enqueue_media_diarization(org_id, case_id, actor_id, media_ok_ids)
+        except Exception:  # noqa: BLE001
+            log.exception("no se pudo encolar la diarización (caso %s)", case_id)
 
     # 3. Extracción legal (entidades/claims/facts) de lo ingerido. Su handler
     #    encadena el graph_build del caso al terminar, de modo que pgvector (ya
@@ -150,3 +182,25 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
             log.exception("extracción automática de partes falló (caso %s)", case_id)
 
     return {"processed": len(results), "errors": errors, "files": results}
+
+
+def _store_original(org_id: str, actor_id: str, source_id: str, mrow: dict | None,
+                    keep_local: bool = False) -> None:
+    """Sube el original a storage (GCS/S3) desde la copia local.
+
+    La subida servidor->GCS puede ser lenta; se hace AQUÍ (en el worker, tras el OCR/ASR)
+    para no bloquear la respuesta de la subida. Clave con internet lento.
+    `keep_local=True` (medios procesados) conserva la copia local para la etapa de
+    diarización, que la borra al terminar."""
+    try:
+        sha = mrow.get("sha256") if mrow else None
+        uri = mrow.get("storage_uri") if mrow else None
+        if not sha or not uri:
+            return
+        local = incoming_dir() / str(sha)
+        if local.exists():
+            storage().put_file(key_from_uri(str(uri)), local)
+            if not keep_local:
+                local.unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001
+        log.exception("no se pudo almacenar el original de %s", source_id)

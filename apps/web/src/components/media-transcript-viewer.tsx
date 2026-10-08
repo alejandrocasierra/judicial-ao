@@ -40,6 +40,7 @@ export function MediaTranscriptViewer({
   mediaId,
   filename,
   initialMs,
+  processingStatus,
   onClose,
 }: {
   caseId: string;
@@ -47,6 +48,8 @@ export function MediaTranscriptViewer({
   filename?: string | null;
   /** Milisegundo inicial al abrir (p. ej. una cita del chat: "video 14:32"). */
   initialMs?: number | null;
+  /** Estado de procesamiento del media (para mostrar "transcribiendo…"). */
+  processingStatus?: string | null;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
@@ -222,7 +225,15 @@ export function MediaTranscriptViewer({
                   ) : (<p className="text-sm">{s.text}</p>)}
                 </div>
               );
-            }) : <p className="text-sm text-muted-foreground">Sin segmentos de transcripción.</p>}
+            }) : (
+              <p className="text-sm text-muted-foreground">
+                {processingStatus && ["UPLOADED", "QUEUED", "OCR_RUNNING", "ASR_RUNNING"].includes(processingStatus)
+                  ? "Transcribiendo (ASR) en curso… la transcripción aparecerá aquí al terminar."
+                  : processingStatus === "FAILED"
+                    ? "La transcripción falló. Usa «Reprocesar»."
+                    : "Sin segmentos de transcripción."}
+              </p>
+            )}
             </div>
           </div>
         </div>

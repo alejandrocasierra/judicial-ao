@@ -198,7 +198,8 @@ def rename_speaker(conn: Connection, case_id: str, ctx: ToolContext, speaker_id:
     identity_error = _need_identity(ctx)
     if identity_error:
         return identity_error
-    one(conn, "UPDATE speakers SET display_name = :n, version = version + 1 WHERE id = :s RETURNING id",
+    one(conn, "UPDATE speakers SET display_name = :n, resolution_status = 'CONFIRMED', "
+              "resolution_source = 'human', version = version + 1 WHERE id = :s RETURNING id",
         n=new_name.strip(), s=sid)
     one(conn, """INSERT INTO reviews (organization_id, case_id, entity_type, entity_id, action,
                  reviewer_id, reason, original_output, human_output)

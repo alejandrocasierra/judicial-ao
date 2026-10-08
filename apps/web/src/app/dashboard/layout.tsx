@@ -7,10 +7,9 @@ import { useAuth } from "@/lib/auth";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Header } from "@/components/header";
 import { ChatWidget } from "@/components/chat-widget";
-import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/query-client";
 import { Toaster } from "sonner";
-
-const queryClient = new QueryClient();
 
 export default function DashboardLayout({
   children,

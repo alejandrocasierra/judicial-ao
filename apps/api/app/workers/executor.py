@@ -143,20 +143,16 @@ def _fail(job: dict[str, Any], target: str, error_code: str, actor_id: str) -> N
                                 "policy": states.retry_policy(error_code)})
 
 
-@celery_app.task(bind=True, name="jobs.run", max_retries=MAX_RETRIES,
-                 acks_late=True, time_limit=get_settings().JOB_TIME_LIMIT_SECONDS)
-def run_job(self, job_id: str, org_id: str, actor_id: str) -> str:
-    """Ejecuta un job. Devuelve el estado final: SUCCEEDED | FAILED | SKIPPED.
-    `actor_id` es el usuario que pidió el procesamiento: toda fila de auditoría
-    lo lleva (la cadena de auditoría exige actor no nulo fuera de auth.*).
+def _execute(task, job_id: str, org_id: str, actor_id: str) -> str:
+    """Cuerpo común de las tareas `jobs.run` y `jobs.run_media` (misma lógica; sólo
+    cambia el `time_limit` de la tarea Celery). `task` es el `self` de la tarea (para
+    `retry`). Devuelve el estado final: SUCCEEDED | FAILED | SKIPPED.
 
-    acks_late=True: si el worker muere a mitad, el broker re-entrega el mensaje y
-    la idempotencia del executor hace segura la re-ejecución. El time_limit viene
-    de JOB_TIME_LIMIT_SECONDS; Settings garantiza JOB_STALE_MINUTES*60 > time_limit,
-    así que el sweeper (`reap_stale_jobs`, vía beat_schedule) nunca barre un job
-    legítimo aún en ejecución."""
+    `actor_id` es el usuario que pidió el procesamiento: toda fila de auditoría lo lleva.
+    acks_late=True: si el worker muere a mitad, el broker re-entrega el mensaje y la
+    idempotencia del executor hace segura la re-ejecución."""
     if not (_is_uuid(job_id) and _is_uuid(org_id) and _is_uuid(actor_id)):
-        log.error("run_job descartado: argumentos no UUID (job_id=%r)", job_id)
+        log.error("job descartado: argumentos no UUID (job_id=%r)", job_id)
         return "FAILED"  # determinista: mensaje malformado, no se toca la BD
     job = _claim(job_id, org_id)
     if job is None:
@@ -168,9 +164,9 @@ def run_job(self, job_id: str, org_id: str, actor_id: str) -> str:
     try:
         result = handler(job)
     except JobError as exc:
-        if states.retry_policy(exc.error_code) == "retry" and self.request.retries < MAX_RETRIES:
+        if states.retry_policy(exc.error_code) == "retry" and task.request.retries < MAX_RETRIES:
             _fail(job, "RETRYING", exc.error_code, actor_id)
-            raise self.retry(exc=exc, countdown=retry_countdown(self.request.retries)) from exc
+            raise task.retry(exc=exc, countdown=retry_countdown(task.request.retries)) from exc
         _fail(job, "FAILED", exc.error_code, actor_id)
         return "FAILED"
     except Exception:
@@ -181,26 +177,46 @@ def run_job(self, job_id: str, org_id: str, actor_id: str) -> str:
     return "SUCCEEDED"
 
 
+@celery_app.task(bind=True, name="jobs.run", max_retries=MAX_RETRIES,
+                 acks_late=True, time_limit=get_settings().JOB_TIME_LIMIT_SECONDS)
+def run_job(self, job_id: str, org_id: str, actor_id: str) -> str:
+    """Jobs generales (OCR, extracción legal, grafo, etc.). Límite: JOB_TIME_LIMIT_SECONDS."""
+    return _execute(self, job_id, org_id, actor_id)
+
+
+@celery_app.task(bind=True, name="jobs.run_media", max_retries=MAX_RETRIES,
+                 acks_late=True, time_limit=get_settings().MEDIA_JOB_TIME_LIMIT_SECONDS)
+def run_media(self, job_id: str, org_id: str, actor_id: str) -> str:
+    """Jobs de MEDIOS (ASR/diarización): límite amplio (MEDIA_JOB_TIME_LIMIT_SECONDS),
+    porque diarizar horas de audio con pyannote en CPU puede tardar mucho. Corren en la
+    cola "media" (worker dedicado) y el sweeper NO los barre (migración 0037)."""
+    return _execute(self, job_id, org_id, actor_id)
+
+
 @celery_app.task(name="jobs.reap_stale")
 def reap_stale_jobs() -> int:
     """Devuelve a QUEUED los jobs huérfanos en RUNNING/RETRYING (worker muerto antes
     de terminar: con acks_late el mensaje se re-entrega, pero si se pierde el job
-    quedaría colgado para siempre). La función jobs_reap_stale es SECURITY DEFINER
-    (owner, BYPASSRLS): barre todas las organizaciones; sólo toca metadatos del job.
+    quedaría colgado para siempre). Usa el umbral `JOB_STALE_MINUTES`."""
+    return reap_orphans(get_settings().JOB_STALE_MINUTES)
 
-    Auditoría (test_sec_aud_04 exige actor/org no nulos fuera de auth.*): se audita
-    job.requeued con jobs.created_by, el usuario que originó el job. Jobs antiguos
-    sin created_by se recuperan igual pero sólo se loggean (sin fila huérfana) y
-    NO se re-encolan (sin actor confiable no se ejecutan).
 
-    Cada job recuperado con actor conocido se re-encola de inmediato: el claim con
-    SELECT ... FOR UPDATE colapsa un eventual doble encolado (idempotencia).
-    """
+def reap_orphans(minutes: int) -> int:
+    """Devuelve a QUEUED y re-encola los jobs RUNNING/RETRYING más antiguos que `minutes`.
+
+    La función `jobs_reap_stale` es SECURITY DEFINER (BYPASSRLS): barre todas las
+    organizaciones; sólo toca metadatos del job. Se usa:
+    - con `JOB_STALE_MINUTES` por el sweeper de beat;
+    - con un umbral corto (p. ej. 1 min) AL ARRANCAR el worker, para recuperar los jobs
+      que quedaron huérfanos si el worker murió/reinició (evita que queden en "0%" siempre).
+
+    Auditoría: se audita `job.requeued` con `jobs.created_by`. Jobs sin created_by se
+    recuperan (vuelven a QUEUED) pero NO se re-encolan (sin actor no se ejecutan)."""
     from app.workers.dispatcher import enqueue_job  # lazy: dispatcher importa executor perezosamente
 
     with tx(None) as c:  # sin org: la propia función SQL es la que bypasea RLS
         stale = rows(c, "SELECT id, organization_id, case_id, job_type, previous_status, created_by "
-                        "FROM jobs_reap_stale(:m)", m=get_settings().JOB_STALE_MINUTES)
+                        "FROM jobs_reap_stale(:m)", m=minutes)
     for job in stale:
         log.warning("job %s (%s) huérfano en %s -> QUEUED", job["id"], job["job_type"], job["previous_status"])
         if job["created_by"]:
@@ -209,5 +225,5 @@ def reap_stale_jobs() -> int:
                              action="job.requeued", entity_type="job", entity_id=str(job["id"]),
                              before={"status": job["previous_status"]},
                              after={"status": "QUEUED", "reason": STALE_REQUEUED})
-            enqueue_job(job["id"], job["organization_id"], job["created_by"])
+            enqueue_job(job["id"], job["organization_id"], job["created_by"], job["job_type"])
     return len(stale)

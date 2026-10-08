@@ -34,7 +34,10 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-3 right-3 top-1/2 z-50 grid max-h-[calc(100dvh-1.5rem)] w-auto translate-y-[-50%] gap-4 overflow-y-auto overscroll-contain rounded-lg border bg-background p-4 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-lg sm:translate-x-[-50%] sm:p-6",
+        // Ancho: casi pantalla completa en móvil y el `max-w-*` que pase cada llamador en
+        // escritorio (por eso NO hay `sm:max-w-*`: pisaría el max-w-6xl de los visores).
+        // Alto: acotado al viewport con scroll interno para que nunca se corte.
+        "fixed left-1/2 top-1/2 z-50 grid w-[calc(100vw-1.5rem)] max-w-lg max-h-[calc(100dvh-1.5rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto overscroll-contain rounded-lg border bg-background p-4 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:p-6",
         className,
       )}
       {...props}

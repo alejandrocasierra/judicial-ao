@@ -199,7 +199,7 @@ def process_document(
         UPDATE documents
         SET processing_status = 'OCR_RUNNING'
         WHERE id = :d AND case_id = :c AND processing_status = ANY(:allowed)
-        RETURNING id, storage_uri, filename, mime_type, processing_status, ocr_mode
+        RETURNING id, storage_uri, filename, mime_type, processing_status, ocr_mode, sha256
     """, d=document_id, c=case_id, allowed=list(allowed_statuses))
     if doc is None:
         existing = one(conn, "SELECT processing_status FROM documents WHERE id = :d AND case_id = :c",
@@ -210,8 +210,21 @@ def process_document(
         return {"pages": 0, "needs_review_count": 0, "document_type": "other/unknown", "skipped": True}
 
     try:
-        key = key_from_uri(doc["storage_uri"])
-        document_bytes = storage().get(key)
+        from app.services.storage import incoming_dir
+        document_bytes = None
+        local = incoming_dir() / str(doc["sha256"])
+        if local.exists():
+            # Copia local compartida por la subida: procesa sin re-descargar de GCS.
+            try:
+                document_bytes = local.read_bytes()
+            except Exception as exc:  # noqa: BLE001 — copia local ilegible: reintenta vía storage
+                log.warning("copia local ilegible para %s (%s); se descarga de storage", document_id, exc)
+                document_bytes = None
+        if not document_bytes:
+            # Reproceso (o subida sin copia local): descarga el original de storage
+            # (GCS o local://) para volver a ejecutar el OCR con el modo elegido.
+            key = key_from_uri(doc["storage_uri"])
+            document_bytes = storage().get(key)
     except Exception as exc:
         log.exception("no se pudo leer el documento %s desde storage", document_id)
         raise PipelineError("storage_error", str(exc)) from exc

@@ -63,40 +63,146 @@ def _energy_based_diarization(wav_path: Path, min_duration_ms: int = 500) -> lis
     return segments
 
 
-def diarize(media_bytes: bytes, mime_type: str) -> list[dict[str, Any]]:
-    """Devuelve segmentos de hablante con start_ms, end_ms y label."""
-    s = get_settings()
-    wav_path = extract_audio_to_wav(media_bytes, mime_type)
+def _wav_duration_minutes(wav_path: Path) -> float:
     try:
-        token = s.ASR_DIARIZATION_TOKEN or s.HF_TOKEN
-        if token:
-            return _pyannote_diarization(wav_path, token)
-        log.info("No hay HF_TOKEN; usando diarización por energía (fallback)")
-        return _energy_based_diarization(wav_path)
-    finally:
-        wav_path.unlink(missing_ok=True)
+        info = sf.info(str(wav_path))
+        return info.frames / float(info.samplerate or 16000) / 60.0
+    except Exception:  # noqa: BLE001
+        return 0.0
 
 
-def _pyannote_diarization(wav_path: Path, token: str) -> list[dict[str, Any]]:
-    # Asegura que torchcodec encuentre FFmpeg en Windows si FFMPEG_PATH está configurado.
+def _load_pipeline(token: str):
+    """Crea el pipeline de pyannote una sola vez (se reutiliza en todos los tramos)."""
     s = get_settings()
     if s.FFMPEG_PATH:
         ffmpeg_dir = str(Path(s.FFMPEG_PATH).parent)
         if ffmpeg_dir not in os.environ.get("PATH", ""):
             os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
-
     from pyannote.audio import Pipeline
     pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", token=token)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     pipeline.to(torch.device(device))
-    output = pipeline(str(wav_path))
-    # pyannote.audio 4 devuelve DiarizeOutput con exclusive_speaker_diarization
+    return pipeline
+
+
+def _pyannote_hook(progress_cb: Any | None, base: float = 0.0, span: float = 1.0):
+    """Hook de pyannote -> avance en [base, base+span] (se compone con el del pipeline)."""
+    def _hook(step_name, step_artifact, file=None, total=None, completed=None, **_kw):
+        if progress_cb is not None and total:
+            try:
+                frac = max(0.0, min(1.0, float(completed or 0) / float(total)))
+                progress_cb(str(step_name), base + span * frac, 1.0)
+            except Exception:  # noqa: BLE001 — el progreso no debe tumbar la diarización
+                pass
+    return _hook
+
+
+def diarize(media: bytes | Path, mime_type: str,
+            progress_cb: Any | None = None) -> list[dict[str, Any]]:
+    """Devuelve segmentos de hablante con start_ms, end_ms y label. Acepta bytes o ruta.
+
+    `progress_cb(step_name, completed, total)` (opcional) informa el avance de pyannote.
+    Audios largos se procesan POR TRAMOS (ver `_pyannote_diarization_chunked`)."""
+    s = get_settings()
+    wav_path = extract_audio_to_wav(media, mime_type)
+    try:
+        token = s.ASR_DIARIZATION_TOKEN or s.HF_TOKEN
+        if not token:
+            log.info("No hay HF_TOKEN; usando diarización por energía (fallback)")
+            return _energy_based_diarization(wav_path)
+        pipeline = _load_pipeline(token)
+        chunk_s = int(getattr(s, "ASR_DIARIZATION_CHUNK_SECONDS", 900) or 0)
+        try:
+            info = sf.info(str(wav_path))
+            dur_s = info.frames / float(info.samplerate or 16000)
+        except Exception:  # noqa: BLE001
+            dur_s = 0.0
+        if chunk_s and dur_s > chunk_s:
+            return _pyannote_diarization_chunked(wav_path, pipeline, chunk_s, progress_cb)
+        return _pyannote_single(wav_path, pipeline, progress_cb)
+    finally:
+        wav_path.unlink(missing_ok=True)
+
+
+def _pyannote_single(wav_path: Path, pipeline, progress_cb: Any | None) -> list[dict[str, Any]]:
+    # pyannote 4 usa `torchcodec` para leer archivos; se le pasa la onda EN MEMORIA.
+    waveform = _load_audio(wav_path, 16000)
+    output = pipeline({"waveform": waveform, "sample_rate": 16000},
+                      hook=_pyannote_hook(progress_cb))
     annotation = getattr(output, "exclusive_speaker_diarization", output)
-    segments = []
-    for turn, _, speaker in annotation.itertracks(yield_label=True):
-        segments.append({
-            "start_ms": int(turn.start * 1000),
-            "end_ms": int(turn.end * 1000),
-            "label": speaker,
-        })
-    return segments
+    return [{"start_ms": int(t.start * 1000), "end_ms": int(t.end * 1000), "label": spk}
+            for t, _, spk in annotation.itertracks(yield_label=True)]
+
+
+def _pyannote_diarization_chunked(wav_path: Path, pipeline, chunk_s: int,
+                                  progress_cb: Any | None) -> list[dict[str, Any]]:
+    """Diariza por tramos y unifica hablantes por embeddings.
+
+    pyannote sobre el audio completo es lentísimo y agota tiempo/memoria en audios de
+    horas. Se procesa por tramos (con solape, para no perder hablantes en los cortes) y
+    se agrupan los centroides de cada tramo (distancia coseno) para asignar una etiqueta
+    GLOBAL: la misma voz recibe el mismo SPEAKER_xx en todos los tramos."""
+    import numpy as np
+    from sklearn.cluster import AgglomerativeClustering
+
+    s = get_settings()
+    overlap_s = int(getattr(s, "ASR_DIARIZATION_OVERLAP_SECONDS", 10) or 0)
+    threshold = float(getattr(s, "ASR_DIARIZATION_CLUSTER_THRESHOLD", 0.5) or 0.5)
+    info = sf.info(str(wav_path))
+    sr = int(info.samplerate or 16000)
+    total_s = info.frames / float(sr)
+    n_chunks = max(1, int((total_s + chunk_s - 1) // chunk_s))
+    log.info("Diarización por tramos: %.0f s en %d tramo(s) de %d s", total_s, n_chunks, chunk_s)
+
+    turns: list[dict[str, Any]] = []
+    keys: list[tuple[int, str]] = []
+    vectors: list[np.ndarray] = []
+    for ci in range(n_chunks):
+        core_start = ci * chunk_s
+        core_end = min(core_start + chunk_s, total_s)
+        read_end = min(core_end + overlap_s, total_s)
+        n_frames = int((read_end - core_start) * sr)
+        array, _ = sf.read(str(wav_path), start=int(core_start * sr), frames=n_frames,
+                           dtype="float32", always_2d=True)
+        waveform = torch.from_numpy(np.ascontiguousarray(array.T))  # (channels, time)
+        if waveform.shape[0] > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
+        output = pipeline({"waveform": waveform, "sample_rate": sr},
+                          hook=_pyannote_hook(progress_cb, base=ci / n_chunks, span=1.0 / n_chunks))
+        annotation = getattr(output, "exclusive_speaker_diarization", output)
+        sd = getattr(output, "speaker_diarization", annotation)
+        embs = getattr(output, "speaker_embeddings", None)
+        if embs is not None and len(embs):
+            for idx, spk in enumerate(list(sd.labels())):
+                if idx < len(embs):
+                    keys.append((ci, spk))
+                    vectors.append(np.asarray(embs[idx], dtype=np.float32))
+        log.info("Diarización tramo %d/%d: %d turno(s)", ci + 1, n_chunks,
+                 sum(1 for _ in annotation.itertracks(yield_label=True)))
+        for turn, _, spk in annotation.itertracks(yield_label=True):
+            s_ms = int(max(core_start + turn.start, core_start) * 1000)
+            e_ms = int(min(core_start + turn.end, core_end) * 1000)
+            if e_ms - s_ms < 200:  # descarta migajas en el borde del tramo
+                continue
+            turns.append({"start_ms": s_ms, "end_ms": e_ms, "label": spk, "chunk": ci})
+
+    key_to_global: dict[tuple[int, str], str] = {}
+    if len(keys) >= 2:
+        x = np.vstack(vectors)
+        x = x / (np.linalg.norm(x, axis=1, keepdims=True) + 1e-9)
+        cl = AgglomerativeClustering(n_clusters=None, distance_threshold=threshold,
+                                     metric="cosine", linkage="average")
+        groups = cl.fit_predict(x)
+        for k, g in zip(keys, groups):
+            key_to_global[k] = f"SPEAKER_{int(g):02d}"
+    else:
+        for k in keys:
+            key_to_global[k] = "SPEAKER_00"
+
+    for t in turns:
+        t["label"] = key_to_global.get((t["chunk"], t["label"]), "UNKNOWN")
+        t.pop("chunk", None)
+    turns.sort(key=lambda x: x["start_ms"])
+    log.info("Diarización por tramos: %d turnos, %d hablante(s) global(es)",
+             len(turns), len(set(key_to_global.values())))
+    return turns
