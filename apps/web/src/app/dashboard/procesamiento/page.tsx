@@ -46,6 +46,8 @@ interface ActiveJob {
   case_number?: string;
   case_title?: string;
   progress: number;
+  /** true = el job no publica % por archivo (legal_extraction, graph_build…): mostrar "En curso…". */
+  indeterminate?: boolean;
   can_cancel?: boolean;
   items: ProcessingItem[];
 }
@@ -279,8 +281,8 @@ function JobCard({
           {isActive && (
             <div className="w-24">
               <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                {job.items.length === 0 ? (
-                  // Jobs sin ítems (p. ej. graph_build): progreso indeterminado.
+                {job.items.length === 0 || job.indeterminate ? (
+                  // Jobs sin progreso real (legal_extraction, graph_build…): indeterminado.
                   <div className="h-2 w-1/3 animate-pulse rounded-full bg-primary" />
                 ) : (
                   <div
@@ -290,7 +292,7 @@ function JobCard({
                 )}
               </div>
               <p className="mt-0.5 text-center text-xs text-muted-foreground">
-                {job.items.length === 0 ? "En curso…" : `${job.progress}%`}
+                {job.items.length === 0 || job.indeterminate ? "En curso…" : `${job.progress}%`}
               </p>
             </div>
           )}

@@ -199,8 +199,13 @@ def active_processing(p: Principal = Depends(current_principal)):
         """, o=p.org_id)
 
         result = []
+        # Solo los jobs que publican progreso POR ARCHIVO muestran el % en vivo. Los demás
+        # (legal_extraction, graph_build, …) se muestran como "En curso…" para no confundir
+        # con el % de OTRO job (p. ej. la diarización) que comparte el mismo medio.
+        progress_job_types = {"file_ingest", "media_asr", "media_diarize", "document_ocr"}
         for job in jobs:
             input_ids = [str(i) for i in (job["input_ids"] or [])]
+            can_show_progress = job["job_type"] in progress_job_types
             items = []
 
             if input_ids:
@@ -214,16 +219,17 @@ def active_processing(p: Principal = Depends(current_principal)):
                     WHERE d.id = ANY(:ids)
                 """, ids=input_ids)
                 for d in docs:
+                    live_pct = d["live_pct"] if can_show_progress else None
                     progress = 0
                     detail = None
                     status = d["processing_status"]
                     if d["processing_status"] in ("OCR_COMPLETE", "REVIEW_REQUIRED"):
                         progress = 100
-                    elif d["live_pct"] is not None:
+                    elif live_pct is not None:
                         # Progreso en vivo: la transacción del pipeline aún no ha
                         # commiteado, así que el estado sigue siendo UPLOADED; usamos
                         # la tabla de progreso para mostrar "OCR en curso".
-                        progress = min(99, int(d["live_pct"]))
+                        progress = min(99, int(live_pct))
                         detail = d["live_detail"]
                         status = "OCR_RUNNING"
                     elif d["processing_status"] in ("UPLOADED", "OCR_PENDING", "OCR_RUNNING"):
@@ -246,17 +252,16 @@ def active_processing(p: Principal = Depends(current_principal)):
                     WHERE m.id = ANY(:ids)
                 """, ids=input_ids)
                 for m in medias:
+                    # Solo el job que procesa el medio muestra su progreso en vivo; otros
+                    # jobs (legal_extraction, …) con el mismo input no deben reflejarlo.
+                    live_pct = m["live_pct"] if can_show_progress else None
                     progress = 0
                     detail = None
                     status = m["processing_status"]
                     if m["processing_status"] == "FAILED":
                         progress = 0
-                    elif m["live_pct"] is not None:
-                        # Progreso en vivo (tabla aparte; la tx del pipeline aún no commitea).
-                        # Va antes de "completado": durante la etapa 2 (diarización) el medio
-                        # sigue con processing_status ASR_COMPLETE, pero el job está corriendo;
-                        # mostrar el live_pct evita el falso "100%".
-                        progress = min(99, int(m["live_pct"]))
+                    elif live_pct is not None:
+                        progress = min(99, int(live_pct))
                         detail = m["live_detail"]
                         status = "ASR_RUNNING"
                     elif m["processing_status"] in ("ASR_COMPLETE", "REVIEW_REQUIRED"):
@@ -281,6 +286,7 @@ def active_processing(p: Principal = Depends(current_principal)):
                 "case_number": job["case_number"],
                 "case_title": job["case_title"],
                 "progress": global_progress,
+                "indeterminate": not can_show_progress,
                 "items": items,
             })
 
