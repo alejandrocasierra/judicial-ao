@@ -154,17 +154,21 @@ def get_llm_for_model(model_id: str, org_id: str, user_id: str):
 
 def get_llm_for_task(task: str):
     """Routing por tarea (D4): permite usar modelos económicos para NER/clasificación
-    y frontier para razonamiento/contradicciones."""
+    y frontier para razonamiento/contradicciones.
+
+    Soporta TODOS los proveedores compatibles con OpenAI (openai, gemini, kimi, deepseek,
+    custom) — igual que `get_llm_for_model` — y Anthropic. Si el proveedor no trae
+    `api_base_url` explícito, se usa la URL base del proveedor del entorno."""
     s = get_settings()
     routing = s.LLM_ROUTING or {}
     cfg = routing.get(task, {})
     provider = cfg.get("provider", s.LLM_PROVIDER)
     model = cfg.get("model", s.LLM_MODEL)
     api_key = cfg.get("api_key") or s.LLM_API_KEY
-    api_base_url = cfg.get("api_base_url") or s.LLM_API_BASE_URL
+    api_base_url = cfg.get("api_base_url") or _provider_base_url(s, provider)
     api_version = cfg.get("api_version") or s.LLM_API_VERSION
     if provider == "fake":
         return FakeLLM(model)
-    if provider == "openai":
+    if provider in ("openai", "gemini", "kimi", "deepseek", "custom"):
         return OpenAiLLM(model=model, api_key=api_key, api_base_url=api_base_url)
     return AnthropicLLM(model=model, api_key=api_key, api_base_url=api_base_url, api_version=api_version)
