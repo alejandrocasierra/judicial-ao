@@ -259,8 +259,18 @@ def _insert_entities(
         if e.get("entity_type") not in _ALLOWED_ENTITY_TYPES:
             log.warning("entidad con tipo no permitido ignorada: %r (%s)", e.get("name"), e.get("entity_type"))
             continue
-        eid = _valid_uuid_or_new(e.get("id"))
+        # Dedup EN ORIGEN: si ya existe una entidad con el mismo nombre normalizado en el
+        # caso, se reutiliza su id (no se crea otra fila). El tipo se conserva del existente
+        # y los nombres alternos se acumulan como alias.
+        nn = e.get("normalized_name") or _norm(e["name"])
+        with_nn = one(conn, "SELECT id, name FROM entities WHERE case_id = :c AND normalized_name = :nn LIMIT 1",
+                      c=case_id, nn=nn)
+        eid = str(with_nn["id"]) if with_nn else _valid_uuid_or_new(e.get("id"))
         ids.append(eid)
+        src_aliases = set(e.get("aliases") or [])
+        if with_nn and with_nn["name"] and with_nn["name"] != e["name"]:
+            src_aliases.add(with_nn["name"])
+        src_aliases.discard(e["name"])
         one(conn, """
             INSERT INTO entities
               (id, organization_id, case_id, entity_type, name, normalized_name, aliases,
@@ -275,8 +285,8 @@ def _insert_entities(
               attributes = EXCLUDED.attributes
             RETURNING id""",
             id=eid, o=org_id, c=case_id, et=e["entity_type"], name=e["name"],
-            nn=e.get("normalized_name") or _norm(e["name"]),
-            aliases=e.get("aliases") or [],
+            nn=nn,
+            aliases=sorted(src_aliases),
             rs=e.get("resolution_status") or "AMBIGUOUS",
             pid=e.get("party_id"), attrs=json.dumps(e.get("attributes") or {}))
     return ids
