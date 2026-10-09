@@ -142,19 +142,23 @@ def _get_or_create_speaker(
     conn: Connection,
     org_id: str,
     case_id: str,
+    media_id: str,
     label: str,
     display_name: str | None,
 ) -> str:
-    """Crea el speaker o ACTUALIZA su display_name cuando la resolución de máquina cambia.
+    """Crea el speaker (POR MEDIA) o ACTUALIZA su display_name cuando la resolución de
+    máquina cambia.
 
-    Al re-diarizar, pyannote puede renumerar las etiquetas (`SPEAKER_00`, `SPEAKER_01`…).
-    Si solo rellenáramos nombres vacíos, quedarían nombres viejos cruzados. Se actualiza
-    el nombre resuelto por MÁQUINA (visual/auto-presentación) cuando difiere, pero NUNCA
-    se pisa un nombre confirmado por una persona (`resolution_status='CONFIRMED'` o
-    `resolution_source='human'`)."""
+    Los hablantes son de alcance por-medio: pyannote numera los clusters de forma
+    independiente en cada grabación, así que `SPEAKER_04` es una persona distinta en
+    cada video. Al ser por-media, la diarización de un video NO pisa los nombres de
+    otro (antes sí: filas compartidas por label → nombres cruzados).
+
+    Al re-diarizar, se actualiza el nombre resuelto por MÁQUINA (visual/auto-presentación)
+    cuando difiere, pero NUNCA se pisa un nombre confirmado por una persona."""
     existing = one(conn, "SELECT id, display_name, resolution_status, resolution_source "
-                         "FROM speakers WHERE case_id = :c AND label = :l",
-                   c=case_id, l=label)
+                         "FROM speakers WHERE case_id = :c AND media_id = :m AND label = :l",
+                   c=case_id, m=media_id, l=label)
     if existing:
         human = existing["resolution_status"] == "CONFIRMED" or existing["resolution_source"] == "human"
         if display_name and not human and display_name != existing["display_name"]:
@@ -164,16 +168,49 @@ def _get_or_create_speaker(
                 n=display_name, i=str(existing["id"]))
         return str(existing["id"])
     result = one(conn, """
-        INSERT INTO speakers (organization_id, case_id, label, display_name, resolution_status, resolution_source, confidence)
-        VALUES (:o, :c, :l, :n, :s, :src, :conf)
+        INSERT INTO speakers (organization_id, case_id, media_id, label, display_name, resolution_status, resolution_source, confidence)
+        VALUES (:o, :c, :m, :l, :n, :s, :src, :conf)
         RETURNING id
     """,
-        o=org_id, c=case_id, l=label, n=display_name,
+        o=org_id, c=case_id, m=media_id, l=label, n=display_name,
         s="PROBABLE" if display_name else "UNRESOLVED",
         src="teams_visual_id" if display_name else "diarization",
         conf=0.7 if display_name else 0.0,
     )
     return str(result["id"])
+
+
+def _get_or_create_speaker_named(
+    conn: Connection,
+    org_id: str,
+    case_id: str,
+    media_id: str,
+    name: str | None,
+    fallback_label: str,
+) -> str:
+    """Speaker por-medio identificado por NOMBRE (identificación visual de Teams).
+
+    En Teams el nombre RESALTADO es el del que habla en ese momento; así que se
+    asigna el segmento al hablante con ESE nombre (aunque el cluster de audio lo
+    hubiera agrupado con otro). Si no hay nombre, cae al hablante por etiqueta de
+    audio (fallback para videos sin resaltado)."""
+    if name and name.strip():
+        clean = name.strip()
+        row = one(conn, """SELECT id FROM speakers
+                           WHERE case_id = :c AND media_id = :m
+                             AND lower(btrim(display_name)) = lower(btrim(:n))""",
+                  c=case_id, m=media_id, n=clean)
+        if row:
+            return str(row["id"])
+        nxt = one(conn, """SELECT coalesce(max((regexp_match(label, '^SPEAKER_([0-9]+)$'))[1]::int), -1) + 1 AS n
+                           FROM speakers WHERE case_id = :c AND media_id = :m AND label ~ '^SPEAKER_[0-9]+$'""",
+                  c=case_id, m=media_id)["n"]
+        new = one(conn, """INSERT INTO speakers (organization_id, case_id, media_id, label, display_name,
+                                resolution_status, resolution_source, confidence)
+            VALUES (:o, :c, :m, :l, :n, 'PROBABLE', 'teams_visual_id', 0.7) RETURNING id""",
+                  o=org_id, c=case_id, m=media_id, l=f"SPEAKER_{int(nxt):02d}", n=clean)
+        return str(new["id"])
+    return _get_or_create_speaker(conn, org_id, case_id, media_id, fallback_label, None)
 
 
 def _progress_writer(org_id: str, user_id: str, media_id: str):
@@ -312,7 +349,7 @@ def process_media(
     # 5. Guardar speakers y segmentos
     needs_review_count = 0
     for seg in joined:
-        speaker_id = _get_or_create_speaker(conn, org_id, case_id, seg["speaker_label"], seg.get("visual_name"))
+        speaker_id = _get_or_create_speaker(conn, org_id, case_id, media_id, seg["speaker_label"], seg.get("visual_name"))
         needs_review = seg["confidence"] < s.ASR_CONFIDENCE_THRESHOLD
         if needs_review:
             needs_review_count += 1
@@ -451,9 +488,21 @@ def apply_diarization(
             except Exception as exc:
                 log.warning("Identificación visual falló para %s: %s", media["filename"], exc)
 
+        # Nombre por TURNO de diarización, tomado de la identificación VISUAL de Teams:
+        # el nombre RESALTADO es el de quien habla en ese momento. Corrige los clusters
+        # de audio que mezclaron a dos personas (p. ej. el juez con un apoderado).
+        from collections import Counter as _Counter
+        for d in diarization:
+            names = [e["name"] for e in timeline if d["start_ms"] <= e["timestamp_ms"] <= d["end_ms"]]
+            if names:
+                nm, cnt = _Counter(names).most_common(1)[0]
+                d["name"] = nm if cnt / len(names) >= _MIN_NAME_AGREEMENT else None
+            else:
+                d["name"] = None
+
         label_names = _resolve_label_names(diarization, timeline)
 
-        def _best_label(start_ms: int, end_ms: int) -> str:
+        def _best_turn(start_ms: int, end_ms: int) -> dict[str, Any] | None:
             best = None
             best_overlap = 0
             for d in diarization:
@@ -461,11 +510,17 @@ def apply_diarization(
                 if overlap > best_overlap:
                     best_overlap = overlap
                     best = d
-            return best["label"] if best else "UNKNOWN"
+            return best
 
-        # Auto-presentaciones ("quien les habla, X") sobre el texto ya transcrito.
-        joined_pre = [{"start_ms": sg["start_ms"], "end_ms": sg["end_ms"], "text": sg["text"],
-                       "speaker_label": _best_label(sg["start_ms"], sg["end_ms"])} for sg in segs]
+        # Auto-presentaciones ("quien les habla, X") como respaldo por etiqueta.
+        joined_pre = []
+        for sg in segs:
+            turn = _best_turn(sg["start_ms"], sg["end_ms"])
+            joined_pre.append({
+                "start_ms": sg["start_ms"], "end_ms": sg["end_ms"], "text": sg["text"],
+                "speaker_label": turn["label"] if turn else "UNKNOWN",
+                "turn_name": (turn.get("name") if turn else None),
+            })
         intro_names = _extract_self_intro_names(joined_pre)
         if intro_names:
             label_names.update(intro_names)
@@ -476,7 +531,9 @@ def apply_diarization(
         for sg, pre in zip(segs, joined_pre):
             label = pre["speaker_label"]
             labels_seen.add(label)
-            speaker_id = _get_or_create_speaker(conn, org_id, case_id, label, label_names.get(label))
+            # Prefiere el nombre VISUAL del turno; si no, el de la etiqueta (intro/visual).
+            name = pre.get("turn_name") or label_names.get(label)
+            speaker_id = _get_or_create_speaker_named(conn, org_id, case_id, media_id, name, label)
             one(conn, "UPDATE transcript_segments SET speaker_id = :spk WHERE id = :i RETURNING id",
                 spk=speaker_id, i=str(sg["id"]))
             if (sg["confidence"] or 0.0) < s.ASR_CONFIDENCE_THRESHOLD:

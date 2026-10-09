@@ -33,17 +33,18 @@ def dedupe_by_name(conn: Connection, case_id: str) -> list[dict[str, str]]:
     Devuelve la lista de {'keep', 'merged', 'name'} para auditoría.
     """
     items = rows(conn, """
-        SELECT s.id, s.label, s.display_name, s.resolution_status, s.resolution_source,
+        SELECT s.id, s.media_id, s.label, s.display_name, s.resolution_status, s.resolution_source,
                (SELECT count(*) FROM transcript_segments ts WHERE ts.speaker_id = s.id) AS segs
         FROM speakers s
         WHERE s.case_id = :c AND coalesce(btrim(s.display_name), '') <> ''
     """, c=case_id)
-    groups: dict[str, list[dict]] = {}
+    groups: dict[tuple[str, str], list[dict]] = {}
     for it in items:
-        groups.setdefault(str(it["display_name"]).strip().lower(), []).append(it)
+        key = (str(it["media_id"]), str(it["display_name"]).strip().lower())
+        groups.setdefault(key, []).append(it)
 
     merged: list[dict[str, str]] = []
-    for name, group in groups.items():
+    for (_media, name), group in groups.items():
         if len(group) < 2:
             continue
 

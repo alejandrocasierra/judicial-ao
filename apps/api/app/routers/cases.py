@@ -864,8 +864,9 @@ def delete_speaker(case_id: UUID, speaker_id: UUID, request: Request, p: Princip
             c, "SELECT DISTINCT media_id FROM transcript_segments WHERE speaker_id = :s", s=str(speaker_id))]
         moved = one(c, "SELECT count(*) AS n FROM transcript_segments WHERE speaker_id = :s",
                     s=str(speaker_id))["n"]
+        media_ref = media_ids[0] if len(media_ids) == 1 else None
         c.execute(text("UPDATE transcript_segments SET speaker_id = :u WHERE speaker_id = :s"),
-                  {"u": _ensure_unidentified(c, p.org_id, str(case_id)), "s": str(speaker_id)})
+                  {"u": _ensure_unidentified(c, p.org_id, str(case_id), media_ref), "s": str(speaker_id)})
         c.execute(text("DELETE FROM speakers WHERE id = :i"), {"i": str(speaker_id)})
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="speaker.deleted", entity_type="speaker",
                      entity_id=str(speaker_id),
@@ -893,9 +894,19 @@ def _valid_party(c, case_id: UUID, party_id) -> str | None:
     return str(party_id)
 
 
-def _ensure_unidentified(c, org_id: str, case_id: str) -> str:
-    """Id del hablante 'Sin identificar' del caso (lo crea si no existe)."""
-    row = one(c, """SELECT id FROM speakers WHERE case_id = :c
+def _ensure_unidentified(c, org_id: str, case_id: str, media_id: str | None = None) -> str:
+    """Id del hablante 'Sin identificar' del MEDIA (o del caso si media_id es None)."""
+    if media_id:
+        row = one(c, "SELECT id FROM speakers WHERE case_id = :c AND media_id = :m AND label = 'UNKNOWN' LIMIT 1",
+                  c=case_id, m=str(media_id))
+        if row:
+            return str(row["id"])
+        new = one(c, """INSERT INTO speakers (organization_id, case_id, media_id, label, display_name,
+                              resolution_status, resolution_source, confidence)
+            VALUES (:o, :c, :m, 'UNKNOWN', 'Sin identificar', 'UNRESOLVED', 'system', 0.0) RETURNING id""",
+                  o=org_id, c=case_id, m=str(media_id))
+        return str(new["id"])
+    row = one(c, """SELECT id FROM speakers WHERE case_id = :c AND media_id IS NULL
                     AND (label = 'UNKNOWN' OR lower(coalesce(display_name, '')) = 'sin identificar')
                     ORDER BY label LIMIT 1""", c=case_id)
     if row:
