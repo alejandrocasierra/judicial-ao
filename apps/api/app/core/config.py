@@ -163,6 +163,9 @@ class Settings(BaseSettings):
     # para no perder hablantes en los cortes) y se unifican hablantes por embeddings.
     ASR_DIARIZATION_CHUNK_SECONDS: int = Field(default=900, ge=0)
     ASR_DIARIZATION_OVERLAP_SECONDS: int = Field(default=10, ge=0)
+    # Identificación visual de hablantes (Teams): 1 frame cada N segundos. Un valor mayor
+    # muestrea menos frames (más rápido en la VPS; p. ej. 10).
+    VISUAL_ID_STEP_SECONDS: float = Field(default=5.0, gt=0)
     # Distancia coseno máxima para considerar que dos voces son el MISMO hablante.
     # Más alto = fusiona más (súbelo si la misma persona sale partida; bájalo si une a
     # personas distintas). 0.5 es el equilibrado por defecto.

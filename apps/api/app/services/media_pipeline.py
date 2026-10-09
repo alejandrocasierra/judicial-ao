@@ -426,8 +426,18 @@ def apply_diarization(
         timeline: list[dict[str, Any]] = []
         if media["media_type"] == "video":
             progress(0.97, "Identificando hablantes (video)…")
+
+            def _vis_progress(done: int, total: int) -> None:
+                if total:
+                    frac = min(1.0, max(0.0, done / total))
+                    progress(0.97 + 0.02 * frac,
+                             f"Identificando hablantes (video)… {int(frac * 100)}%")
+
             try:
-                timeline = extract_active_speaker_timeline(media_path, media["mime_type"])
+                timeline = extract_active_speaker_timeline(
+                    media_path, media["mime_type"],
+                    step_s=float(getattr(s, "VISUAL_ID_STEP_SECONDS", 5.0) or 5.0),
+                    progress_cb=_vis_progress)
             except Exception as exc:
                 log.warning("Identificación visual falló para %s: %s", media["filename"], exc)
 

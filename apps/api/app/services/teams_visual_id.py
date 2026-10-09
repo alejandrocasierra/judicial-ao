@@ -141,28 +141,31 @@ def extract_active_speaker_timeline(
         src_path = Path(media)
 
     try:
-        duration_s = _get_duration(src_path)
-        n_steps = int(duration_s // step_s) + 1
         results: list[dict[str, Any]] = []
-        for i in range(n_steps):
-            ts = i * step_s
-            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as frame_file:
-                frame_path = Path(frame_file.name)
-            try:
-                _extract_frame(src_path, ts, frame_path)
-                image = Image.open(frame_path)
-                name = detect_active_speaker_name(image)
-                if name:
-                    results.append({"timestamp_ms": int(ts * 1000), "name": name})
-            except Exception as exc:  # noqa: BLE001 — un frame no debe tumbar el pipeline
-                log.warning("No se pudo procesar frame en %ss: %s", ts, exc)
-            finally:
-                frame_path.unlink(missing_ok=True)
-            if progress_cb:
+        # UNA SOLA pasada de FFmpeg: extrae 1 frame cada `step_s` segundos (fps=1/step_s).
+        # Antes se hacía una llamada a FFmpeg POR frame (~1 600 en un video de 2 h) => lentísimo.
+        with tempfile.TemporaryDirectory(prefix="frames-") as td:
+            ffmpeg = _get_ffmpeg_exe()
+            cmd = [ffmpeg, "-y", "-i", str(src_path), "-vf", f"fps=1/{step_s}",
+                   "-q:v", "3", str(Path(td) / "f_%06d.jpg")]
+            subprocess.run(cmd, check=True, capture_output=True)
+            frames = sorted(Path(td).glob("f_*.jpg"))
+            total = len(frames) or 1
+            log.info("Identificación visual: %d frames extraídos (1 pasada ffmpeg, cada %ss)", len(frames), step_s)
+            for i, frame_path in enumerate(frames):
+                ts = i * step_s
                 try:
-                    progress_cb(i + 1, n_steps)
-                except Exception as exc:  # noqa: BLE001 — el callback no debe tumbar el pipeline
-                    log.debug("progress_cb falló en frame %s: %s", i + 1, exc)
+                    image = Image.open(frame_path)
+                    name = detect_active_speaker_name(image)
+                    if name:
+                        results.append({"timestamp_ms": int(ts * 1000), "name": name})
+                except Exception as exc:  # noqa: BLE001 — un frame no debe tumbar el pipeline
+                    log.warning("No se pudo procesar frame %s: %s", frame_path.name, exc)
+                if progress_cb:
+                    try:
+                        progress_cb(i + 1, total)
+                    except Exception:  # noqa: BLE001 — el callback no debe tumbar el pipeline
+                        pass
         return results
     finally:
         if cleanup_src:
