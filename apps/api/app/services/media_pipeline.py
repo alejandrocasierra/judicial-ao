@@ -31,13 +31,19 @@ _MIN_NAME_AGREEMENT = 0.5
 # Patrones de auto-presentación en audiencias (para hablantes SIN video: el juez
 # suele tener la cámara apagada, así que no hay cuadro resaltado que leer).
 _NAME_RX = r"([A-ZÁÉÍÓÚÑ][\wáéíóúñ]+(?:\s+(?:de\s+|del\s+|la\s+|los\s+)?[A-ZÁÉÍÓÚÑ][\wáéíóúñ]+){1,3})"
+# El keyword va con (?i:...) (insensible), pero el NOMBRE es sensible a mayúsculas: así no se
+# captura "soy yo yo yo digo" (que antes salía por usar re.IGNORECASE en todo el patrón).
 _SELF_INTRO_PATTERNS = [
-    re.compile(r"qui[eé]nes?\s+les\s+habla[,\s]+" + _NAME_RX, re.IGNORECASE),
-    re.compile(r"\bles\s+habla[,\s]+" + _NAME_RX, re.IGNORECASE),
-    re.compile(r"\bmi\s+nombre\s+es[,\s]+" + _NAME_RX, re.IGNORECASE),
-    re.compile(r"\bme\s+llamo[,\s]+" + _NAME_RX, re.IGNORECASE),
-    re.compile(r"\bsoy\s+" + _NAME_RX, re.IGNORECASE),
+    re.compile(r"(?i:qui[eé]nes?\s+les\s+habla[,\s]+)" + _NAME_RX),
+    re.compile(r"(?i:\bles\s+habla[,\s]+)" + _NAME_RX),
+    re.compile(r"(?i:\bmi\s+nombre\s+es[,\s]+)" + _NAME_RX),
+    re.compile(r"(?i:\bme\s+llamo[,\s]+)" + _NAME_RX),
+    re.compile(r"(?i:\bsoy\s+)" + _NAME_RX),
 ]
+
+# Palabras de relleno que NO forman parte de un nombre propio (evita "yo yo yo digo").
+_NAME_FILLER = {"yo", "tu", "usted", "digo", "dice", "dijo", "dicen", "estoy", "soy", "es",
+                "que", "pues", "bueno", "entonces", "esto", "esta", "aqui"}
 
 # Palabras que no forman parte de un nombre (evita "soy el juez 21").
 _NAME_STOPWORDS = {"el", "la", "los", "las", "juez", "doctor", "doctora", "señor", "señora",
@@ -52,6 +58,10 @@ def _clean_intro_name(raw: str) -> str | None:
     while words and words[0].lower() in _NAME_STOPWORDS:
         words.pop(0)
     if len(words) < 2:
+        return None
+    low = [w.lower() for w in words]
+    # Rechaza basura: palabras de relleno o nombre sin al menos 2 palabras distintas.
+    if any(w in _NAME_FILLER for w in low) or len(set(low)) < 2:
         return None
     return " ".join(words)
 

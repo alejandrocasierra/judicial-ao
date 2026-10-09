@@ -189,16 +189,26 @@ def _pyannote_diarization_chunked(wav_path: Path, pipeline, chunk_s: int,
                 continue
             turns.append({"start_ms": s_ms, "end_ms": e_ms, "label": spk, "chunk": ci})
 
+    # Clustering global de centroides. Se DESCARTAN los embeddings inválidos (NaN o norma 0):
+    # pyannote produce NaN en tramos con segmentos vacíos ("Mean of empty slice") y sklearn
+    # rechaza los NaN ("Input X contains NaN"). `nan_to_num` + filtro evitan el fallo.
+    valid = [(k, np.nan_to_num(np.asarray(v, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0))
+             for k, v in zip(keys, vectors)
+             if np.all(np.isfinite(v)) and float(np.linalg.norm(np.asarray(v, dtype=np.float32))) > 0]
     key_to_global: dict[tuple[int, str], str] = {}
-    if len(keys) >= 2:
-        x = np.vstack(vectors)
+    if len(valid) >= 2:
+        keys_v = [k for k, _ in valid]
+        x = np.vstack([v for _, v in valid])
         x = x / (np.linalg.norm(x, axis=1, keepdims=True) + 1e-9)
         cl = AgglomerativeClustering(n_clusters=None, distance_threshold=threshold,
                                      metric="cosine", linkage="average")
         groups = cl.fit_predict(x)
-        for k, g in zip(keys, groups):
+        for k, g in zip(keys_v, groups):
             key_to_global[k] = f"SPEAKER_{int(g):02d}"
-    else:
+    elif valid:
+        key_to_global[valid[0][0]] = "SPEAKER_00"
+    elif keys:
+        # Sin centroides válidos (todos NaN): no se puede unificar; al menos no perder turnos.
         for k in keys:
             key_to_global[k] = "SPEAKER_00"
 
