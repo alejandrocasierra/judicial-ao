@@ -482,6 +482,17 @@ def apply_diarization(
             if (sg["confidence"] or 0.0) < s.ASR_CONFIDENCE_THRESHOLD:
                 needs_review_count += 1
 
+        # Fusiona hablantes que quedaron con el MISMO nombre resuelto (pyannote suele
+        # partir a una persona en dos clusters y la visión/intro les pone el mismo
+        # nombre): evita duplicados en la lista y el selector de hablantes.
+        try:
+            from app.services import speakers as speakers_service
+            dups = speakers_service.dedupe_by_name(conn, case_id)
+            if dups:
+                log.info("Hablantes fusionados por nombre (media %s): %s", media_id, dups)
+        except Exception:  # noqa: BLE001 — la fusión no debe tumbar la diarización
+            log.exception("no se pudieron fusionar hablantes duplicados (caso %s)", case_id)
+
         status = "REVIEW_REQUIRED" if needs_review_count else "ASR_COMPLETE"
         one(conn, "UPDATE media SET processing_status = :s WHERE id = :m RETURNING id", s=status, m=media_id)
     finally:

@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.db import tx
-from app.services import entity_consolidation, graph
+from app.services import entity_consolidation, graph, speakers
 
 
 def handle(job: dict[str, Any]) -> dict[str, Any]:
@@ -15,6 +15,10 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
         # Antes de reconstruir el grafo: consolida entidades (dedup por nombre normalizado,
         # tipo dominante, alias fusionados). Así cualquier subida deja la BD/grafo limpios.
         consolidation = entity_consolidation.consolidate_case_entities(conn, org_id, case_id)
+        # Y fusiona hablantes DUPLICADOS (mismo nombre resuelto en dos clusters): así la
+        # lista/selector de hablantes nunca muestra a la misma persona dos veces.
+        speaker_merges = speakers.dedupe_by_name(conn, case_id)
         result = graph.build_case_graph(conn, org_id, case_id, actor_id)
     return {"implemented": True, "job_type": "graph_build",
-            "result": result, "entity_consolidation": consolidation}
+            "result": result, "entity_consolidation": consolidation,
+            "speaker_merges": speaker_merges}
