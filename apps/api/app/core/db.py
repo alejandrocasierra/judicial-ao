@@ -15,7 +15,16 @@ from app.core.config import get_settings
 @lru_cache
 def engine() -> Engine:
     s = get_settings()
-    return create_engine(s.database_url, pool_size=s.DB_POOL_SIZE, pool_pre_ping=True, future=True)
+    connect_args: dict = {}
+    # psycopg3: desactiva los "prepared statements" del lado del servidor. Con
+    # conexiones de larga vida (jobs de medios que duran horas) y reintentos, reutilizar
+    # el nombre auto-generado "_pg3_N" produce
+    # `DuplicatePreparedStatement: prepared statement "_pg3_0" already exists`, que tumbó
+    # la diarización de un video de 2 h tras 2.5 h de trabajo. Sin prepare, no ocurre.
+    if str(s.database_url).startswith("postgresql+psycopg"):
+        connect_args["prepare_threshold"] = None
+    return create_engine(s.database_url, pool_size=s.DB_POOL_SIZE, pool_pre_ping=True,
+                         future=True, connect_args=connect_args)
 
 
 @contextmanager
