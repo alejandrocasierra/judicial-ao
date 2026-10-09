@@ -5,6 +5,7 @@ ejecutan de forma síncrona en el proceso que las encola."""
 from __future__ import annotations
 
 import logging
+import os
 
 from celery import Celery
 from celery.signals import worker_ready
@@ -13,6 +14,12 @@ from app.core.config import get_settings
 
 _settings = get_settings()
 log = logging.getLogger(__name__)
+
+# Sólo el worker DEDICADO a medios (queue "media") debe barrer jobs de medios al arrancar.
+# Si lo hiciera el worker general, un reinicio suyo reencolaría ("stale_requeued") una
+# diarización que está corriendo en `worker-media` y la reiniciaría desde cero (horas
+# perdidas). El worker general deja los medios intactos.
+_REAP_MEDIA_ON_STARTUP = os.environ.get("REAP_MEDIA_ON_STARTUP", "").strip().lower() in {"1", "true", "yes"}
 
 celery_app = Celery(
     "judicial",
@@ -61,10 +68,12 @@ def _reap_orphans_on_startup(**_kwargs) -> None:
     previo (p. ej. el worker murió por OOM). Evita que queden "Procesando 0%" para siempre."""
     try:
         from app.workers.executor import reap_orphans
-        # include_media=True: al arrancar, un job de medios RUNNING SIEMPRE es huérfano de un
-        # reinicio (el mensaje redeliverado se saltaría por estar RUNNING). El sweeper
-        # periódico, en cambio, NO barre medios en ejecución (umbral largo).
-        n = reap_orphans(int(_settings.STARTUP_REAP_MINUTES), include_media=True)
+        # Al arrancar, un job de medios RUNNING SIEMPRE es huérfano de un reinicio (el
+        # mensaje redeliverado se saltaría por estar RUNNING). PERO sólo lo hace el worker
+        # de medios (REAP_MEDIA_ON_STARTUP=1): si lo hiciera el general, reiniciarlo
+        # reencolaría la diarización que corre en el otro worker. El sweeper periódico NO
+        # barre medios en ejecución (umbral largo).
+        n = reap_orphans(int(_settings.STARTUP_REAP_MINUTES), include_media=_REAP_MEDIA_ON_STARTUP)
         if n:
             log.warning("startup reap: %s job(s) huérfano(s) reencolado(s)", n)
     except Exception:  # noqa: BLE001 — nunca debe impedir que el worker arranque

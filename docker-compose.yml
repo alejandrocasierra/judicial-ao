@@ -147,6 +147,9 @@ services:
       CELERY_BROKER_URL: ${CELERY_BROKER_URL_DOCKER:-redis://redis:6379/1}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND_DOCKER:-redis://redis:6379/2}
       CELERY_TASK_ALWAYS_EAGER: "false"
+      # Sólo ESTE worker (queue media) barre jobs de medios huérfanos al arrancar; el
+      # general NO, para no reencolar una diarización viva en este worker.
+      REAP_MEDIA_ON_STARTUP: "1"
       ASR_DEVICE: cpu
       ASR_COMPUTE_TYPE: int8
       # Los topes de hilos (OMP/MKL/...) NO se fijan aquí: local = todos los núcleos;
