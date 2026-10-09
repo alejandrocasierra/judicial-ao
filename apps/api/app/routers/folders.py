@@ -31,9 +31,9 @@ router = APIRouter(prefix="/cases/{case_id}", tags=["folders"])
 log = logging.getLogger(__name__)
 
 # Tipos permitidos en el gestor de archivos del proceso.
-ALLOWED_EXTS = {"xlsx", "docx", "pdf", "jpg", "jpeg", "png", "svg", "mp4"}
-DOC_ROUTE_EXTS = {"pdf"}          # -> documents (pipeline OCR)
-MEDIA_ROUTE_EXTS = {"mp4"}        # -> media (pipeline ASR)
+ALLOWED_EXTS = {"xlsx", "docx", "pdf", "jpg", "jpeg", "png", "svg", "mp4", "mov"}
+DOC_ROUTE_EXTS = {"pdf"}           # -> documents (pipeline OCR)
+MEDIA_ROUTE_EXTS = {"mp4", "mov"}  # -> media (pipeline ASR) — .MOV de grabaciones de Teams
 EXTRA_MIME = {"svg": "image/svg+xml"}
 
 _UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
