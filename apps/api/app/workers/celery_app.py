@@ -61,7 +61,10 @@ def _reap_orphans_on_startup(**_kwargs) -> None:
     previo (p. ej. el worker murió por OOM). Evita que queden "Procesando 0%" para siempre."""
     try:
         from app.workers.executor import reap_orphans
-        n = reap_orphans(int(_settings.STARTUP_REAP_MINUTES))
+        # include_media=True: al arrancar, un job de medios RUNNING SIEMPRE es huérfano de un
+        # reinicio (el mensaje redeliverado se saltaría por estar RUNNING). El sweeper
+        # periódico, en cambio, NO barre medios en ejecución (umbral largo).
+        n = reap_orphans(int(_settings.STARTUP_REAP_MINUTES), include_media=True)
         if n:
             log.warning("startup reap: %s job(s) huérfano(s) reencolado(s)", n)
     except Exception:  # noqa: BLE001 — nunca debe impedir que el worker arranque

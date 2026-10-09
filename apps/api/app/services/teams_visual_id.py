@@ -27,8 +27,9 @@ log = logging.getLogger(__name__)
 
 # Umbral de saturación (max-min)/max del fondo del nombre para considerarlo resaltado.
 _MIN_HIGHLIGHT_SATURATION = 0.25
-# Diferencia mínima azul-rojo para descartar resaltados rojizos/verdes (Teams usa azul).
-_MIN_BLUE_DOMINANCE = 15.0
+# CROMA mínima = max(B, R) - G. Alto en resaltados AZULES/teal (B>G) y PÚRPURAS/magenta
+# (R y B > G); ~0 en fondos gris/negro (etiquetas inactivas). No depende del color exacto.
+_MIN_HIGHLIGHT_CHROMA = 15.0
 # Intervalo de muestreo de frames (segundos). Suficiente para no perder turnos.
 _DEFAULT_STEP_S = 5.0
 
@@ -73,7 +74,10 @@ def _looks_like_name(text: str) -> bool:
 
 
 def _box_background(image_arr: np.ndarray, box: Any) -> tuple[float, float]:
-    """Devuelve (saturación, dominancia_azul) del fondo detrás de la caja de texto."""
+    """Devuelve (saturación, croma) del fondo detrás de la caja de texto.
+
+    `croma = max(B, R) - G`: alto en resaltados azules/teal (B>G) y púrpuras/magenta
+    (R y B > G); ~0 en fondos gris/negro (etiquetas inactivas: el que no habla)."""
     pts = np.array(box)
     xs, ys = pts[:, 0], pts[:, 1]
     h, w = image_arr.shape[:2]
@@ -85,13 +89,13 @@ def _box_background(image_arr: np.ndarray, box: Any) -> tuple[float, float]:
     mean = crop.reshape(-1, 3).mean(axis=0)
     mx, mn = float(mean.max()), float(mean.min())
     saturation = (mx - mn) / (mx + 1e-6)
-    blue_dominance = float(mean[2]) - float(mean[0])  # B - R
-    return saturation, blue_dominance
+    chroma = max(float(mean[2]), float(mean[0])) - float(mean[1])  # max(B,R) - G
+    return saturation, chroma
 
 
 def _is_highlighted(image_arr: np.ndarray, box: Any) -> bool:
-    saturation, blue_dominance = _box_background(image_arr, box)
-    return saturation >= _MIN_HIGHLIGHT_SATURATION and blue_dominance >= _MIN_BLUE_DOMINANCE
+    saturation, chroma = _box_background(image_arr, box)
+    return saturation >= _MIN_HIGHLIGHT_SATURATION and chroma >= _MIN_HIGHLIGHT_CHROMA
 
 
 def detect_active_speaker_name(image: Image.Image) -> str | None:
@@ -106,7 +110,7 @@ def detect_active_speaker_name(image: Image.Image) -> str | None:
         return None
 
     best_name: str | None = None
-    best_blue = 0.0
+    best_chroma = 0.0
     for i, text in enumerate(out.txts):
         if i >= len(boxes):
             continue
@@ -115,9 +119,9 @@ def detect_active_speaker_name(image: Image.Image) -> str | None:
             continue
         if not _is_highlighted(arr, boxes[i]):
             continue
-        _, blue = _box_background(arr, boxes[i])
-        if blue > best_blue:
-            best_blue = blue
+        _, chroma = _box_background(arr, boxes[i])
+        if chroma > best_chroma:
+            best_chroma = chroma
             best_name = text
     return best_name
 

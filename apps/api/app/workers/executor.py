@@ -201,7 +201,7 @@ def reap_stale_jobs() -> int:
     return reap_orphans(get_settings().JOB_STALE_MINUTES)
 
 
-def reap_orphans(minutes: int) -> int:
+def reap_orphans(minutes: int, include_media: bool = False) -> int:
     """Devuelve a QUEUED y re-encola los jobs RUNNING/RETRYING más antiguos que `minutes`.
 
     La función `jobs_reap_stale` es SECURITY DEFINER (BYPASSRLS): barre todas las
@@ -216,7 +216,7 @@ def reap_orphans(minutes: int) -> int:
 
     with tx(None) as c:  # sin org: la propia función SQL es la que bypasea RLS
         stale = rows(c, "SELECT id, organization_id, case_id, job_type, previous_status, created_by "
-                        "FROM jobs_reap_stale(:m)", m=minutes)
+                        "FROM jobs_reap_stale(:m, :inc)", m=minutes, inc=include_media)
     for job in stale:
         log.warning("job %s (%s) huérfano en %s -> QUEUED", job["id"], job["job_type"], job["previous_status"])
         if job["created_by"]:
