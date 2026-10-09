@@ -136,9 +136,55 @@ def _batch_windows(items: list[dict[str, Any]], size: int = _EXTRACTION_MAX_ITEM
         yield batch
 
 
+def _extract_json_block(txt: str) -> str | None:
+    """Recorta el primer objeto/arreglo JSON balanceado (el modelo suele añadir
+    prosa o cercas de código alrededor)."""
+    start = next((i for i, ch in enumerate(txt) if ch in "{["), None)
+    if start is None:
+        return None
+    open_ch = txt[start]
+    close_ch = "}" if open_ch == "{" else "]"
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(txt)):
+        ch = txt[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return txt[start:i + 1]
+    return None
+
+
 def _parse_json(raw: str) -> dict[str, Any]:
+    """Parseo tolerante: muchos modelos (p. ej. Gemini Flash-Lite) devuelven JSON
+    casi válido — con cercas, prosa o comas finales — que `json.loads` rechaza."""
     txt = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.M).strip()
-    return json.loads(txt)
+    try:
+        return json.loads(txt, strict=False)
+    except json.JSONDecodeError:
+        pass
+    block = _extract_json_block(txt)
+    if block is not None and block != txt:
+        try:
+            return json.loads(block, strict=False)
+        except json.JSONDecodeError:
+            pass
+    # Reparación mecánica segura: comas finales antes de } o ].
+    candidate = re.sub(r",\s*([}\]])", r"\1", block if block is not None else txt)
+    return json.loads(candidate, strict=False)
 
 
 def _validate(
