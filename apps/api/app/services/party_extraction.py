@@ -402,4 +402,91 @@ def auto_extract_and_upsert(conn: Connection, org_id: str, case_id: str) -> dict
                            WHERE case_id = :c AND coalesce(display_name,'') <> ''""", c=case_id):
         items.append({"name": s["display_name"], "role": s["speaker_role"] or "third_party",
                       "entity_type": entity_type(s["display_name"])})
-    return auto_upsert(conn, org_id, case_id, items)
+    res = auto_upsert(conn, org_id, case_id, items)
+    # Automático: asigna el lado (demandante/demandada) de cada apoderado buscándolo en el OCR.
+    res["attorney_sides"] = infer_attorney_sides(conn, case_id)
+    return res
+
+
+# --- Inferencia automática del LADO del apoderado (demandante / demandada) ---
+# Solo señales FUERTES sobre el texto normalizado (sin acentos, mayúsculas):
+#  A) "APODERAD[OA] ... <apellido>" con la palabra del lado en la MISMA frase.
+#  B) bloque "APODERADO: <apellido>" y la última etiqueta previa DEMANDANTE:/DEMANDADO:.
+_ATT = re.compile(r"APODERAD[OA]")
+_SIDE_CLAIM = re.compile(r"\b(DEMANDANTE|ACTORA|EJECUTANTE|ACCIONANTE)")
+_SIDE_DEF = re.compile(r"\b(DEMANDAD[OA]|EJECUTAD[OA])")
+_APODERADO_BLOCK = re.compile(r"APODERAD[OA]\s*:\s*([^\n]{0,90})")
+
+
+def _surname_tokens(name: str) -> list[str]:
+    """Los 1-2 apellidos (últimos tokens) para buscar al apoderado en el texto."""
+    toks = [t for t in re.findall(r"[A-Z0-9]+", strip_accents(name or "").upper()) if len(t) >= 3]
+    return toks[-2:] if len(toks) >= 2 else toks
+
+
+def _vote_window(window: str, surnames: list[str], votes: dict[str, int]) -> None:
+    """Vota el lado para cada 'APODERADO … <apellido>' cuyo lado aparece en la misma frase."""
+    for m in _ATT.finditer(window):
+        seg = window[m.end(): m.end() + 80]
+        if not any(sn in seg for sn in surnames):
+            continue
+        c = _SIDE_CLAIM.search(seg)
+        d = _SIDE_DEF.search(seg)
+        ci = c.start() if c else 10 ** 9
+        di = d.start() if d else 10 ** 9
+        if ci < di:
+            votes["claimant"] += 2
+        elif di < ci:
+            votes["defendant"] += 2
+
+
+def infer_attorney_sides(conn: Connection, case_id: str) -> dict[str, Any]:
+    """A partir del OCR/ASR, asigna `attorney_claimant`/`attorney_defendant` a los apoderados
+    genéricos cuando el texto lo evidencia con claridad. Conservador: si el apoderado aparece
+    en AMBOS extremos (histórico largo) o no hay señal, se deja el rol genérico."""
+    attorneys = rows(conn, "SELECT id, name FROM parties "
+                           "WHERE case_id = :c AND role = 'attorney'", c=case_id)
+    if not attorneys:
+        return {"checked": 0, "assigned": 0}
+
+    texts: list[str] = [strip_accents(r["text"] or "").upper() for r in rows(conn, """
+        SELECT p.text FROM document_pages p JOIN documents d ON d.id = p.document_id
+        WHERE d.case_id = :c""", c=case_id)]
+    texts += [strip_accents(r["text"] or "").upper() for r in rows(conn, """
+        SELECT s.text FROM transcript_segments s JOIN media m ON m.id = s.media_id
+        WHERE m.case_id = :c""", c=case_id)]
+
+    assigned = 0
+    for a in attorneys:
+        surnames = _surname_tokens(a["name"])
+        if not surnames:
+            continue
+        votes = {"claimant": 0, "defendant": 0}
+        for t in texts:
+            for sn in surnames:
+                start = 0
+                while True:
+                    i = t.find(sn, start)
+                    if i < 0:
+                        break
+                    _vote_window(t[max(0, i - 280): i + 340], surnames, votes)
+                    start = i + 1
+            for m in _APODERADO_BLOCK.finditer(t):
+                if any(sn in m.group(1) for sn in surnames):
+                    before = t[:m.start()]
+                    pc, pd = before.rfind("DEMANDANTE:"), before.rfind("DEMANDADO:")
+                    if pc > pd and pc >= 0:
+                        votes["claimant"] += 2
+                    elif pd > pc and pd >= 0:
+                        votes["defendant"] += 2
+        # Asigna por mayoría clara; si hay empate o señal débil, deja el rol genérico.
+        if votes["claimant"] >= 2 and votes["claimant"] > votes["defendant"]:
+            role = "attorney_claimant"
+        elif votes["defendant"] >= 2 and votes["defendant"] > votes["claimant"]:
+            role = "attorney_defendant"
+        else:
+            continue
+        conn.execute(text("UPDATE parties SET role = :r WHERE id = :i AND case_id = :c"),
+                     {"r": role, "i": str(a["id"]), "c": case_id})
+        assigned += 1
+    return {"checked": len(attorneys), "assigned": assigned}

@@ -34,3 +34,25 @@ def test_role_from_header_generic_attorney_and_others():
     assert pe._role_from_header("Demandante") == "claimant"
     assert pe._role_from_header("Demandado") == "defendant"
     assert pe._role_from_header("texto cualquiera") is None
+
+
+def test_surname_tokens():
+    """Toma los apellidos (últimos tokens) para buscar en el texto."""
+    assert pe._surname_tokens("Carlos Alfonso Gómez Garcés") == ["GOMEZ", "GARCES"]
+    assert pe._surname_tokens("Yalitza Paola Jaimes Ibáñez") == ["JAIMES", "IBANEZ"]
+    assert pe._surname_tokens("") == []
+
+
+def test_vote_window_infers_side_near_name():
+    """Vota el lado cuando 'APODERADO … <apellido>' y el lado están en la misma frase."""
+    v = {"claimant": 0, "defendant": 0}
+    pe._vote_window("APODERADO DE LA PARTE DEMANDANTE, DR. CARLOS GOMEZ GARCES", ["GOMEZ", "GARCES"], v)
+    assert v["claimant"] == 2 and v["defendant"] == 0
+
+    v = {"claimant": 0, "defendant": 0}
+    pe._vote_window("APODERADO DEL DEMANDADO: JESUS GUTIERREZ SANCHEZ", ["GUTIERREZ", "SANCHEZ"], v)
+    assert v["defendant"] == 2 and v["claimant"] == 0
+
+    v = {"claimant": 0, "defendant": 0}
+    pe._vote_window("APODERADO DE OTRA PERSONA SIN RELACION", ["GOMEZ"], v)
+    assert v == {"claimant": 0, "defendant": 0}
