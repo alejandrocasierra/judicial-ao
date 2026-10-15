@@ -80,16 +80,15 @@ export function displayDate(iso: string | null | undefined, precision?: string |
   return `${da} de ${MONTHS_ES[mo - 1]} de ${y}`;
 }
 
-/** Fecha y precisión efectivas: actuación > documento > incorporación. */
+/** Fecha y precisión efectivas: fecha del acto > fecha del documento.
+ *  NO se usa `incorporation_date` (fecha de subida del archivo): mostrarla como fecha
+ *  del acto sería engañoso, sobre todo en audiencias en video. */
 export function eventDateParts(ev: TimelineEvent): { iso: string | null; precision: string } {
   if (ev.event_date && !REJECT_DATES.has(ev.event_date)) {
     return { iso: ev.event_date, precision: ev.date_precision || "day" };
   }
   if (ev.document_date && !REJECT_DATES.has(ev.document_date)) {
     return { iso: ev.document_date, precision: "day" };
-  }
-  if (ev.incorporation_date && !REJECT_DATES.has(ev.incorporation_date)) {
-    return { iso: ev.incorporation_date, precision: "day" };
   }
   return { iso: null, precision: "unknown" };
 }
