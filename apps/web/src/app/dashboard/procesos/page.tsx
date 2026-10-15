@@ -96,6 +96,10 @@ export default function ProcesosPage() {
   // "documento" e "incorporacion" son metadatos/citas y generan ruido y duplicados.
   const [soloReales, setSoloReales] = useState(true);
   const [pendingFocus, setPendingFocus] = useState<string | null>(null);
+  // Eventos cuyos orígenes/vínculos están expandidos (por defecto se muestran pocos).
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const scrollToEvent = (id: string) =>
     document.getElementById(`ev-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   // Si la actuación está en la vista actual, hace scroll; si no (p. ej. estamos en el
@@ -180,30 +184,53 @@ export default function ProcesosPage() {
       {ev.procedural_effect && (
         <p className="mt-0.5 text-xs text-muted-foreground"><b>Efecto:</b> {ev.procedural_effect}</p>
       )}
-      {(ev.links ?? []).length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1">
-          {(ev.links ?? []).map((l, i) => (
-            <button key={`${l.other_id}-${l.relationship}-${i}`} type="button"
-              onClick={() => scrollToEvent(l.other_id)}
-              className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
-              title={`Ir a ${l.other_code}`}>
-              {l.direction === "out" ? "→" : "←"} {REL_ES[l.relationship] || l.relationship} {l.other_code}
-            </button>
-          ))}
-        </div>
-      )}
-      {ev.sources?.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1">
-          {ev.sources.map((s) => (
-            <button key={s.citation_id} type="button" onClick={() => openSource(s)}
-              className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
-              {s.source_type === "document_page" ? <FileText className="h-3 w-3" /> : <Video className="h-3 w-3" />}
-              {s.filename || (s.source_type === "document_page" ? "documento" : "video")}
-              {s.source_type === "document_page" ? ` p.${s.page}` : ` ${mmss(s.start_ms)}`}
-            </button>
-          ))}
-        </div>
-      )}
+      {(ev.links ?? []).length > 0 && (() => {
+        const all = ev.links ?? [];
+        const open = expanded.has(ev.id);
+        const shown = open ? all : all.slice(0, 6);
+        return (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {shown.map((l, i) => (
+              <button key={`${l.other_id}-${l.relationship}-${i}`} type="button"
+                onClick={() => scrollToEvent(l.other_id)}
+                className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+                title={`Ir a ${l.other_code}`}>
+                {l.direction === "out" ? "→" : "←"} {REL_ES[l.relationship] || l.relationship} {l.other_code}
+              </button>
+            ))}
+            {all.length > 6 && (
+              <button type="button" onClick={() => toggleExpanded(ev.id)}
+                className="rounded border border-dashed px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
+                {open ? "ver menos" : `+${all.length - 6} vínculos`}
+              </button>
+            )}
+          </div>
+        );
+      })()}
+      {ev.sources?.length > 0 && (() => {
+        const all = ev.sources;
+        const open = expanded.has(`${ev.id}:src`);
+        const shown = open ? all : all.slice(0, 4);
+        return (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {shown.map((s) => (
+              <button key={s.citation_id} type="button" onClick={() => openSource(s)}
+                className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
+                {s.source_type === "document_page" ? <FileText className="h-3 w-3" /> : <Video className="h-3 w-3" />}
+                {s.filename || (s.source_type === "document_page" ? "documento" : "video")}
+                {s.source_type === "document_page" ? ` p.${s.page}` : ` ${mmss(s.start_ms)}`}
+              </button>
+            ))}
+            {all.length > 4 && (
+              <button type="button" onClick={() => toggleExpanded(`${ev.id}:src`)}
+                title="Orígenes donde se menciona esta actuación"
+                className="rounded border border-dashed px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
+                {open ? "ver menos" : `+${all.length - 4} orígenes`}
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </li>
   );
 

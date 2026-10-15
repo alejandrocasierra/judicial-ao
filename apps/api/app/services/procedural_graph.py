@@ -98,19 +98,28 @@ def link_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
         best, best_score = None, 0.0
         rd = _date(r["event_date"])
         for e in real:
-            score = 0.0
-            if r["subtype"] and r["subtype"] == e["subtype"]:
-                score += 0.6
-            elif r["event_type"] and r["event_type"] == e["event_type"]:
-                score += 0.3
+            sim = _sim(r["description"], e["description"])
+            same_sub = bool(r["subtype"]) and r["subtype"] == e["subtype"]
+            # Exigimos coincidencia REAL: mismo subtipo, o texto claramente igual.
+            # Así una mención genérica no se "absorbe" en cualquier actuación parecida
+            # y no le arrastra decenas de citas ajenas.
+            if not same_sub and sim < 0.5:
+                continue
+            days: int | None = None
             ed = _date(e["event_date"])
             if rd and ed:
                 days = abs((rd - ed).days)
-                score += 0.4 if days == 0 else (0.2 if days <= 45 else 0.0)
-            score += 0.2 * _sim(r["description"], e["description"])
+            if not same_sub and (days is None or days > 45):
+                continue
+            score = (0.6 if same_sub else 0.3)
+            if days == 0:
+                score += 0.4
+            elif days is not None and days <= 45:
+                score += 0.2
+            score += 0.4 * sim
             if score > best_score:
                 best, best_score = e, score
-        if best is not None and best_score >= 0.5:
+        if best is not None and best_score >= 0.6:
             # El real absorbe las citas y el referenciado se borra: NO se crea una
             # relación (apuntaría a un evento ya eliminado).
             _absorb_event_citations(conn, org_id, case_id, str(r["id"]), str(best["id"]))
