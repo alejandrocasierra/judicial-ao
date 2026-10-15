@@ -167,7 +167,7 @@ export default function VideosPage() {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-6xl">
+        <DialogContent className="max-w-[1600px]">
           <DialogHeader><DialogTitle>{media?.title || media?.filename}</DialogTitle></DialogHeader>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">

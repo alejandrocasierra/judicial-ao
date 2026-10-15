@@ -128,3 +128,116 @@ def test_ut_grp_05_speaker_nodes_use_display_name(monkeypatch):
     speaker_nodes = [n for n in calls["nodes"] if n["type"] == "Speaker"]
     assert speaker_nodes and speaker_nodes[0]["label"] == "Álvaro Lúzico Álvarez"
     assert any(e["type"] == "HAS_SPEAKER" for e in calls["edges"])
+
+
+def test_ut_grp_06_event_relationships_projected_to_graph(monkeypatch):
+    """build_case_graph proyecta event_relationships a graph_edges con tipos y provenance correctos."""
+    calls: dict[str, list] = {"nodes": [], "edges": []}
+    node_map: dict[tuple[str, str], str] = {}
+
+    def fake_insert_node(_c, _o, _cid, node_type, source_table, source_id, label, metadata=None):
+        nid = str(uuid.uuid4())
+        node_map[(source_table, source_id)] = nid
+        calls["nodes"].append({"type": node_type, "source_table": source_table, "source_id": source_id, "label": label})
+        return nid
+
+    def fake_insert_edge(_c, _o, _cid, src, tgt, edge_type, provenance, confidence=None, metadata=None):
+        calls["edges"].append({
+            "src": src, "tgt": tgt, "type": edge_type,
+            "provenance": provenance, "confidence": confidence, "metadata": metadata,
+        })
+
+    def fake_node_id(_c, _cid, source_table, source_id):
+        return node_map.get((source_table, source_id))
+
+    monkeypatch.setattr(gr, "_delete_case_graph", lambda *a: None)
+    monkeypatch.setattr(gr, "_insert_node", fake_insert_node)
+    monkeypatch.setattr(gr, "_insert_edge", fake_insert_edge)
+    monkeypatch.setattr(gr, "_node_id", fake_node_id)
+
+    e1 = str(uuid.uuid4())
+    e2 = str(uuid.uuid4())
+    e3 = str(uuid.uuid4())
+
+    def _rows(_c, sql: str, **params):
+        if "count(*)" in sql:
+            return [{"n": 1}]
+        if "FROM cases" in sql:
+            return [{"case_number": "2018-361", "title": "Caso prueba"}]
+        if "FROM events" in sql and "event_relationships" not in sql:
+            return [
+                {"id": uuid.UUID(e1), "description": "Demanda", "participants": []},
+                {"id": uuid.UUID(e2), "description": "Auto admisorio", "participants": []},
+                {"id": uuid.UUID(e3), "description": "Sentencia", "participants": []},
+            ]
+        if "FROM event_relationships" in sql:
+            return [
+                {"source_event_id": uuid.UUID(e1), "target_event_id": uuid.UUID(e2),
+                 "relationship": "precede", "confidence": 0.7, "provenance": "INFERRED"},
+                {"source_event_id": uuid.UUID(e2), "target_event_id": uuid.UUID(e3),
+                 "relationship": "causes", "confidence": 0.85, "provenance": "EXTRACTED"},
+                {"source_event_id": uuid.UUID(e3), "target_event_id": uuid.UUID(e1),
+                 "relationship": "appeals", "confidence": 0.6, "provenance": "INFERRED"},
+                {"source_event_id": uuid.UUID(e1), "target_event_id": uuid.UUID(e3),
+                 "relationship": "responds_to", "confidence": 0.75, "provenance": "EXTRACTED"},
+                {"source_event_id": uuid.UUID(e2), "target_event_id": uuid.UUID(e1),
+                 "relationship": "refers_to", "confidence": 0.5, "provenance": "INFERRED"},
+            ]
+        return []
+
+    monkeypatch.setattr(gr, "rows", _rows)
+    gr.build_case_graph(object(), ORG, CASE)
+
+    edges_by_type = {e["type"]: e for e in calls["edges"]}
+    assert "PRECEDES" in edges_by_type
+    assert edges_by_type["PRECEDES"]["provenance"] == "INFERRED"
+    assert edges_by_type["PRECEDES"]["confidence"] == pytest.approx(0.7)
+    assert edges_by_type["PRECEDES"]["metadata"] == {"relationship_type": "precede"}
+    assert "CAUSES" in edges_by_type
+    assert edges_by_type["CAUSES"]["provenance"] == "EXTRACTED"
+    assert edges_by_type["CAUSES"]["confidence"] == pytest.approx(0.85)
+    assert "APPEALS" in edges_by_type
+    assert "RESPONDS_TO" in edges_by_type
+    assert "REFERS_TO" in edges_by_type
+
+
+def test_ut_grp_07_event_relationships_skip_orphan_events(monkeypatch):
+    """No se crean aristas si uno de los eventos no tiene nodo en el grafo."""
+    calls: dict[str, list] = {"edges": []}
+    existing_nodes: dict[tuple[str, str], str] = {}
+
+    def fake_insert_node(_c, _o, _cid, node_type, source_table, source_id, label, metadata=None):
+        nid = str(uuid.uuid4())
+        existing_nodes[(source_table, source_id)] = nid
+        return nid
+
+    def fake_insert_edge(_c, _o, _cid, src, tgt, edge_type, provenance, confidence=None, metadata=None):
+        calls["edges"].append({"src": src, "tgt": tgt, "type": edge_type})
+
+    def fake_node_id(_c, _cid, source_table, source_id):
+        return existing_nodes.get((source_table, source_id))
+
+    monkeypatch.setattr(gr, "_delete_case_graph", lambda *a: None)
+    monkeypatch.setattr(gr, "_insert_node", fake_insert_node)
+    monkeypatch.setattr(gr, "_insert_edge", fake_insert_edge)
+    monkeypatch.setattr(gr, "_node_id", fake_node_id)
+
+    e1 = str(uuid.uuid4())
+
+    def _rows(_c, sql: str, **params):
+        if "count(*)" in sql:
+            return [{"n": 1}]
+        if "FROM cases" in sql:
+            return [{"case_number": "2018-361", "title": "Caso prueba"}]
+        if "FROM events" in sql and "event_relationships" not in sql:
+            return [{"id": uuid.UUID(e1), "description": "Evento real", "participants": []}]
+        if "FROM event_relationships" in sql:
+            return [
+                {"source_event_id": uuid.UUID(e1), "target_event_id": uuid.uuid4(),
+                 "relationship": "precede", "confidence": 0.7, "provenance": "INFERRED"},
+            ]
+        return []
+
+    monkeypatch.setattr(gr, "rows", _rows)
+    gr.build_case_graph(object(), ORG, CASE)
+    assert not any(e["type"] == "PRECEDES" for e in calls["edges"])

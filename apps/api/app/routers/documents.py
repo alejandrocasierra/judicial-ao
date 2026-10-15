@@ -17,7 +17,7 @@ from app.security.deps import Principal, case_access, current_principal, downloa
 from app.services import audit, file_delete, files, indexing, markdown, ocr_confidence, ocr_lexicon, ratelimit
 from app.services.storage import incoming_dir, key_from_uri, original_key, storage
 from app.workers.dispatcher import create_job, enqueue_if_pending
-from app.workers.handlers.file_ingest import enqueue_graph_refresh
+from app.workers.handlers.file_ingest import enqueue_graph_refresh, enqueue_legal_extraction
 
 router = APIRouter(prefix="/cases/{case_id}", tags=["documents"])
 log = logging.getLogger(__name__)
@@ -329,6 +329,12 @@ def update_page(case_id: UUID, document_id: UUID, page_number: int, body: Docume
     except Exception:
         log.exception("no se pudo encolar graph_build tras corregir la página %s del documento %s",
                       page_number, document_id)
+    # Re-extracción legal: el OCR corregido puede cambiar actuaciones/fechas/entidades.
+    try:
+        enqueue_legal_extraction(str(p.org_id), str(case_id), str(p.user_id), [str(document_id)])
+    except Exception:
+        log.exception("no se pudo encolar legal_extraction tras corregir la página %s del documento %s",
+                      page_number, document_id)
     return {"document_id": str(document_id), "page_number": page_number, "mode": effective_mode,
             "confidence": new_conf, "chars_total": metrics["total"], "chars_changed": metrics["changed"],
             "letters": metrics["letters"], "learned_terms": learned, "reindexed": True,
@@ -424,7 +430,9 @@ def update_segment(case_id: UUID, media_id: UUID, segment_id: UUID, body: Transc
         sets = ["needs_review = false"]
         params: dict[str, object] = {"s": str(segment_id), "m": str(media_id)}
         if body.text is not None:
-            sets += ["text = :t", "confidence = 1.0"]
+            # El texto corregido a mano invalida los timestamps por palabra de Whisper
+            # (ya no corresponden al texto): se limpian para no partir con datos falsos.
+            sets += ["text = :t", "confidence = 1.0", "words = NULL"]
             params["t"] = body.text
         speaker_set = "speaker_id" in body.model_fields_set
         if speaker_set:
@@ -457,6 +465,11 @@ def update_segment(case_id: UUID, media_id: UUID, segment_id: UUID, body: Transc
         enqueue_graph_refresh(str(p.org_id), str(case_id), str(p.user_id), correction=True)
     except Exception:
         log.exception("no se pudo encolar graph_build tras corregir el segmento (caso %s)", case_id)
+    # Re-extracción legal: la transcripción corregida puede cambiar actuaciones/fechas/entidades.
+    try:
+        enqueue_legal_extraction(str(p.org_id), str(case_id), str(p.user_id), [str(media_id)])
+    except Exception:
+        log.exception("no se pudo encolar legal_extraction tras corregir el segmento (caso %s)", case_id)
     return {"segment_id": str(segment_id), "learned_terms": learned, "reindexed": True,
             "graph_refresh_scheduled": True}
 

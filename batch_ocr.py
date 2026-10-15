@@ -7,6 +7,7 @@ Uso: python batch_ocr.py
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -20,7 +21,8 @@ LOG = Path(r"C:\Users\ale13\AppData\Local\Temp\opencode\batch_ocr.log")
 PG = ["docker", "exec", "judicial-ai-postgres-1", "psql", "-U", "postgres", "-d", "judicial", "-t", "-A", "-F", "\x1f", "-c"]
 
 TERMINAL = {"OCR_COMPLETE", "REVIEW_REQUIRED", "FAILED", "INDEXED"}
-EMAIL, PASSWORD = "admin@judicial.ai", "9O5[v0>tu-7b"
+EMAIL = os.environ.get("JUDICIAL_ADMIN_EMAIL", "admin@judicial.ai")
+PASSWORD = os.environ["JUDICIAL_ADMIN_PASSWORD"]
 
 
 def log(msg: str) -> None:

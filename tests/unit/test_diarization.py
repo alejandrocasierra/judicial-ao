@@ -60,6 +60,8 @@ def test_ut_diar_02_diarize_uses_pyannote_when_token_set(tmp_path):
         mock_settings.return_value.ASR_DIARIZATION_TOKEN = "hf_test"
         mock_settings.return_value.HF_TOKEN = "hf_test"
         mock_settings.return_value.FFMPEG_PATH = ""
+        # Sin tramos: el audio corto debe procesarse en una sola pasada por pyannote.
+        mock_settings.return_value.ASR_DIARIZATION_CHUNK_SECONDS = 0
         with patch("app.services.diarization.extract_audio_to_wav", return_value=wav_path):
             with patch("pyannote.audio.Pipeline.from_pretrained") as mock_from_pretrained:
                 pipeline = MagicMock()

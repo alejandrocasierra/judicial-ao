@@ -19,6 +19,7 @@ import logging
 import re
 import unicodedata
 import uuid
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from sqlalchemy.engine import Connection
 
 from app.core.config import get_settings
 from app.core.db import one, rows
+from app.domain.procedural_catalog import normalize_subtype
 from app.providers import llm
 from app.providers.llm import LLMResult
 
@@ -71,6 +73,28 @@ def _source_label(it: dict[str, Any]) -> str:
     return f"media:{it['media_id']} {it['start_ms']}-{it['end_ms']}ms speaker:{it['speaker'] or 'unknown'}"
 
 
+def _source_folder_path(conn: Connection, case_id: str, source_type: str, source_id: str) -> str | None:
+    """Devuelve la ruta de carpetas ('A / B / C') de un documento o media."""
+    table = "documents" if source_type == "document" else "media" if source_type == "media" else None
+    if not table:
+        return None
+    row = one(conn, f"SELECT folder_id FROM {table} WHERE case_id = :c AND id = :id", c=case_id, id=source_id)
+    folder_id = row.get("folder_id") if row else None
+    if not folder_id:
+        return None
+    rows_f = rows(conn, "SELECT id, parent_id, name FROM case_folders WHERE case_id = :c", c=case_id)
+    by_id = {str(f["id"]): f for f in rows_f}
+    parts: list[str] = []
+    cur: str | None = str(folder_id)
+    seen: set[str] = set()
+    while cur and cur in by_id and cur not in seen:
+        seen.add(cur)
+        parts.append(by_id[cur]["name"])
+        parent = by_id[cur]["parent_id"]
+        cur = str(parent) if parent else None
+    return " / ".join(reversed(parts)) if parts else None
+
+
 def build_evidence_blocks(
     conn: Connection,
     case_id: str,
@@ -85,10 +109,20 @@ def build_evidence_blocks(
     s = get_settings()
     max_chars = max_chars or s.RETRIEVAL_SNIPPET_MAX_CHARS
     if source_type == "document":
+        # Texto efectivo: corrección humana > versión del modo configurado > document_pages actual.
         items = rows(conn, """
             SELECT 'document_page' AS source_type, p.document_id, p.page_number, p.folio,
-                   left(p.text, :n) AS text, d.filename
-            FROM document_pages p JOIN documents d ON d.id = p.document_id
+                   left(CASE
+                     WHEN p.human_corrected THEN p.text
+                     WHEN d.ocr_mode IN ('basico', 'document_ai') AND v.text IS NOT NULL THEN v.text
+                     ELSE p.text
+                   END, :n) AS text, d.filename
+            FROM document_pages p
+            JOIN documents d ON d.id = p.document_id
+            LEFT JOIN document_ocr_versions v
+              ON v.document_id = p.document_id
+             AND v.page_number = p.page_number
+             AND v.mode = d.ocr_mode
             WHERE d.case_id = :c AND p.document_id = :sid
             ORDER BY p.page_number""", c=case_id, n=max_chars, sid=source_id)
     elif source_type == "media":
@@ -114,10 +148,18 @@ def build_evidence_blocks(
     return items, h.hexdigest()
 
 
-def build_user_prompt(items: list[dict[str, Any]]) -> str:
-    """El contenido del expediente se escapa para evitar prompt injection."""
-    blocks = [f'<evidence id="{it["handle"]}" source="{html.escape(_source_label(it), quote=True)}">\n'
-              f'{html.escape(it["text"], quote=False)}\n</evidence>' for it in items]
+def build_user_prompt(items: list[dict[str, Any]], with_segment: bool = False) -> str:
+    """El contenido del expediente se escapa para evitar prompt injection.
+
+    Con ``with_segment`` cada bloque de evidencia incluye el segmento estructural
+    (encabezado/cuerpo/decision/anexos) detectado por document_segmentation.
+    """
+    blocks = []
+    for it in items:
+        attrs = f'id="{it["handle"]}" source="{html.escape(_source_label(it), quote=True)}"'
+        if with_segment and it.get("segment"):
+            attrs += f' segment="{html.escape(str(it["segment"]), quote=True)}"'
+        blocks.append(f"<evidence {attrs}>\n{html.escape(it['text'], quote=False)}\n</evidence>")
     return "\n".join(blocks)
 
 
@@ -134,6 +176,18 @@ def _batch_windows(items: list[dict[str, Any]], size: int = _EXTRACTION_MAX_ITEM
         for j, it in enumerate(batch, 1):
             it["handle"] = f"E{j}"
         yield batch
+
+
+def _annotate_segments(items: list[dict[str, Any]]) -> int:
+    """Anota cada item con su segmento estructural (si la segmentación está activa).
+
+    La segmentación (encabezado/cuerpo/decisión/anexos) es una capa previa a la
+    extracción: le dice al LLM DÓNDE está la decisión, la autoridad y las fechas.
+    """
+    if not get_settings().DOCUMENT_SEGMENTATION_ENABLED:
+        return 0
+    from app.services import document_segmentation
+    return document_segmentation.annotate_segments(items)
 
 
 def _extract_json_block(txt: str) -> str | None:
@@ -298,14 +352,27 @@ _ALLOWED_ENTITY_TYPES = {"person", "organization", "contract", "asset", "account
                          "place", "date", "money", "related_case", "legal_rule", "authority"}
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Fechas placeholder que los modelos usan cuando no encuentran una fecha real.
+_REJECT_DATES = {"1899-12-31", "1899-12-30", "1900-01-01", "0001-01-01"}
 
 
 def _safe_date(value: Any) -> str | None:
-    """Devuelve una fecha ISO válida (YYYY-MM-DD) o None (el modelo a veces manda 'unknown'/'' )."""
+    """Devuelve una fecha ISO válida (YYYY-MM-DD) o None.
+
+    Rechaza placeholders comunes (1899-12-31, 1900-01-01), fechas futuras y
+    fechas imposibles. El modelo a veces devuelve 'unknown'/''/placeholders.
+    """
     if isinstance(value, str):
         v = value.strip()
-        if _DATE_RE.match(v):
-            return v
+        if _DATE_RE.match(v) and v not in _REJECT_DATES:
+            try:
+                d = date.fromisoformat(v)
+                today = date.today()
+                # Rechazar fechas futuras (> 1 año) y fechas imposibles (año < 1800).
+                if 1800 <= d.year <= today.year + 1:
+                    return v
+            except ValueError:
+                pass
     return None
 
 
@@ -416,20 +483,25 @@ def _insert_events(
     org_id: str,
     case_id: str,
     events: list[dict[str, Any]],
+    source_type: str | None = None,
+    source_id: str | None = None,
 ) -> list[str]:
+    document_date, incorporation_date = _source_dates(conn, case_id, source_type, source_id)
     ids: list[str] = []
     for e in events:
         eid = _valid_uuid_or_new(e.get("id"))
         ids.append(eid)
         one(conn, """
             INSERT INTO events
-              (id, organization_id, case_id, event_type, event_date, date_precision,
-               description, timeline_confidence, confidence, participants)
+              (id, organization_id, case_id, event_type, event_date, document_date, incorporation_date,
+               date_precision, description, timeline_confidence, confidence, participants)
             VALUES
-              (:id, :o, :c, :et, :ed, :dp, :desc, :tc, :conf, :parts)
+              (:id, :o, :c, :et, :ed, :docd, :incd, :dp, :desc, :tc, :conf, :parts)
             ON CONFLICT (id) DO UPDATE SET
               event_type = EXCLUDED.event_type,
               event_date = EXCLUDED.event_date,
+              document_date = EXCLUDED.document_date,
+              incorporation_date = EXCLUDED.incorporation_date,
               date_precision = EXCLUDED.date_precision,
               description = EXCLUDED.description,
               timeline_confidence = EXCLUDED.timeline_confidence,
@@ -437,6 +509,7 @@ def _insert_events(
               participants = EXCLUDED.participants
             RETURNING id""",
             id=eid, o=org_id, c=case_id, et=e["event_type"], ed=_safe_date(e.get("event_date")),
+            docd=document_date, incd=incorporation_date,
             dp=e.get("date_precision") or "day", desc=e["description"],
             tc=e["timeline_confidence"], conf=e.get("confidence"),
             parts=_uuid_list(e.get("participants") or []))
@@ -862,8 +935,9 @@ def extract_events(
     schema_path = get_settings().path("packages/schemas/event.schema.json")
     n_events = n_citations = 0
     last_validation: dict[str, Any] | None = None
+    _annotate_segments(all_items)
     for items in _batch_windows(all_items):
-        user = build_user_prompt(items)
+        user = build_user_prompt(items, with_segment=True)
         result = _call_llm(conn, case_id, system, user, "extract_events")
         data, validation = _validate_and_parse(result, schema_path, conn, case_id, actor_id, ["events"])
         _record_model_run(conn, org_id, case_id, "extract_events", prompt_id, prompt_version,
@@ -873,7 +947,7 @@ def extract_events(
             continue
         events = data.get("events") or []
         evidence_map = {it["handle"]: it for it in items}
-        ids = _insert_events(conn, org_id, case_id, events)
+        ids = _insert_events(conn, org_id, case_id, events, source_type, source_id)
         for eid, e in zip(ids, events, strict=False):
             _insert_citations(conn, org_id, case_id, "event", eid, e.get("sources") or [], evidence_map)
         n_events += len(ids)
@@ -883,36 +957,121 @@ def extract_events(
 
 
 def _insert_procedural_events(conn: Connection, org_id: str, case_id: str, document_id: str | None,
-                              events: list[dict[str, Any]]) -> list[str]:
+                              events: list[dict[str, Any]],
+                              fallback_date: str | None = None,
+                              source_type: str | None = None,
+                              source_id: str | None = None) -> list[str]:
+    document_date, incorporation_date = _source_dates(conn, case_id, source_type, source_id)
     ids: list[str] = []
     for e in events:
         eid = _valid_uuid_or_new(e.get("id"))
         ids.append(eid)
+        # Fallback: si la actuación no trae fecha explícita, usa la fecha del documento.
+        event_date = _safe_date(e.get("event_date"))
+        date_precision = e.get("date_precision") or "day"
+        if not event_date and fallback_date and e.get("date_type") in (None, "actuacion", "documento"):
+            event_date = fallback_date
+            date_precision = "day"
+            if e.get("timeline_confidence") == "source_backed":
+                e["timeline_confidence"] = "inferred"
+        if not event_date:
+            date_precision = "unknown"
+
+        raw_subtype = e.get("subtype")
+        canonical_subtype = normalize_subtype(raw_subtype)
+        if canonical_subtype is None and raw_subtype is not None:
+            log.warning("subtype procesal no reconocido: %r (case=%s)", raw_subtype, case_id)
+        subtype_raw = raw_subtype if (raw_subtype is not None and canonical_subtype != raw_subtype) else None
+
         one(conn, """
             INSERT INTO events
-              (id, organization_id, case_id, kind, event_type, subtype, instance, actor, authority,
-               date_type, procedural_effect, document_id, page_number, event_date, date_precision,
-               description, timeline_confidence, confidence, participants)
+              (id, organization_id, case_id, kind, event_type, subtype, subtype_raw, instance, actor, authority,
+               date_type, procedural_effect, document_id, page_number, event_date, document_date,
+               incorporation_date, date_precision, description, timeline_confidence, confidence, participants)
             VALUES
-              (:id, :o, :c, 'procedural', :et, :st, :inst, :act, :auth, :dt, :eff, :doc, :pg, :ed, :dp,
-               :desc, :tc, :conf, :parts)
+              (:id, :o, :c, 'procedural', :et, :st, :st_raw, :inst, :act, :auth, :dt, :eff, :doc, :pg, :ed, :docd,
+               :incd, :dp, :desc, :tc, :conf, :parts)
             ON CONFLICT (id) DO UPDATE SET
               kind = 'procedural', event_type = EXCLUDED.event_type, subtype = EXCLUDED.subtype,
-              instance = EXCLUDED.instance, actor = EXCLUDED.actor, authority = EXCLUDED.authority,
-              date_type = EXCLUDED.date_type, procedural_effect = EXCLUDED.procedural_effect,
-              document_id = EXCLUDED.document_id, page_number = EXCLUDED.page_number,
-              event_date = EXCLUDED.event_date, date_precision = EXCLUDED.date_precision,
-              description = EXCLUDED.description, timeline_confidence = EXCLUDED.timeline_confidence,
-              confidence = EXCLUDED.confidence, participants = EXCLUDED.participants
+              subtype_raw = EXCLUDED.subtype_raw, instance = EXCLUDED.instance, actor = EXCLUDED.actor,
+              authority = EXCLUDED.authority, date_type = EXCLUDED.date_type,
+              procedural_effect = EXCLUDED.procedural_effect, document_id = EXCLUDED.document_id,
+              page_number = EXCLUDED.page_number, event_date = EXCLUDED.event_date,
+              document_date = EXCLUDED.document_date, incorporation_date = EXCLUDED.incorporation_date,
+              date_precision = EXCLUDED.date_precision, description = EXCLUDED.description,
+              timeline_confidence = EXCLUDED.timeline_confidence, confidence = EXCLUDED.confidence,
+              participants = EXCLUDED.participants
             RETURNING id""",
-            id=eid, o=org_id, c=case_id, et=e.get("event_type") or "otro", st=e.get("subtype") or "otro",
-            inst=e.get("instance"), act=e.get("actor"), auth=e.get("authority"),
+            id=eid, o=org_id, c=case_id, et=e.get("event_type") or "otro", st=canonical_subtype,
+            st_raw=subtype_raw, inst=e.get("instance"), act=e.get("actor"), auth=e.get("authority"),
             dt=e.get("date_type") or "actuacion", eff=e.get("procedural_effect"),
-            doc=document_id, pg=e.get("page_number"), ed=_safe_date(e.get("event_date")),
-            dp=e.get("date_precision") or "day", desc=e["description"],
+            doc=document_id, pg=e.get("page_number"), ed=event_date,
+            docd=document_date, incd=incorporation_date,
+            dp=date_precision, desc=e["description"],
             tc=e.get("timeline_confidence") or "source_backed", conf=e.get("confidence"),
             parts=_uuid_list(e.get("participants") or []))
     return ids
+
+
+def _source_metadata(conn: Connection, case_id: str, source_type: str, source_id: str) -> dict[str, Any]:
+    """Metadatos de contexto para la extracción: fecha del documento y ruta de carpetas."""
+    out: dict[str, Any] = {"document_date": None, "folder_path": None, "filename": None}
+    if source_type == "document":
+        row = one(conn, "SELECT filename, document_date FROM documents WHERE case_id = :c AND id = :id",
+                  c=case_id, id=source_id)
+        if row:
+            out["filename"] = row.get("filename")
+            out["document_date"] = str(row.get("document_date")) if row.get("document_date") else None
+    elif source_type == "media":
+        row = one(conn, "SELECT filename FROM media WHERE case_id = :c AND id = :id",
+                  c=case_id, id=source_id)
+        if row:
+            out["filename"] = row.get("filename")
+    else:
+        return out
+    folder_path = _source_folder_path(conn, case_id, source_type, source_id)
+    if folder_path:
+        out["folder_path"] = folder_path
+    return out
+
+
+def _source_dates(conn: Connection, case_id: str, source_type: str | None,
+                  source_id: str | None) -> tuple[str | None, str | None]:
+    """Devuelve (document_date, incorporation_date) para un documento o medio.
+
+    document_date: fecha del documento según metadatos; si no existe, fecha de carga.
+    incorporation_date: fecha de carga/incorporación del documento o medio.
+    """
+    if source_type == "document" and source_id:
+        row = one(conn, "SELECT document_date, created_at::date AS incorporation_date "
+                        "FROM documents WHERE case_id = :c AND id = :id",
+                  c=case_id, id=source_id)
+        if row:
+            inc = str(row["incorporation_date"]) if row.get("incorporation_date") else None
+            doc = str(row["document_date"]) if row.get("document_date") else inc
+            return doc, inc
+    elif source_type == "media" and source_id:
+        row = one(conn, "SELECT created_at::date AS incorporation_date FROM media "
+                        "WHERE case_id = :c AND id = :id",
+                  c=case_id, id=source_id)
+        if row:
+            inc = str(row["incorporation_date"]) if row.get("incorporation_date") else None
+            return None, inc
+    return None, None
+
+
+def _metadata_prompt(metadata: dict[str, Any]) -> str:
+    """Bloque de metadatos que se antepone al prompt de extracción."""
+    parts: list[str] = []
+    if metadata.get("folder_path"):
+        parts.append(f'Ubicación en el expediente: "{metadata["folder_path"]}".')
+    if metadata.get("document_date"):
+        parts.append(f'Fecha del documento: {metadata["document_date"]}.')
+    if metadata.get("filename"):
+        parts.append(f'Nombre de archivo: {metadata["filename"]}.')
+    if not parts:
+        return ""
+    return "\n".join(["CONTEXTO DEL DOCUMENTO:", *parts, "", "EVIDENCIA:"]) + "\n"
 
 
 def extract_procedural_events(
@@ -926,18 +1085,21 @@ def extract_procedural_events(
 ) -> dict[str, Any]:
     """Extrae ACTUACIONES PROCESALES del documento/media y las persiste (kind='procedural')."""
     locale = locale or get_settings().DEFAULT_LOCALE
-    # v2: anti-ruido (sin encabezados/sellos) y anti-duplicado (una fila por actuación).
-    system, prompt_id, prompt_version = _load_extraction_prompt(conn, org_id, "extract_procedural_events", locale, version=2)
+    # v4: segmentos (encabezado/cuerpo/decisión/anexos) y catálogo canónico de subtipos.
+    system, prompt_id, prompt_version = _load_extraction_prompt(conn, org_id, "extract_procedural_events", locale, version=4)
     all_items, input_hash = build_evidence_blocks(conn, case_id, source_type, source_id)
     if not all_items:
         return {"events": 0, "citations": 0, "model_run": None, "warning": "no_evidence"}
 
+    _annotate_segments(all_items)
     document_id = source_id if source_type == "document" else None
+    metadata = _source_metadata(conn, case_id, source_type, source_id)
+    fallback_date = metadata.get("document_date")
     schema_path = get_settings().path("packages/schemas/procedural_event.schema.json")
     n_events = n_citations = 0
     last_validation: dict[str, Any] | None = None
     for items in _batch_windows(all_items):
-        user = build_user_prompt(items)
+        user = _metadata_prompt(metadata) + build_user_prompt(items, with_segment=True)
         result = _call_llm(conn, case_id, system, user, "extract_procedural_events")
         data, validation = _validate_and_parse(result, schema_path, conn, case_id, actor_id, ["events"])
         _record_model_run(conn, org_id, case_id, "extract_procedural_events", prompt_id, prompt_version,
@@ -947,7 +1109,8 @@ def extract_procedural_events(
             continue
         events = data.get("events") or []
         evidence_map = {it["handle"]: it for it in items}
-        ids = _insert_procedural_events(conn, org_id, case_id, document_id, events)
+        ids = _insert_procedural_events(conn, org_id, case_id, document_id, events, fallback_date,
+                                        source_type, source_id)
         for eid, e in zip(ids, events, strict=False):
             _insert_citations(conn, org_id, case_id, "event", eid, e.get("sources") or [], evidence_map)
         n_events += len(ids)

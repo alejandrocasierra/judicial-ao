@@ -13,14 +13,16 @@ from app.services.agent_tools import TOOL_DESCRIPTIONS
 
 BUILTIN_AGENT_NAME = "Agente jurídico (anti-alucinación)"
 
-BUILTIN_AGENT_PROMPT = (
-    "Eres el agente jurídico del expediente. Respondes SOLO con evidencia recuperada mediante "
-    "herramientas (least context). Sigues un loop ReAct de hasta 5 pasos: eliges una herramienta, "
-    "la ejecutas y decides si necesitas más evidencia. Citas siempre documento+página o "
-    "media+timestamp; nunca inventas hechos, normas ni cifras. Si la evidencia es insuficiente, te "
-    "abstienes. Cada afirmación se valida con un verificador semántico que la clasifica como "
-    "supported / not_supported / contradicted / needs_review."
-)
+# Versión por defecto del system prompt del agente jurídico. Al cambiarla, la nueva versión se
+# siembra en organizaciones que aún no tienen agentes; las existentes conservan su prompt editable.
+DEFAULT_AGENT_VERSION = 7
+
+
+def default_agent_prompt(locale: str = "es") -> str:
+    """Carga el system prompt versionado del agente jurídico por defecto."""
+    from app.services.legal_extraction import _load_prompt
+    body, _pid, _ver = _load_prompt("agent_system", locale, version=DEFAULT_AGENT_VERSION)
+    return body
 
 # Skills jurídicas de sistema (se siembran por organización y se enlazan al agente).
 BUILTIN_SKILLS: list[tuple[str, str]] = [
@@ -114,8 +116,36 @@ def ensure_builtin_agents(conn: Connection, org_id: str, user_id: str | None) ->
     conn.execute(
         text("""INSERT INTO agents (organization_id, name, system_prompt, skills, created_by, is_system, kind)
                 VALUES (:o, :n, :sp, :sk, :u, true, 'system')"""),
-        {"o": org_id, "n": BUILTIN_AGENT_NAME, "sp": BUILTIN_AGENT_PROMPT,
+        {"o": org_id, "n": BUILTIN_AGENT_NAME, "sp": default_agent_prompt(),
          "sk": list(skills.values()), "u": user_id},
+    )
+
+
+# Prompt base de Whisper (ASR), editable como agente desde /dashboard/agents.
+# media_pipeline lo lee de este agente y le AÑADE por caso el radicado y los
+# participantes conocidos. Si el agente no existe, se usa ASR_INITIAL_PROMPT (.env)
+# y luego este default.
+ASR_CONTEXT_AGENT_NAME = "Transcripción ASR · Prompt de contexto (Whisper)"
+ASR_CONTEXT_DEFAULT_PROMPT = (
+    "Audiencia judicial en español de Colombia. Juez, secretario, apoderado, demandante, "
+    "demandado, testigo, perito, radicado."
+)
+
+
+def ensure_asr_context_agent(conn: Connection, org_id: str, user_id: str | None) -> None:
+    """Crea (idempotente por nombre) el agente que guarda el prompt base de Whisper.
+
+    No pisa el prompt si el usuario ya lo editó: solo lo crea cuando no existe."""
+    exists = conn.execute(
+        text("SELECT 1 FROM agents WHERE organization_id = :o AND name = :n"),
+        {"o": org_id, "n": ASR_CONTEXT_AGENT_NAME},
+    ).first()
+    if exists:
+        return
+    conn.execute(
+        text("""INSERT INTO agents (organization_id, name, system_prompt, skills, created_by, is_system, kind)
+                VALUES (:o, :n, :sp, '[]', :u, true, 'system')"""),
+        {"o": org_id, "n": ASR_CONTEXT_AGENT_NAME, "sp": ASR_CONTEXT_DEFAULT_PROMPT, "u": user_id},
     )
 
 
@@ -154,7 +184,7 @@ EXTRACTION_AGENTS: list[tuple[str, str, int]] = [
     ("Extracción · Entidades", "extract_entities", 2),
     ("Extracción · Pretensiones", "extract_claims", 2),
     ("Extracción · Eventos", "extract_events", 2),
-    ("Extracción · Actuaciones", "extract_procedural_events", 2),
+    ("Extracción · Actuaciones", "extract_procedural_events", 4),
     ("Extracción · Decisiones", "extract_decisions", 1),
     ("Vinculación de evidencia", "link_evidence", 1),
     ("Detección de contradicciones", "detect_contradictions", 1),
@@ -164,24 +194,41 @@ EXTRACTION_AGENTS: list[tuple[str, str, int]] = [
 def ensure_extraction_agents(conn: Connection, org_id: str, user_id: str | None) -> None:
     """Crea (idempotente por nombre) un agente por prompt de EXTRACCIÓN con su system_prompt
     del archivo base. Así TODOS los prompts de extracción quedan visibles y EDITABLES en
-    /dashboard/agents. No pisa los que el usuario haya editado."""
+    /dashboard/agents. No pisa los que el usuario haya editado.
+
+    Si un agente existe y su system_prompt es idéntico al de la versión anterior del archivo,
+    lo actualiza a la versión base (migración silenciosa de prompts no editados).
+    """
     from app.services.legal_extraction import _load_prompt  # perezoso (evita ciclo de import)
     for agent_name, prompt_id, version in EXTRACTION_AGENTS:
-        exists = conn.execute(
-            text("SELECT 1 FROM agents WHERE organization_id = :o AND name = :n"),
+        existing = conn.execute(
+            text("SELECT system_prompt FROM agents WHERE organization_id = :o AND name = :n"),
             {"o": org_id, "n": agent_name},
         ).first()
-        if exists:
+        if existing is None:
+            try:
+                body, _pid, _ver = _load_prompt(prompt_id, "es", version=version)
+            except FileNotFoundError:
+                continue
+            conn.execute(
+                text("""INSERT INTO agents (organization_id, name, system_prompt, skills, created_by, is_system, kind)
+                        VALUES (:o, :n, :sp, :sk, :u, true, 'extraction')"""),
+                {"o": org_id, "n": agent_name, "sp": body, "sk": [], "u": user_id},
+            )
+            continue
+        # Actualización silenciosa: si el usuario no editó (prompt == versión anterior), se lleva a la base.
+        if version <= 1:
             continue
         try:
-            body, _pid, _ver = _load_prompt(prompt_id, "es", version=version)
+            prev_body, _pid, _ver = _load_prompt(prompt_id, "es", version=version - 1)
+            new_body, _pid2, _ver2 = _load_prompt(prompt_id, "es", version=version)
         except FileNotFoundError:
             continue
-        conn.execute(
-            text("""INSERT INTO agents (organization_id, name, system_prompt, skills, created_by, is_system, kind)
-                    VALUES (:o, :n, :sp, :sk, :u, true, 'extraction')"""),
-            {"o": org_id, "n": agent_name, "sp": body, "sk": [], "u": user_id},
-        )
+        if existing.system_prompt == prev_body:
+            conn.execute(
+                text("UPDATE agents SET system_prompt = :sp WHERE organization_id = :o AND name = :n"),
+                {"o": org_id, "n": agent_name, "sp": new_body},
+            )
 
 
 # ---------------------------------------------------------------------------

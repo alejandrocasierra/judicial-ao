@@ -213,6 +213,7 @@ CREATE TABLE events (
   kind text NOT NULL DEFAULT 'generic' CHECK (kind IN ('generic','procedural')),
   event_type text NOT NULL,
   subtype text,
+  subtype_raw text,
   instance text,
   actor text,
   authority text,
@@ -221,13 +222,26 @@ CREATE TABLE events (
   document_id uuid REFERENCES documents(id),
   page_number int,
   event_date date,
+  document_date date,
+  incorporation_date date,
   date_precision text NOT NULL DEFAULT 'day' CHECK (date_precision IN ('day','month','year','unknown')),
   description text NOT NULL,
   timeline_confidence text NOT NULL CHECK (timeline_confidence IN ('source_backed','inferred','ambiguous')),
   confidence numeric(4,3),
   participants uuid[] NOT NULL DEFAULT '{}',
   duplicate_of uuid REFERENCES events(id),
-  review_flags jsonb NOT NULL DEFAULT '[]'
+  review_flags jsonb NOT NULL DEFAULT '[]',
+  CONSTRAINT events_subtype_check CHECK (
+    subtype IS NULL OR
+    subtype IN ('demanda','contestacion','excepcion','reconvencion','auto','auto_admisorio',
+                'auto_de_pruebas','auto_inhibitorio','sentencia','notificacion',
+                'notificacion_personal','notificacion_por_estado','notificacion_electronica',
+                'emplazamiento','alegato','recurso','apelacion','casacion','queja','revision',
+                'nulidad','reposicion','desistimiento','prueba','solicitud_prueba',
+                'decreto_prueba','practica_prueba','testimonio','interrogatorio','dictamen',
+                'inspeccion_judicial','incorporacion_documental','memorial','tutela','incidente',
+                'medida_cautelar','ejecucion','concesion_recurso','otro')
+  )
 );
 
 CREATE TABLE event_relationships (
@@ -237,6 +251,7 @@ CREATE TABLE event_relationships (
   source_event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   target_event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
   relationship text NOT NULL,
+  provenance text NOT NULL DEFAULT 'INFERRED' CHECK (provenance IN ('EXTRACTED','INFERRED','AMBIGUOUS')),
   confidence numeric(4,3),
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (source_event_id, target_event_id, relationship)
@@ -473,7 +488,7 @@ CREATE TABLE graph_edges (
   case_id uuid NOT NULL REFERENCES cases(id),
   source_node_id uuid NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
   target_node_id uuid NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
-  edge_type text NOT NULL CHECK (edge_type IN ('ASSERTS','SUPPORTS','CONTRADICTS','REFUTES','CITES','PARTICIPATED_IN','TESTIFIED_IN','DECIDES','APPLIES','DERIVED_FROM','MENTIONS','ABOUT','HAS_SPEAKER','IS_PARTY')),
+  edge_type text NOT NULL CHECK (edge_type IN ('ASSERTS','SUPPORTS','CONTRADICTS','REFUTES','CITES','PARTICIPATED_IN','TESTIFIED_IN','DECIDES','APPLIES','DERIVED_FROM','MENTIONS','ABOUT','HAS_SPEAKER','IS_PARTY','PRECEDES','CAUSES','APPEALS','RESPONDS_TO','REFERS_TO')),
   provenance text NOT NULL CHECK (provenance IN ('EXTRACTED','INFERRED','AMBIGUOUS')),
   confidence numeric(4,3) CHECK (confidence >= 0 AND confidence <= 1),
   metadata jsonb NOT NULL DEFAULT '{}',

@@ -13,6 +13,7 @@ from app.providers.ocr import (
     _layout_text,
     get_ocr_provider,
 )
+from app.services.document_pipeline import detect_document_date
 
 pytestmark = pytest.mark.unit
 
@@ -276,3 +277,22 @@ def test_ut_ocr_14_document_ai_parse_bounding_boxes_normalizados():
     assert w["bbox"] == {"x": 10.0, "y": 20.0, "w": 40.0, "h": 20.0}
     assert w["text"] == "Hola mundo"
     assert w["confidence"] == 0.95
+
+
+def test_ut_ocr_19_detect_document_date_spanish():
+    text = "Bogotá, 15 de enero de 2018. El juzgado resuelve hoy 15 de enero de 2018."
+    d = detect_document_date(text)
+    assert d is not None
+    assert d.isoformat() == "2018-01-15"
+
+
+def test_ut_ocr_20_detect_document_date_iso_and_slashes():
+    assert detect_document_date("Fecha: 2019-06-21").isoformat() == "2019-06-21"
+    assert detect_document_date("21/06/2019").isoformat() == "2019-06-21"
+
+
+def test_ut_ocr_21_detect_document_date_rejects_placeholders():
+    assert detect_document_date("1899-12-31") is None
+    assert detect_document_date("1900-01-01") is None
+    assert detect_document_date("") is None
+    assert detect_document_date("No hay fecha") is None

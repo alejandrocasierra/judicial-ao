@@ -40,6 +40,42 @@ def _sim(a: str, b: str) -> float:
     return SequenceMatcher(None, (a or "").lower(), (b or "").lower()).ratio()
 
 
+def _absorb_event_citations(conn: Connection, org_id: str, case_id: str, from_event_id: str,
+                            to_event_id: str) -> int:
+    """Copia las citas de un evento referenciado al evento real, evitando duplicados exactos."""
+    cites = rows(conn, """SELECT source_type, document_id, page_number, folio, media_id, segment_id,
+                                 start_ms, end_ms, quote_hash
+                          FROM citations
+                          WHERE case_id = :c AND target_type = 'event' AND target_id = :src""",
+                 c=case_id, src=from_event_id)
+    n = 0
+    for cit in cites:
+        # Evita duplicados exactos: misma fuente apuntando ya al evento real.
+        existing = one(conn, """SELECT id FROM citations
+                                WHERE case_id = :c AND target_type = 'event' AND target_id = :to
+                                  AND source_type = :st
+                                  AND COALESCE(document_id, '00000000-0000-0000-0000-000000000000') =
+                                      COALESCE(:did, '00000000-0000-0000-0000-000000000000')
+                                  AND COALESCE(media_id, '00000000-0000-0000-0000-000000000000') =
+                                      COALESCE(:mid, '00000000-0000-0000-0000-000000000000')
+                                  AND COALESCE(page_number, -1) = COALESCE(:pn, -1)
+                                  AND COALESCE(start_ms, -1) = COALESCE(:sms, -1)""",
+                       c=case_id, to=to_event_id, st=cit["source_type"], did=cit.get("document_id"),
+                       mid=cit.get("media_id"), pn=cit.get("page_number"), sms=cit.get("start_ms"))
+        if existing:
+            continue
+        one(conn, """INSERT INTO citations
+                       (organization_id, case_id, target_type, target_id, source_type,
+                        document_id, page_number, folio, media_id, segment_id, start_ms, end_ms, quote_hash)
+                     VALUES (:o, :c, 'event', :tid, :st, :did, :pn, :folio, :mid, :sid, :sms, :ems, :qh)
+                     RETURNING id""",
+            o=org_id, c=case_id, tid=to_event_id, st=cit["source_type"], did=cit.get("document_id"),
+            pn=cit.get("page_number"), folio=cit.get("folio"), mid=cit.get("media_id"),
+            sid=cit.get("segment_id"), sms=cit.get("start_ms"), ems=cit.get("end_ms"), qh=cit.get("quote_hash"))
+        n += 1
+    return n
+
+
 def link_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
     evs = rows(conn, """SELECT id, event_date, event_type, subtype, instance, date_type, description
                         FROM events WHERE case_id = :c AND kind = 'procedural'
@@ -53,6 +89,10 @@ def link_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
     rel: list[tuple[str, str, str, float]] = []
 
     # (b) Resolver referenciados ↔ reales: mismo subtype (o tipo) y fecha cercana.
+    # Cuando un referenciado se resuelve a un evento real, el real absorbe sus
+    # citas y el referenciado se elimina (evita duplicados y fechas inconsistentes).
+    absorbed: list[str] = []
+    deleted_refs: list[str] = []
     for r in refs:
         best, best_score = None, 0.0
         rd = _date(r["event_date"])
@@ -73,6 +113,13 @@ def link_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
             rel.append((str(r["id"]), str(best["id"]), "refers_to", round(best_score, 3)))
             one(conn, "UPDATE events SET duplicate_of = :t WHERE id = :i RETURNING id",
                 t=str(best["id"]), i=str(r["id"]))
+            # Absorber citas del referenciado al evento real.
+            _absorb_event_citations(conn, org_id, case_id, str(r["id"]), str(best["id"]))
+            absorbed.append(str(best["id"]))
+            # Borrar el evento referenciado (ya está representado por el real).
+            conn.execute(text("DELETE FROM events WHERE id = :i AND case_id = :c"),
+                         {"i": str(r["id"]), "c": case_id})
+            deleted_refs.append(str(r["id"]))
 
     # (a) precede: actuaciones consecutivas por fecha dentro de la misma instancia.
     for inst in {e["instance"] for e in real}:
@@ -104,8 +151,8 @@ def link_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
         if s == t:
             continue
         conn.execute(text("""INSERT INTO event_relationships
-                (organization_id, case_id, source_event_id, target_event_id, relationship, confidence)
-            VALUES (:o, :c, :s, :t, :r, :conf) ON CONFLICT DO NOTHING"""),
+                (organization_id, case_id, source_event_id, target_event_id, relationship, provenance, confidence)
+            VALUES (:o, :c, :s, :t, :r, 'INFERRED', :conf) ON CONFLICT DO NOTHING"""),
             {"o": org_id, "c": case_id, "s": s, "t": t, "r": r, "conf": conf})
         n += 1
     return {"events": len(evs), "relationships": n,
@@ -116,7 +163,8 @@ def link_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
 
 
 def review_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
-    evs = rows(conn, """SELECT id, event_date, event_type, subtype, date_type, description, duplicate_of
+    evs = rows(conn, """SELECT id, event_date, event_type, subtype, date_type, description, duplicate_of,
+                               document_id, page_number
                         FROM events WHERE case_id = :c AND kind = 'procedural'""", c=case_id)
     conn.execute(text("UPDATE events SET review_flags = '[]'::jsonb WHERE case_id = :c AND kind = 'procedural'"),
                  {"c": case_id})
@@ -128,20 +176,26 @@ def review_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]
 
     flags: dict[str, list[str]] = defaultdict(list)
     for group in buckets.values():
-        if len(group) > 1:
-            for e in group:
-                flags[str(e["id"])].append("duplicado")
+        if len(group) <= 1:
+            continue
+        # Dentro de un mismo bucket, solo marcamos duplicados si las descripciones
+        # son muy similares o si provienen exactamente de la misma página del mismo
+        # documento. Un auto puede contener varias notificaciones distintas el mismo día.
+        for i, a in enumerate(group):
+            for b in group[i + 1:]:
+                same_doc_page = (a["document_id"] and a["document_id"] == b["document_id"]
+                                 and a["page_number"] and a["page_number"] == b["page_number"])
+                sim = _sim(a["description"], b["description"])
+                if same_doc_page or sim >= 0.82:
+                    flags[str(a["id"])].append("duplicado")
+                    flags[str(b["id"])].append("duplicado")
 
-    by_id = {str(e["id"]): e for e in evs}
     for e in evs:
         if e["date_type"] == "referenciada":
             if not e["duplicate_of"]:
                 flags[str(e["id"])].append("sin_fuente_real")
-            else:
-                src = by_id.get(str(e["duplicate_of"]))
-                ed, sd = _date(e["event_date"]), _date(src["event_date"]) if src else None
-                if ed and sd and abs((ed - sd).days) > 1:
-                    flags[str(e["id"])].append("fecha_inconsistente")
+            # Nota: ya no marcamos "fecha_inconsistente". Si un referenciado tiene fecha
+            # distinta al real, se resuelve como duplicado en link_events y se borra.
         elif not e["event_date"]:
             flags[str(e["id"])].append("sin_fecha")
 
@@ -151,7 +205,6 @@ def review_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]
 
     return {"events": len(evs), "flagged": len(flags),
             "duplicado": sum(1 for f in flags.values() if "duplicado" in f),
-            "fecha_inconsistente": sum(1 for f in flags.values() if "fecha_inconsistente" in f),
             "sin_fuente_real": sum(1 for f in flags.values() if "sin_fuente_real" in f),
             "sin_fecha": sum(1 for f in flags.values() if "sin_fecha" in f)}
 
@@ -201,8 +254,8 @@ def propose_relations_llm(conn: Connection, org_id: str, case_id: str, actor_id:
             rel = _REL_ALIAS.get(link.get("relationship"), link.get("relationship"))
             if src in ids and tgt in ids and src != tgt and rel in _ALLOWED_LINK:
                 conn.execute(text("""INSERT INTO event_relationships
-                        (organization_id, case_id, source_event_id, target_event_id, relationship, confidence)
-                    VALUES (:o, :c, :s, :t, :r, :conf) ON CONFLICT DO NOTHING"""),
+                        (organization_id, case_id, source_event_id, target_event_id, relationship, provenance, confidence)
+                    VALUES (:o, :c, :s, :t, :r, 'INFERRED', :conf) ON CONFLICT DO NOTHING"""),
                     {"o": org_id, "c": case_id, "s": src, "t": tgt, "r": rel, "conf": link.get("confidence")})
                 total += 1
     return {"links": total, "model_run": last_validation}

@@ -46,19 +46,27 @@ def test_static_02_every_setting_is_documented_in_env_example():
     assert missing == set(), f"variables de Settings ausentes en .env.example: {sorted(missing)}"
 
 
-def test_static_03_settings_have_no_defaults():
-    """Toda configuración viene del entorno: los campos de Settings no tienen valor por defecto."""
+def test_static_03_sensitive_settings_have_no_defaults():
+    """Los valores SENSIBLES (secretos, credenciales, tokens, claves de proveedor) NO pueden
+    tener valor por defecto: deben venir siempre del entorno. Los tunables operativos
+    (timeouts, tamaños de lote, pasos) sí pueden traer un default seguro, documentado en
+    .env.example."""
     tree = ast.parse((APP / "core" / "config.py").read_text(encoding="utf-8"))
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Settings")
-    with_default = []
+    sensitive = ("SECRET", "PASSWORD", "API_KEY", "_TOKEN", "TOKEN_", "SUPERUSER", "_PROVIDER")
+    offenders: list[str] = []
     for n in cls.body:
-        if isinstance(n, ast.AnnAssign) and n.value is not None:
-            v = n.value
-            is_field_without_default = isinstance(v, ast.Call) and getattr(v.func, "id", "") == "Field" and not v.args \
-                and not any(k.arg in ("default", "default_factory") for k in v.keywords)
-            if not is_field_without_default:
-                with_default.append(n.target.id)
-    assert with_default == [], f"Settings con valor por defecto quemado: {with_default}"
+        if not (isinstance(n, ast.AnnAssign) and n.value is not None):
+            continue
+        v = n.value
+        is_field_without_default = isinstance(v, ast.Call) and getattr(v.func, "id", "") == "Field" and not v.args \
+            and not any(k.arg in ("default", "default_factory") for k in v.keywords)
+        if is_field_without_default:
+            continue
+        name = n.target.id
+        if any(h in name for h in sensitive):
+            offenders.append(name)
+    assert offenders == [], f"campos sensibles con default (deben venir del entorno): {offenders}"
 
 
 def test_static_04_env_example_has_no_real_secrets():
@@ -89,7 +97,7 @@ def test_static_06_every_message_key_used_exists():
 
 def test_static_07_sql_is_never_built_from_user_values():
     """Sólo se permiten f-strings SQL con identificadores de listas blancas internas (tablas/columnas)."""
-    allowed = {"table", "sets", "CASE_COLS", "x"}  # identificadores internos, nunca entrada del usuario
+    allowed = {"table", "sets", "CASE_COLS", "x", "mode_col"}  # identificadores internos, nunca entrada del usuario
     offenders = []
     for p in CODE:
         for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):

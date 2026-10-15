@@ -75,11 +75,12 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
     graph: dict[str, Any] | None = None
     if any(r.get("status") == "ok" for r in results):
         try:
-            from app.services import procedural_graph
+            from app.services import event_consolidation, procedural_graph
             with tx(org_id, user_id) as conn:
+                consolidated = event_consolidation.consolidate_case_events(conn, org_id, case_id)
                 linked = procedural_graph.link_events(conn, org_id, case_id)
                 reviewed = procedural_graph.review_events(conn, org_id, case_id)
-            graph = {"linked": linked, "reviewed": reviewed}
+            graph = {"consolidated": consolidated, "linked": linked, "reviewed": reviewed}
         except Exception as exc:  # noqa: BLE001
             log.exception("process graph build failed for case %s", case_id)
             graph = {"status": "error", "error": str(exc)}

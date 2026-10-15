@@ -63,6 +63,7 @@ async function pollProcessing(caseId: string, filename: string, taskId: string):
         }
         queryClient.invalidateQueries({ queryKey: ["files", caseId] });
         queryClient.invalidateQueries({ queryKey: ["processing"] });
+        queryClient.invalidateQueries({ queryKey: ["timeline"] });
         setTimeout(() => st.remove(taskId), 8000);
         return;
       }

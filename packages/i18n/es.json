@@ -16,6 +16,8 @@
     "USER_NOT_FOUND": "Usuario no encontrado.",
     "PASSWORD_WEAK": "La contraseña no cumple la política: longitud mínima, mayúscula, minúscula, número y símbolo.",
     "SPEAKER_NOT_FOUND": "Hablante no encontrado en el expediente.",
+    "PARTY_ROLE_DUPLICATE": "Esa parte ya tiene asignado ese rol en el expediente.",
+    "PARTY_ROLE_IN_USE": "No se puede quitar el rol: está en uso en el expediente.",
     "VALIDATION_ERROR": "Los datos enviados no son válidos.",
     "CASE_NUMBER_INVALID": "El número de radicado no cumple el formato de la jurisdicción.",
     "JURISDICTION_UNKNOWN": "Jurisdicción no soportada.",

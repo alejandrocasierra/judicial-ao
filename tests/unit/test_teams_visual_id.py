@@ -1,6 +1,7 @@
 """UT-TEAMS — identificación visual del HABLANTE ACTIVO en Teams (Fase 3)."""
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -55,13 +56,23 @@ def test_ut_teams_03_detect_active_speaker_picks_highlighted_name():
 
 
 def test_ut_teams_04_timeline_returns_active_names():
-    with patch("app.services.teams_visual_id._get_duration", return_value=25.0):
-        with patch("app.services.teams_visual_id._extract_frame"):
-            with patch("PIL.Image.open") as mock_open:
-                mock_open.return_value = Image.new("RGB", (1920, 1080), color="black")
-                with patch("app.services.teams_visual_id.detect_active_speaker_name",
-                           return_value="Alba Lucy Cock Alvarez"):
-                    results = extract_active_speaker_timeline(b"fake", "video/mp4", step_s=10.0)
+    # La implementación actual extrae los frames en UNA pasada de ffmpeg a una carpeta
+    # temporal y luego recorre los f_*.jpg. Simulamos esa salida sin ffmpeg real.
+    def fake_run(cmd, **_kwargs):
+        out = Path(cmd[-1])  # .../f_%06d.jpg
+        out.parent.mkdir(parents=True, exist_ok=True)
+        for i in (1, 2, 3):
+            (out.parent / f"f_{i:06d}.jpg").write_bytes(b"jpeg")
+        return MagicMock(returncode=0)
+
+    with patch("app.services.teams_visual_id._get_ffmpeg_exe", return_value="ffmpeg"):
+        with patch("app.services.teams_visual_id.subprocess.run", side_effect=fake_run):
+            with patch("app.services.teams_visual_id._get_engine", return_value=lambda _rgb: object()):
+                with patch("app.services.teams_visual_id._active_speaker_box", return_value=(0, 0, 4, 4)):
+                    with patch("app.services.teams_visual_id._pick_name",
+                               return_value="Alba Lucy Cock Alvarez"):
+                        with patch("PIL.Image.open", return_value=Image.new("RGB", (8, 8))):
+                            results = extract_active_speaker_timeline(b"fake", "video/mp4", step_s=10.0)
 
     assert len(results) == 3  # 0, 10, 20 s
     assert all(r["name"] == "Alba Lucy Cock Alvarez" for r in results)

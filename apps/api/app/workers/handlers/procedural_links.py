@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.db import tx
-from app.services import procedural_graph
+from app.services import event_consolidation, procedural_graph
 
 
 def handle(job: dict[str, Any]) -> dict[str, Any]:
@@ -20,8 +20,10 @@ def handle(job: dict[str, Any]) -> dict[str, Any]:
     case_id = str(job["case_id"])
     actor_id = str(job.get("created_by") or job.get("user_id") or "00000000-0000-0000-0000-000000000000")
     with tx(org_id, actor_id) as conn:
+        # Antes de enlazar: fusiona actuaciones reales duplicadas (misma fecha/subtipo/texto).
+        consolidated = event_consolidation.consolidate_case_events(conn, org_id, case_id)
         linked = procedural_graph.link_events(conn, org_id, case_id)
         reviewed = procedural_graph.review_events(conn, org_id, case_id)
         ai = procedural_graph.propose_relations_llm(conn, org_id, case_id, actor_id)
     return {"implemented": True, "job_type": "procedural_links",
-            "linked": linked, "reviewed": reviewed, "ai_links": ai}
+            "consolidated": consolidated, "linked": linked, "reviewed": reviewed, "ai_links": ai}

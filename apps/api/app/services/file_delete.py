@@ -44,8 +44,9 @@ def delete_document(conn: Connection, org_id: str, case_id: str, document_id: st
     conn.execute(text("DELETE FROM document_ocr_progress WHERE document_id = :d"), {"d": document_id})
     conn.execute(text("DELETE FROM document_ocr_versions WHERE document_id = :d"), {"d": document_id})
     conn.execute(text("DELETE FROM document_pages WHERE document_id = :d"), {"d": document_id})
-    # FKs a documents: se desvincula lo opcional y se borra lo obligatorio.
-    conn.execute(text("UPDATE events SET document_id = NULL WHERE document_id = :d"), {"d": document_id})
+    # Eventos procesales/genéricos extraídos de este documento: se borran porque
+    # su evidencia desaparece (las relaciones del Process Graph se limpian por CASCADE).
+    conn.execute(text("DELETE FROM events WHERE document_id = :d"), {"d": document_id})
     # evidence exige al menos una fuente (CHECK): si la fuente es el documento, se borra
     # la evidencia derivada (con sus enlaces) en vez de desvincularla.
     conn.execute(text("DELETE FROM evidence_links WHERE evidence_id IN "
@@ -76,6 +77,12 @@ def delete_media(conn: Connection, org_id: str, case_id: str, media_id: str) -> 
                  {"c": case_id, "m": media_id})
     conn.execute(text("DELETE FROM chunks WHERE case_id = :c AND media_id = :m"),
                  {"c": case_id, "m": media_id})
+    # Eventos derivados de segmentos de este media: se borran junto con sus relaciones.
+    conn.execute(text("""DELETE FROM events
+                          WHERE id IN (SELECT DISTINCT target_id
+                                       FROM citations
+                                       WHERE target_type = 'event' AND media_id = :m)"""),
+                 {"m": media_id})
     conn.execute(text("DELETE FROM transcript_segments WHERE media_id = :m"), {"m": media_id})
     conn.execute(text("DELETE FROM media_asr_progress WHERE media_id = :m"), {"m": media_id})
     # evidence derivada del audio/video: se borra (con sus enlaces) por el CHECK de fuente.

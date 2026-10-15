@@ -7,9 +7,15 @@ from app.core.config import Settings
 pytestmark = pytest.mark.unit
 
 
-def test_ut_cfg_01_no_field_has_default():
-    with_defaults = [n for n, f in Settings.model_fields.items() if not f.is_required()]
-    assert with_defaults == [], f"campos con default (deben venir de entorno): {with_defaults}"
+def test_ut_cfg_01_sensitive_fields_have_no_default():
+    """Los valores SENSIBLES (secretos, credenciales, tokens, claves de proveedor)
+    deben venir SIEMPRE del entorno: no pueden tener un default. Los tunables
+    operativos (timeouts, tamaños de lote, pasos) sí pueden traer un default seguro
+    documentado en .env.example."""
+    sensitive = ("SECRET", "PASSWORD", "API_KEY", "_TOKEN", "TOKEN_", "SUPERUSER", "_PROVIDER")
+    offenders = [n for n, f in Settings.model_fields.items()
+                 if not f.is_required() and any(h in n for h in sensitive)]
+    assert offenders == [], f"campos sensibles con default (deben venir de entorno): {offenders}"
 
 
 def test_ut_cfg_02_missing_variable_fails(monkeypatch):

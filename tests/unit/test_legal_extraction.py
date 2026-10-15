@@ -36,6 +36,9 @@ def _patch_rows(monkeypatch, items: list[dict]):
 def _patch_one(monkeypatch, captured: list[dict]):
     def _one(_c, _s, **_p):
         captured.append({"sql": _s, "params": _p})
+        # La consulta de dedup de entidades no debe encontrar una fila previa.
+        if "normalized_name = :nn" in _s:
+            return None
         # Devuelve un id ficticio para INSERT ... RETURNING id
         return {"id": str(uuid.uuid4())}
     monkeypatch.setattr(lex, "one", _one)
@@ -145,3 +148,152 @@ def test_ut_lex_05_prompt_is_versioned_and_localized(monkeypatch):
     body, pid, ver = lex._load_prompt("extract_entities", "es")
     assert pid == "extract_entities" and ver.isdigit()
     assert "UNTRUSTED" in body and "{{LOCALE}}" not in body
+
+
+def test_ut_lex_07_safe_date_rejects_placeholders():
+    assert lex._safe_date("1899-12-31") is None
+    assert lex._safe_date("1900-01-01") is None
+    assert lex._safe_date("0001-01-01") is None
+    assert lex._safe_date("9999-12-31") is None
+    assert lex._safe_date("1799-12-31") is None
+    assert lex._safe_date("2024-13-01") is None
+    assert lex._safe_date("") is None
+    assert lex._safe_date("unknown") is None
+    assert lex._safe_date("2024-01-15") == "2024-01-15"
+
+
+def test_ut_lex_08_metadata_prompt_includes_folder_and_date():
+    meta = {"folder_path": "01PrimeraInstancia / Demanda", "document_date": "2018-03-21", "filename": "demanda.pdf"}
+    prompt = lex._metadata_prompt(meta)
+    assert "01PrimeraInstancia" in prompt
+    assert "2018-03-21" in prompt
+    assert "demanda.pdf" in prompt
+    assert "EVIDENCIA:" in prompt
+
+
+def test_ut_lex_09_metadata_prompt_empty_when_no_context():
+    assert lex._metadata_prompt({}) == ""
+    assert lex._metadata_prompt({"filename": None}) == ""
+
+
+def test_ut_lex_10_source_dates_for_document(monkeypatch):
+    def _one(_c, _s, **_p):
+        return {"document_date": "2018-03-21", "incorporation_date": "2024-01-10"}
+    monkeypatch.setattr(lex, "one", _one)
+    doc_date, inc_date = lex._source_dates(object(), CASE, "document", DOC)
+    assert doc_date == "2018-03-21"
+    assert inc_date == "2024-01-10"
+
+
+def test_ut_lex_11_source_dates_falls_back_to_created_at(monkeypatch):
+    def _one(_c, _s, **_p):
+        return {"document_date": None, "incorporation_date": "2024-01-10"}
+    monkeypatch.setattr(lex, "one", _one)
+    doc_date, inc_date = lex._source_dates(object(), CASE, "document", DOC)
+    assert doc_date == "2024-01-10"
+    assert inc_date == "2024-01-10"
+
+
+def test_ut_lex_12_source_dates_for_media(monkeypatch):
+    mid = str(uuid.uuid4())
+
+    def _one(_c, _s, **_p):
+        return {"incorporation_date": "2024-02-15"}
+    monkeypatch.setattr(lex, "one", _one)
+    doc_date, inc_date = lex._source_dates(object(), CASE, "media", mid)
+    assert doc_date is None
+    assert inc_date == "2024-02-15"
+
+
+def test_ut_lex_13_insert_events_populates_document_and_incorporation_dates(monkeypatch):
+    captured: list[dict] = []
+
+    def _one(_c, s, **_p):
+        captured.append({"sql": s, "params": _p})
+        if "document_date" in s and "incorporation_date" in s:
+            return {"document_date": "2018-03-21", "incorporation_date": "2024-01-10"}
+        return {"id": str(uuid.uuid4())}
+    monkeypatch.setattr(lex, "one", _one)
+
+    events = [
+        {"id": str(uuid.uuid4()), "event_type": "demand", "event_date": "2018-03-20",
+         "description": "Demand filed", "timeline_confidence": "source_backed"},
+    ]
+    lex._insert_events(_FakeConn(), ORG, CASE, events, "document", DOC)
+    event_inserts = [c for c in captured if "INSERT INTO events" in c["sql"]]
+    assert len(event_inserts) == 1
+    params = event_inserts[0]["params"]
+    assert params["docd"] == "2018-03-21"
+    assert params["incd"] == "2024-01-10"
+
+
+def test_ut_lex_14_insert_procedural_events_populates_dates(monkeypatch):
+    captured: list[dict] = []
+
+    def _one(_c, s, **_p):
+        captured.append({"sql": s, "params": _p})
+        if "document_date" in s and "incorporation_date" in s:
+            return {"document_date": "2019-07-15", "incorporation_date": "2024-03-01"}
+        return {"id": str(uuid.uuid4())}
+    monkeypatch.setattr(lex, "one", _one)
+
+    events = [
+        {"id": str(uuid.uuid4()), "event_type": "auto", "subtype": "auto_admisorio",
+         "description": "Admisión de la demanda", "timeline_confidence": "source_backed"},
+    ]
+    lex._insert_procedural_events(_FakeConn(), ORG, CASE, DOC, events,
+                                  fallback_date="2019-07-15", source_type="document", source_id=DOC)
+    event_inserts = [c for c in captured if "INSERT INTO events" in c["sql"]]
+    assert len(event_inserts) == 1
+    params = event_inserts[0]["params"]
+    assert params["docd"] == "2019-07-15"
+    assert params["incd"] == "2024-03-01"
+    assert params["st"] == "auto_admisorio"
+    assert params["st_raw"] is None
+
+
+def test_ut_lex_15_insert_procedural_events_normalizes_subtype(monkeypatch, caplog):
+    captured: list[dict] = []
+
+    def _one(_c, s, **_p):
+        captured.append({"sql": s, "params": _p})
+        if "document_date" in s and "incorporation_date" in s:
+            return {"document_date": "2019-07-15", "incorporation_date": "2024-03-01"}
+        return {"id": str(uuid.uuid4())}
+    monkeypatch.setattr(lex, "one", _one)
+
+    events = [
+        {"id": str(uuid.uuid4()), "event_type": "auto", "subtype": "auto_admite_demanda",
+         "description": "Admisión de la demanda", "timeline_confidence": "source_backed"},
+    ]
+    lex._insert_procedural_events(_FakeConn(), ORG, CASE, DOC, events,
+                                  fallback_date="2019-07-15", source_type="document", source_id=DOC)
+    event_inserts = [c for c in captured if "INSERT INTO events" in c["sql"]]
+    assert len(event_inserts) == 1
+    params = event_inserts[0]["params"]
+    assert params["st"] == "auto_admisorio"
+    assert params["st_raw"] == "auto_admite_demanda"
+
+
+def test_ut_lex_16_insert_procedural_events_warns_on_unknown_subtype(monkeypatch, caplog):
+    captured: list[dict] = []
+
+    def _one(_c, s, **_p):
+        captured.append({"sql": s, "params": _p})
+        if "document_date" in s and "incorporation_date" in s:
+            return {"document_date": "2019-07-15", "incorporation_date": "2024-03-01"}
+        return {"id": str(uuid.uuid4())}
+    monkeypatch.setattr(lex, "one", _one)
+
+    events = [
+        {"id": str(uuid.uuid4()), "event_type": "auto", "subtype": "glorposidez",
+         "description": "Evento raro", "timeline_confidence": "source_backed"},
+    ]
+    lex._insert_procedural_events(_FakeConn(), ORG, CASE, DOC, events,
+                                  fallback_date="2019-07-15", source_type="document", source_id=DOC)
+    event_inserts = [c for c in captured if "INSERT INTO events" in c["sql"]]
+    assert len(event_inserts) == 1
+    params = event_inserts[0]["params"]
+    assert params["st"] is None
+    assert params["st_raw"] == "glorposidez"
+    assert "glorposidez" in caplog.text

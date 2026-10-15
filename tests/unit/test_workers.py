@@ -29,7 +29,7 @@ def test_ut_wrk_01_every_schema_job_type_has_handler():
 def test_ut_wrk_02_stub_result_is_structured():
     job = {"job_type": "document_ocr", "input_ids": [uuid.uuid4(), uuid.uuid4()]}
     # Handlers ya implementados no devuelven stub; el resto sí.
-    implemented = {"document_ocr", "document_classification", "media_asr", "legal_extraction",
+    implemented = {"document_ocr", "document_classification", "media_asr", "media_diarize", "legal_extraction",
                    "embedding", "indexing", "graph_build", "file_ingest", "xlsx_ingest", "procedural_links"}
     stub_types = _schema_job_types() - implemented
     for jt in stub_types:
@@ -266,8 +266,8 @@ def test_ut_wrk_12_sweeper_requeues_stale_jobs_and_audits_with_actor(monkeypatch
     assert len(conn.audits) == 2 and all(a["act"] == "job.requeued" for a in conn.audits)
     assert all(a["a"] == ACTOR for a in conn.audits)  # actor que originó el job, nunca NULL
     assert all(json.loads(a["b"])["status"] in ("RUNNING", "RETRYING") for a in conn.audits)
-    # cada job recuperado se re-encola con su org y su actor (el claim colapsa doble encolado)
-    assert sorted(enqueued) == sorted((j["id"], j["organization_id"], j["created_by"]) for j in stale)
+    # cada job recuperado se re-encola con su org, su actor y su tipo (el claim colapsa doble encolado)
+    assert sorted(enqueued) == sorted((j["id"], j["organization_id"], j["created_by"], j["job_type"]) for j in stale)
 
 
 def test_ut_wrk_13_sweeper_is_idempotent_when_nothing_stale(monkeypatch):

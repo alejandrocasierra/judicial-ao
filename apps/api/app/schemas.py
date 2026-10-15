@@ -81,7 +81,7 @@ class DeletionRequestIn(Strict):
 
 
 class ProcessIn(Strict):
-    job_types: list[Literal["document_ocr", "document_classification", "media_asr", "diarization", "legal_extraction",
+    job_types: list[Literal["document_ocr", "document_classification", "media_asr", "media_diarize", "legal_extraction",
                             "embedding", "indexing", "graph_build", "file_ingest", "xlsx_ingest",
                             "procedural_links"]] = Field(min_length=1, max_length=10)
 

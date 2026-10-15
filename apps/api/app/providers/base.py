@@ -26,7 +26,8 @@ class OCRProvider(Protocol):
 
 
 class ASRProvider(Protocol):
-    def transcribe(self, media_bytes: bytes, mime_type: str) -> list[dict]: ...  # segmentos con timestamps
+    def transcribe(self, media_bytes: bytes, mime_type: str, progress_cb=None,
+                   initial_prompt: str | None = None) -> list[dict]: ...  # segmentos con timestamps
 
 
 class EmbeddingProvider(Protocol):

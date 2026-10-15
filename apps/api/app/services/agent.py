@@ -20,7 +20,7 @@ MAX_STEPS = 5
 
 def _system_prompt(agent_prompt: str | None = None) -> str:
     s = get_settings()
-    raw = (s.path(s.PROMPTS_DIR) / "agent_system.v6.md").read_text(encoding="utf-8")
+    raw = (s.path(s.PROMPTS_DIR) / "agent_system.v7.md").read_text(encoding="utf-8")
     base = raw.split("---", 2)[2].strip()
     # El system prompt del agente configurado (+ sus skills) se antepone al contrato de tools/formato.
     return f"{agent_prompt.strip()}\n\n{base}" if agent_prompt else base

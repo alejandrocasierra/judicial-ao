@@ -21,7 +21,7 @@ PENDING_PHASE = {
     "document_ocr": "fase-2",
     "document_classification": "fase-2",
     "media_asr": "fase-3",
-    "diarization": "fase-3",
+    "media_diarize": "fase-3",
     "legal_extraction": "fase-4",
     "embedding": "fase-4",
     "indexing": "fase-4",

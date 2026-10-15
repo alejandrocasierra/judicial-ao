@@ -10,27 +10,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FolderKanban, Plus, ChevronRight, Pencil, Trash2, AlertTriangle, Activity, FileText, Video, GitBranch, Sparkles } from "lucide-react";
+import { FolderKanban, Plus, ChevronRight, ChevronDown, ChevronUp, Pencil, Trash2, AlertTriangle, Activity, FileText, Video, GitBranch, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
+import { ProceduralChain } from "@/components/procedural-chain";
+import { ProceduralGraph } from "@/components/procedural-graph";
+import { TimelineAudit } from "@/components/timeline-audit";
+import { displayDate, effectiveDate, mmss, type TimelineEvent, type TimelineSource } from "@/components/timeline-types";
 
 interface Case { id: string; case_number: string; title: string; created_at: string; version: number; }
-interface TimelineSource {
-  citation_id: string; source_type: string; document_id?: string | null; page?: number | null;
-  media_id?: string | null; start_ms?: number | null; end_ms?: number | null; filename?: string | null;
-}
-interface TimelineEvent {
-  id: string; event_date: string | null; date_precision?: string | null; event_type?: string | null;
-  description: string; timeline_confidence?: string | null; sources: TimelineSource[];
-  kind?: string | null; subtype?: string | null; instance?: string | null; actor?: string | null;
-  authority?: string | null; date_type?: string | null; procedural_effect?: string | null;
-  document_id?: string | null; page_number?: number | null; document_filename?: string | null;
-  duplicate_of?: string | null; review_flags?: string[] | null;
-  seq?: number; code?: string | null;
-  links?: Array<{ relationship: string; direction: "in" | "out"; other_id: string; other_code: string;
-                  other_subtype?: string | null; confidence?: number | null }> | null;
-}
 
 const INSTANCE_ES: Record<string, string> = {
   primera: "Primera instancia", segunda: "Segunda instancia", casacion: "Casación", tutela: "Tutela",
@@ -66,15 +55,12 @@ const FLAG_ES: Record<string, string> = {
   duplicado: "duplicado", fecha_inconsistente: "fecha inconsistente",
   sin_fuente_real: "sin fuente real", sin_fecha: "sin fecha",
 };
+// Banderas que NO se muestran en la UI porque generan ruido; se usan solo internamente.
+const HIDDEN_FLAGS = new Set(["duplicado", "fecha_inconsistente", "ambiguous"]);
 const REL_ES: Record<string, string> = {
   causes: "causa", responds_to: "responde a", appeals: "apela a", confirms: "confirma",
   revokes: "revoca", precede: "precede", precedes: "precede", refers_to: "refiere a", same_as: "idéntico a",
 };
-
-function mmss(ms: number) {
-  const s = Math.floor((ms || 0) / 1000);
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-}
 
 export default function ProcesosPage() {
   const router = useRouter();
@@ -90,9 +76,49 @@ export default function ProcesosPage() {
   const [tlKind, setTlKind] = useState<string>("procedural");
   const [tlInstance, setTlInstance] = useState<string>("all");
   const [tlActor, setTlActor] = useState<string>("all");
+  const [collapsedInstances, setCollapsedInstances] = useState<Set<string>>(new Set());
+  const toggleInstance = (k: string) => {
+    setCollapsedInstances((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k); else next.add(k);
+      return next;
+    });
+  };
+  const expandAll = () => setCollapsedInstances(new Set());
+  const collapseAll = () => setCollapsedInstances(new Set(tlGroups.map(([k]) => k)));
   const [docView, setDocView] = useState<{ caseId: string; id: string; page: number; name?: string | null } | null>(null);
   const [mediaView, setMediaView] = useState<{ caseId: string; id: string; ms: number; name?: string | null } | null>(null);
   const [aiJobId, setAiJobId] = useState<string | null>(null);
+  // Vista de la línea de tiempo: cronológica (una sola línea), por instancia (acordeón),
+  // grafo causal (nodos y flechas) o auditoría (origen y marcas de cada actuación).
+  const [tlView, setTlView] = useState<"cronologica" | "instancias" | "grafo" | "auditoria">("instancias");
+  const [pendingFocus, setPendingFocus] = useState<string | null>(null);
+  const scrollToEvent = (id: string) =>
+    document.getElementById(`ev-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  // Si la actuación está en la vista actual, hace scroll; si no (p. ej. estamos en el
+  // grafo), cambia a la vista por instancia y luego hace scroll. Así ningún clic queda muerto.
+  const goToEvent = (id: string) => {
+    const el = document.getElementById(`ev-${id}`);
+    if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    setTlView("instancias");
+    setPendingFocus(id);
+  };
+  useEffect(() => {
+    if (!pendingFocus) return;
+    const t = setTimeout(() => {
+      document.getElementById(`ev-${pendingFocus}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setPendingFocus(null);
+    }, 60);
+    return () => clearTimeout(t);
+  }, [pendingFocus]);
+  const openSource = (s: TimelineSource) => {
+    if (!timelineCase) return;
+    if (s.source_type === "document_page" && s.document_id) {
+      setDocView({ caseId: timelineCase.id, id: s.document_id, page: s.page || 1, name: s.filename });
+    } else if (s.media_id) {
+      setMediaView({ caseId: timelineCase.id, id: s.media_id, ms: s.start_ms || 0, name: s.filename });
+    }
+  };
 
   const { data: cases = [], isLoading } = useQuery({
     queryKey: ["cases"],
@@ -115,6 +141,64 @@ export default function ProcesosPage() {
   const tlGroups = INSTANCE_ORDER
     .map((k) => [k, timeline.filter((e) => (e.instance || (e.kind === "procedural" ? "otro" : "generico")) === k)] as const)
     .filter(([, list]) => list.length > 0);
+
+  // Línea cronológica pura: una sola secuencia ordenada por fecha efectiva.
+  const tlOrdered = [...timeline].sort((a, b) =>
+    ((effectiveDate(a) ?? "").localeCompare(effectiveDate(b) ?? "")) || ((a.seq ?? 0) - (b.seq ?? 0)));
+
+  // Una actuación de la línea de tiempo (se reutiliza en la vista cronológica y en la
+  // agrupada por instancia).
+  const renderRow = (ev: TimelineEvent) => (
+    <li key={ev.id} id={`ev-${ev.id}`} className="relative mb-5 ml-4 scroll-mt-4">
+      <span className="absolute -left-[21px] top-1.5 h-3 w-3 rounded-full border-2 border-background bg-primary" />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold">{displayDate(effectiveDate(ev)) ?? "Sin fecha"}</span>
+        {ev.code && <span className="font-mono text-[10px] text-muted-foreground">{ev.code}</span>}
+        {ev.subtype && <Badge variant="secondary" className="text-[10px]">{SUBTYPE_ES[ev.subtype] || ev.subtype}</Badge>}
+        {ev.actor && <Badge variant="outline" className="text-[10px]">{ACTOR_ES[ev.actor] || ev.actor}</Badge>}
+        {ev.date_type === "referenciada" && (
+          <Badge variant="outline" className="border-amber-500 text-[10px] text-amber-600">referenciada</Badge>
+        )}
+        {(ev.review_flags ?? []).filter((f) => !HIDDEN_FLAGS.has(f)).map((f) => (
+          <Badge key={f} variant="outline" className="border-rose-500 text-[10px] text-rose-600">
+            {FLAG_ES[f] || f}
+          </Badge>
+        ))}
+        {ev.timeline_confidence && ev.timeline_confidence === "inferred" && (
+          <Badge variant="outline" className="text-[10px]">inferido</Badge>
+        )}
+      </div>
+      {ev.authority && <p className="mt-0.5 text-[11px] text-muted-foreground">{ev.authority}</p>}
+      <p className="mt-1 text-sm">{ev.description}</p>
+      {ev.procedural_effect && (
+        <p className="mt-0.5 text-xs text-muted-foreground"><b>Efecto:</b> {ev.procedural_effect}</p>
+      )}
+      {(ev.links ?? []).length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {(ev.links ?? []).map((l, i) => (
+            <button key={`${l.other_id}-${l.relationship}-${i}`} type="button"
+              onClick={() => scrollToEvent(l.other_id)}
+              className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+              title={`Ir a ${l.other_code}`}>
+              {l.direction === "out" ? "→" : "←"} {REL_ES[l.relationship] || l.relationship} {l.other_code}
+            </button>
+          ))}
+        </div>
+      )}
+      {ev.sources?.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {ev.sources.map((s) => (
+            <button key={s.citation_id} type="button" onClick={() => openSource(s)}
+              className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
+              {s.source_type === "document_page" ? <FileText className="h-3 w-3" /> : <Video className="h-3 w-3" />}
+              {s.filename || (s.source_type === "document_page" ? "documento" : "video")}
+              {s.source_type === "document_page" ? ` p.${s.page}` : ` ${mmss(s.start_ms)}`}
+            </button>
+          ))}
+        </div>
+      )}
+    </li>
+  );
 
   const buildGraph = useMutation({
     mutationFn: () => api.post<{ linked?: { relationships?: number }; reviewed?: { flagged?: number } }>(
@@ -339,7 +423,7 @@ export default function ProcesosPage() {
       </Dialog>
 
       <Dialog open={timelineCase !== null} onOpenChange={(o) => { if (!o) setTimelineCase(null); }}>
-        <DialogContent className="max-w-6xl">
+        <DialogContent className="max-w-[1400px]">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary" />Línea de tiempo procesal</span>
@@ -378,6 +462,31 @@ export default function ProcesosPage() {
                 {ACTOR_ES[a] || a}
               </Button>
             ))}
+            {tlGroups.length > 1 && (
+              <>
+                <span className="mx-1 h-4 w-px bg-border" />
+                <Button size="sm" variant="outline" className="h-7 gap-1" onClick={expandAll} title="Expandir todas las instancias">
+                  <ChevronDown className="h-3.5 w-3.5" />Expandir
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 gap-1" onClick={collapseAll} title="Colapsar todas las instancias">
+                  <ChevronUp className="h-3.5 w-3.5" />Colapsar
+                </Button>
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Vista:</span>
+            {([
+              ["cronologica", "Cronológica"],
+              ["instancias", "Por instancia"],
+              ["grafo", "Grafo causal"],
+              ["auditoria", "Auditoría"],
+            ] as const).map(([key, label]) => (
+              <Button key={key} size="sm" variant={tlView === key ? "default" : "outline"} className="h-7"
+                onClick={() => setTlView(key)}>
+                {label}
+              </Button>
+            ))}
           </div>
           <details className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <summary className="cursor-pointer select-none font-medium">¿Qué significan los vínculos y las marcas?</summary>
@@ -386,7 +495,7 @@ export default function ProcesosPage() {
               <p><b className="text-foreground">→ precede / ← precede</b>: orden temporal entre actuaciones (la anterior y la siguiente).</p>
               <p><b className="text-foreground">refiere a</b>: actuación que estaba citada dentro de otra y se resolvió a la actuación real.</p>
               <p><b className="text-foreground">apela a / responde a</b>: recurso o escrito que apela/responde a un auto o sentencia previos.</p>
-              <p><b className="text-rose-600">duplicado</b>: dos actuaciones casi idénticas (posible doble extracción). Otras marcas: <i>fecha_inconsistente</i>, <i>sin_fuente_real</i>, <i>sin_fecha</i>.</p>
+              <p><b className="text-rose-600">duplicado</b>: se resuelve automáticamente (se borra el referenciado y se unen sus citas al evento real). Otras marcas: <i>sin_fuente_real</i>, <i>sin_fecha</i>.</p>
               <p><b className="text-foreground">Chip 📄 al final</b>: documento y página de origen (clic para abrir la evidencia).</p>
               <p className="pt-1">
                 <b className="text-foreground">Analizar vínculos</b> = recalcula por reglas (instantáneo, sin IA).
@@ -402,79 +511,45 @@ export default function ProcesosPage() {
                 No hay actuaciones en la línea de tiempo todavía. Se alimenta de la extracción de actuaciones
                 procesales del expediente (autos, sentencias, recursos, pruebas, audiencias…).
               </p>
+            ) : tlView === "auditoria" ? (
+              <TimelineAudit events={timeline} subtypeLabel={(s) => SUBTYPE_ES[s] || s} onOpenSource={openSource} />
+            ) : tlView === "grafo" ? (
+              <div className="space-y-3">
+                <ProceduralChain events={timeline} onSelect={goToEvent} />
+                <ProceduralGraph events={timeline} laneLabel={(k) => INSTANCE_ES[k] || k}
+                  relationLabel={(k) => REL_ES[k] || k} onSelect={goToEvent} />
+              </div>
+            ) : tlView === "cronologica" ? (
+              <div className="space-y-3">
+                <ProceduralChain events={timeline} onSelect={goToEvent} />
+                <ol className="relative ml-2 border-l border-border">
+                  {tlOrdered.map((ev) => renderRow(ev))}
+                </ol>
+              </div>
             ) : (
-              tlGroups.map(([instance, list]) => (
-                <section key={instance} className="mb-4">
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {INSTANCE_ES[instance] || instance} · {list.length}
-                  </h4>
-                  <ol className="relative ml-2 border-l border-border">
-                    {list.map((ev) => (
-                      <li key={ev.id} id={`ev-${ev.id}`} className="relative mb-5 ml-4 scroll-mt-4">
-                        <span className="absolute -left-[21px] top-1.5 h-3 w-3 rounded-full border-2 border-background bg-primary" />
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold">
-                            {ev.event_date
-                              ? new Date(ev.event_date).toLocaleDateString("es-CO", { year: "numeric", month: "short", day: "numeric" })
-                              : "Sin fecha"}
-                          </span>
-                          {ev.code && <span className="font-mono text-[10px] text-muted-foreground">{ev.code}</span>}
-                          {ev.subtype && <Badge variant="secondary" className="text-[10px]">{SUBTYPE_ES[ev.subtype] || ev.subtype}</Badge>}
-                          {ev.actor && <Badge variant="outline" className="text-[10px]">{ACTOR_ES[ev.actor] || ev.actor}</Badge>}
-                          {ev.date_type === "referenciada" && (
-                            <Badge variant="outline" className="border-amber-500 text-[10px] text-amber-600">referenciada</Badge>
-                          )}
-                          {(ev.review_flags ?? []).map((f) => (
-                            <Badge key={f} variant="outline" className="border-rose-500 text-[10px] text-rose-600">
-                              {FLAG_ES[f] || f}
-                            </Badge>
-                          ))}
-                          {ev.timeline_confidence && ev.timeline_confidence !== "source_backed" && (
-                            <Badge variant="outline" className="text-[10px]">{ev.timeline_confidence}</Badge>
-                          )}
-                        </div>
-                        {ev.authority && <p className="mt-0.5 text-[11px] text-muted-foreground">{ev.authority}</p>}
-                        <p className="mt-1 text-sm">{ev.description}</p>
-                        {ev.procedural_effect && (
-                          <p className="mt-0.5 text-xs text-muted-foreground"><b>Efecto:</b> {ev.procedural_effect}</p>
-                        )}
-                        {(ev.links ?? []).length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {(ev.links ?? []).map((l, i) => (
-                              <button key={`${l.other_id}-${l.relationship}-${i}`} type="button"
-                                onClick={() => document.getElementById(`ev-${l.other_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
-                                className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
-                                title={`Ir a ${l.other_code}`}>
-                                {l.direction === "out" ? "→" : "←"} {REL_ES[l.relationship] || l.relationship} {l.other_code}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {ev.sources?.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {ev.sources.map((s) => (
-                              <button key={s.citation_id} type="button"
-                                onClick={() => {
-                                  if (!timelineCase) return;
-                                  if (s.source_type === "document_page" && s.document_id) {
-                                    setDocView({ caseId: timelineCase.id, id: s.document_id, page: s.page || 1, name: s.filename });
-                                  } else if (s.media_id) {
-                                    setMediaView({ caseId: timelineCase.id, id: s.media_id, ms: s.start_ms || 0, name: s.filename });
-                                  }
-                                }}
-                                className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
-                                {s.source_type === "document_page" ? <FileText className="h-3 w-3" /> : <Video className="h-3 w-3" />}
-                                {s.filename || (s.source_type === "document_page" ? "documento" : "video")}
-                                {s.source_type === "document_page" ? ` p.${s.page}` : ` ${mmss(s.start_ms || 0)}`}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-              ))
+              <div className="space-y-3">
+                <ProceduralChain events={timeline} onSelect={goToEvent} />
+                <div>
+                  {tlGroups.map(([instance, list]) => (
+                    <section key={instance} className="mb-4">
+                      <button
+                        type="button"
+                        onClick={() => toggleInstance(instance)}
+                        className="mb-2 flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted/50"
+                        aria-expanded={!collapsedInstances.has(instance)}
+                      >
+                        <span>{INSTANCE_ES[instance] || instance} · {list.length}</span>
+                        {collapsedInstances.has(instance) ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                      </button>
+                      {!collapsedInstances.has(instance) && (
+                        <ol className="relative ml-2 border-l border-border">
+                          {list.map((ev) => renderRow(ev))}
+                        </ol>
+                      )}
+                    </section>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </DialogContent>

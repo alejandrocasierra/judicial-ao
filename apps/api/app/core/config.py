@@ -131,6 +131,9 @@ class Settings(BaseSettings):
     OCR_TESSERACT_LANG: str
     OCR_DPI: int = Field(gt=0)
     OCR_PREPROCESS: bool
+    # Segmentación estructural de documentos antes de la extracción (encabezado,
+    # cuerpo, decisión/resuelve, anexos). Mejora fechas, autoridad y efectos procesales.
+    DOCUMENT_SEGMENTATION_ENABLED: bool = True
     # Extracción automática de PARTES al terminar OCR/ASR (encabezados + hablantes).
     AUTO_EXTRACT_PARTIES: bool = True
     # Máximo de hechos que se envían al LLM en cada llamada de `link_evidence` (evita el
@@ -169,14 +172,26 @@ class Settings(BaseSettings):
     # Distancia coseno máxima para considerar que dos voces son el MISMO hablante.
     # Más alto = fusiona más (súbelo si la misma persona sale partida; bájalo si une a
     # personas distintas). 0.5 es el equilibrado por defecto.
-    ASR_DIARIZATION_CLUSTER_THRESHOLD: float = Field(default=0.5, ge=0, le=2)
+    ASR_DIARIZATION_CLUSTER_THRESHOLD: float = Field(default=0.35, ge=0, le=2)
     ASR_VAD_FILTER: bool
     ASR_VAD_PARAMETERS: dict | None
     ASR_MIN_SPEECH_DURATION_MS: int = Field(ge=0)
     ASR_DIARIZATION_TOKEN: str
     FFMPEG_PATH: str
     HF_TOKEN: str
-
+    # Log en vivo: con true, el worker escribe en el log cada segmento ASR y cada turno
+    # de diarización a medida que se producen (quién dijo qué y en qué minuto), sin
+    # esperar a que termine el job. Ver con: docker compose logs -f worker-media
+    ASR_LOG_LIVE: bool = False
+    # Prompt base para Whisper (vocabulario del dominio). media_pipeline lo COMPLEMENTA
+    # por caso con el radicado y los participantes ya conocidos: Whisper tiende a copiar
+    # el vocabulario del prompt, así los nombres propios y radicados salen bien.
+    ASR_INITIAL_PROMPT: str = ""
+    # Reciclaje del proceso hijo de Whisper: tras N segundos de audio procesados por
+    # el mismo hijo, se mata y nace uno nuevo (la memoria vuelve al baseline). Faster-
+    # whisper/ctranslate2 acumulan RSS en procesos muy largos; con el reciclaje el
+    # pico nunca crece y el ASR completa videos de horas sin OOM.
+    ASR_CHILD_RECYCLE_SECONDS: int = Field(default=900, ge=0)
     LLM_PROVIDER: Literal["fake", "anthropic", "openai"]
     LLM_MODEL: str
     LLM_API_KEY: str

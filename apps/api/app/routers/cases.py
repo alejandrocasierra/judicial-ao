@@ -20,7 +20,8 @@ from app.schemas import (CaseCreate, CasePatch, LegalHoldIn, MemberIn, PartyBulk
                          SpeakerMergeIn, SpeakerPatch, SpeakerRoleAssign)
 from app.security import rbac
 from app.security.deps import Principal, case_access, current_principal, require_org
-from app.services import audit, export, indexing, party_extraction, party_roles as party_roles_service, procedural_graph, purge
+from app.services import (audit, event_consolidation, export, indexing, party_extraction,
+                          party_roles as party_roles_service, procedural_graph, purge)
 from app.services import speakers as speakers_service
 from app.services.case_tools import read as ct_read
 from app.workers.dispatcher import create_job, enqueue_if_pending, enqueue_job
@@ -549,10 +550,10 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
     case_access(p, case_id, "case.read")
     with tx(p.org_id, p.user_id) as c:
         evs = [dict(r) for r in rows(c, """
-            SELECT e.id, e.kind, e.event_date, e.date_precision, e.event_type, e.subtype, e.instance,
-                   e.actor, e.authority, e.date_type, e.procedural_effect, e.description,
-                   e.timeline_confidence, e.confidence, e.document_id, e.page_number,
-                   e.duplicate_of, e.review_flags,
+            SELECT e.id, e.kind, e.event_date, e.document_date, e.incorporation_date, e.date_precision,
+                   e.event_type, e.subtype, e.instance, e.actor, e.authority, e.date_type,
+                   e.procedural_effect, e.description, e.timeline_confidence, e.confidence,
+                   e.document_id, e.page_number, e.duplicate_of, e.review_flags,
                    d.filename AS document_filename,
                    (SELECT coalesce(json_agg(json_build_object('citation_id', ci.id, 'source_type', ci.source_type,
                         'document_id', ci.document_id, 'page', ci.page_number, 'media_id', ci.media_id,
@@ -568,7 +569,7 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
               AND (CAST(:kind AS text) IS NULL OR e.kind = :kind)
               AND (CAST(:instance AS text) IS NULL OR e.instance = :instance)
               AND (CAST(:actor AS text) IS NULL OR e.actor = :actor)
-            ORDER BY e.event_date NULLS LAST, e.kind""",
+            ORDER BY COALESCE(e.event_date, e.document_date, e.incorporation_date) NULLS LAST, e.id""",
             c=str(case_id), kind=kind, instance=instance, actor=actor)]
         rels = rows(c, """SELECT source_event_id, target_event_id, relationship, confidence
                           FROM event_relationships WHERE case_id = :c""", c=str(case_id))
@@ -618,13 +619,15 @@ def build_timeline(case_id: UUID, request: Request, llm: bool = False, backgroun
         return {"background": True, "job_id": str(job["id"]), "status": job["status"],
                 "reused": bool(job.get("reused"))}
     with tx(p.org_id, p.user_id) as c:
+        consolidated = event_consolidation.consolidate_case_events(c, p.org_id, str(case_id))
         linked = procedural_graph.link_events(c, p.org_id, str(case_id))
         reviewed = procedural_graph.review_events(c, p.org_id, str(case_id))
         ai = procedural_graph.propose_relations_llm(c, p.org_id, str(case_id), p.user_id) if llm else None
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="timeline.built", entity_type="case",
-                     entity_id=str(case_id), after={"linked": linked, "reviewed": reviewed, "ai": ai},
+                     entity_id=str(case_id),
+                     after={"consolidated": consolidated, "linked": linked, "reviewed": reviewed, "ai": ai},
                      request=request)
-    return {"linked": linked, "reviewed": reviewed, "ai_links": ai}
+    return {"consolidated": consolidated, "linked": linked, "reviewed": reviewed, "ai_links": ai}
 
 
 @router.get("/{case_id}/entities")

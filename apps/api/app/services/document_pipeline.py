@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -53,6 +54,75 @@ FOLIO_PATTERNS = [
 # Regex para número aislado (último recurso). Suele ser el folio impreso en
 # encabezado/pie; lo buscamos en cualquier línea para no perder folios.
 ISOLATED_NUMBER = re.compile(r"^\s*(\d{1,4})\s*$", re.MULTILINE)
+
+# Meses en español para extraer fechas tipo "15 de enero de 2018".
+_MONTH_ES = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
+    "julio": 7, "agosto": 8, "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+    "ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6,
+    "jul": 7, "ago": 8, "sep": 9, "oct": 10, "nov": 11, "dic": 12,
+}
+
+
+def _parse_spanish_date(match_text: str) -> date | None:
+    """Convierte '15 de enero de 2018' o '15 enero 2018' a date."""
+    parts = re.sub(r"[^\w\d]", " ", match_text.lower()).split()
+    nums = [p for p in parts if p.isdigit()]
+    if len(nums) < 2:
+        return None
+    day = int(nums[0])
+    year = int(nums[-1])
+    month_name = next((p for p in parts if p in _MONTH_ES), None)
+    if not month_name or not (1 <= day <= 31) or not (1800 <= year <= 2100):
+        return None
+    month = _MONTH_ES[month_name]
+    try:
+        return date(year, month, day)
+    except ValueError:
+        return None
+
+
+# Patrones de fecha en documentos judiciales colombianos.
+_DATE_PATTERNS = [
+    re.compile(r"\b(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+de\s+(\d{4})\b", re.IGNORECASE),
+    re.compile(r"\b(\d{1,2})\s+([a-záéíóúñ]+)\s+(\d{4})\b", re.IGNORECASE),
+    re.compile(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b"),
+    re.compile(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b"),
+    re.compile(r"\b(\d{1,2})-(\d{1,2})-(\d{4})\b"),
+]
+
+
+def detect_document_date(text: str) -> date | None:
+    """Busca la fecha del documento en el texto; devuelve la más frecuente o None.
+
+    Prioriza fechas escritas en español ('15 de enero de 2018') y evita
+    placeholders como 1899/1900/0001.
+    """
+    if not text:
+        return None
+    from collections import Counter
+    found: list[date] = []
+    for pat in _DATE_PATTERNS:
+        for m in pat.finditer(text):
+            try:
+                if pat.pattern.startswith(r"\b(\d{1,2})\s+de"):
+                    d = _parse_spanish_date(m.group(0))
+                elif pat.pattern.startswith(r"\b(\d{1,2})\s+([a-z"):
+                    d = _parse_spanish_date(m.group(0))
+                elif pat.pattern.startswith(r"\b(\d{4})-"):
+                    y, mth, day = map(int, m.groups())
+                    d = date(y, mth, day)
+                else:
+                    day, mth, y = map(int, m.groups())
+                    d = date(y, mth, day)
+                if d and 1800 <= d.year <= date.today().year + 1 and d.strftime("%Y-%m-%d") not in {"1899-12-31", "1900-01-01", "0001-01-01"}:
+                    found.append(d)
+            except (ValueError, TypeError):
+                continue
+    if not found:
+        return None
+    most_common = Counter(found).most_common(1)[0][0]
+    return most_common
 
 
 def detect_folio(text: str) -> str | None:
@@ -345,19 +415,21 @@ def process_document(
     # Clasificación documental: concatena texto de todas las páginas.
     full_text = "\n".join(p.text for p in ocr_pages)
     document_type, classification_reason = classify_document(full_text)
+    doc_date = detect_document_date(full_text)
 
     one(conn, """
         UPDATE documents
         SET processing_status = :status,
             page_count = :pc,
             document_type = :dt,
+            document_date = :dd,
             ocr_mode = :mode,
             parser_version = :pv
         WHERE id = :d
         RETURNING id
     """,
         status="REVIEW_REQUIRED" if needs_review_count else "OCR_COMPLETE",
-        pc=len(ocr_pages), dt=document_type,
+        pc=len(ocr_pages), dt=document_type, dd=doc_date,
         mode=actual_mode if actual_mode in ("basico", "document_ai") else None,
         pv=s.PIPELINE_VERSION, d=document_id)
 

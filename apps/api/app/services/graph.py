@@ -135,6 +135,34 @@ def build_case_graph(conn: Connection, org_id: str, case_id: str, actor_id: str 
     events = rows(conn, "SELECT id, description FROM events WHERE case_id = :c", c=case_id)
     for x in events:
         _insert_node(conn, org_id, case_id, "Event", "events", str(x["id"]), x["description"][:200])
+
+    # Aristas: relaciones entre eventos (event_relationships -> graph_edges)
+    _REL_TO_EDGE = {
+        "precede": "PRECEDES",
+        "precedes": "PRECEDES",
+        "causes": "CAUSES",
+        "appeals": "APPEALS",
+        "responds_to": "RESPONDS_TO",
+        "refers_to": "REFERS_TO",
+    }
+    event_rels = rows(conn, """
+        SELECT er.source_event_id, er.target_event_id, er.relationship, er.confidence,
+               COALESCE(er.provenance, 'INFERRED') AS provenance
+        FROM event_relationships er
+        JOIN events es ON es.id = er.source_event_id AND es.case_id = :c
+        JOIN events et ON et.id = er.target_event_id AND et.case_id = :c
+        WHERE er.case_id = :c
+    """, c=case_id)
+    for er in event_rels:
+        src = _node_id(conn, case_id, "events", str(er["source_event_id"]))
+        tgt = _node_id(conn, case_id, "events", str(er["target_event_id"]))
+        if src and tgt:
+            edge_type = _REL_TO_EDGE.get(er["relationship"], er["relationship"].upper())
+            _insert_edge(conn, org_id, case_id, src, tgt, edge_type,
+                         er["provenance"] or "INFERRED",
+                         confidence=er["confidence"],
+                         metadata={"relationship_type": er["relationship"]})
+
     decisions = rows(conn, "SELECT id, outcome FROM decisions WHERE case_id = :c", c=case_id)
     for x in decisions:
         _insert_node(conn, org_id, case_id, "Decision", "decisions", str(x["id"]), x["outcome"] or "Decisión")

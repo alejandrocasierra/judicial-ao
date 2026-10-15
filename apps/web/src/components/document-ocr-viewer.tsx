@@ -346,11 +346,13 @@ export function DocumentOcrViewer({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-6xl">
+      <DialogContent className="max-w-[1600px]">
         <DialogHeader><DialogTitle>{filename}</DialogTitle></DialogHeader>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {/* Navegación de hoja: NO se encoge (shrink-0); si no cabe, el grupo de
+              acciones (ml-auto) pasa a la siguiente línea sin aplastarla. */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button variant="outline" size="icon" onClick={() => setPage((p) => Math.max(1, p - 1))}><ChevronLeft className="h-4 w-4" /></Button>
             <Select value={String(page)} onValueChange={(v) => setPage(Number(v))}>
               <SelectTrigger className="w-[230px]"><SelectValue placeholder={`Hoja ${page}`} /></SelectTrigger>
@@ -384,7 +386,7 @@ export function DocumentOcrViewer({
               </Badge>
             ))}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {ocrVersions && ocrVersions.versions.length > 0 && (
               <Select value={viewOcrMode} onValueChange={setViewOcrMode}>
                 <SelectTrigger className="w-[160px]">
@@ -438,7 +440,8 @@ export function DocumentOcrViewer({
           {(viewMode === "split" || viewMode === "text") && (
             <div className="space-y-2">
               <Textarea value={text} onChange={(e) => setTextDraft(e.target.value)}
-                rows={viewMode === "text" ? 26 : 18} className="font-mono text-xs leading-relaxed" />
+                rows={viewMode === "text" ? 26 : 18}
+                className={`font-mono text-xs leading-relaxed ${viewMode === "text" ? "h-[68vh]" : "h-[60vh] min-h-[300px] resize-none"}`} />
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                 <Bot className="h-3.5 w-3.5" />
                 <span>
@@ -462,7 +465,7 @@ export function DocumentOcrViewer({
                 </p>
                 <span className="text-xs text-muted-foreground">Clic en un chunk para ir a su hoja</span>
               </div>
-              <div className="h-[520px] space-y-2 overflow-auto rounded-md border bg-muted/20 p-3">
+              <div className="h-[60vh] min-h-[300px] space-y-2 overflow-auto rounded-md border bg-muted/20 p-3">
                 {loadingChunks && !chunks ? (
                   <p className="text-sm text-muted-foreground">Cargando chunks…</p>
                 ) : (chunks?.length ?? 0) === 0 ? (
@@ -516,7 +519,7 @@ export function DocumentOcrViewer({
               </div>
               <div
                 ref={viewRef}
-                className={`${viewMode === "pdf" ? "h-[70vh]" : "h-[520px]"} overflow-auto rounded-md border bg-muted/30 ${dragging ? "select-none" : ""}`}
+                className={`${viewMode === "pdf" ? "h-[70vh]" : "h-[60vh] min-h-[300px]"} overflow-auto rounded-md border bg-muted/30 ${dragging ? "select-none" : ""}`}
                 style={{ cursor: dragging ? "grabbing" : "grab" }}
                 onMouseDown={onMouseDown}
                 onMouseMove={onMouseMove}

@@ -140,7 +140,7 @@ export function MediaTranscriptViewer({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-6xl">
+      <DialogContent className="max-w-[1600px]">
         <DialogHeader><DialogTitle>{filename}</DialogTitle></DialogHeader>
         <div className="grid min-w-0 gap-4 [&>*]:min-w-0 md:grid-cols-2">
           <div className="space-y-2">
@@ -168,7 +168,7 @@ export function MediaTranscriptViewer({
               unidentifiedCount={(segments ?? []).filter((s) => data?.unknown_speaker_id && s.speaker_id === data.unknown_speaker_id).length}
               onRenamed={() => qc.invalidateQueries({ queryKey: ["segments", caseId, mediaId] })}
             />
-            <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-[65vh] space-y-2 overflow-y-auto pr-1">
               {segments?.length ? segments.map((s) => {
               const active = s.id === activeId;
               return (

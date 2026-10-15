@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import shutil
+import time
 from functools import lru_cache
 from pathlib import Path
 
 from app.core.config import get_settings
+
+log = logging.getLogger(__name__)
 
 
 def original_key(case_id: str, sha256: str, kind: str) -> str:
@@ -207,13 +211,33 @@ class GcsStorage:
     def get(self, key: str) -> bytes:
         return self.bucket.blob(self._key(key)).download_as_bytes()
 
-    def download_to(self, key: str, dest: Path) -> None:
+    def download_to(self, key: str, dest: Path, attempts: int = 8) -> None:
+        """Descarga por bloques CON REINTENTO Y REANUDACIÓN.
+
+        Los medios son de GB y la conexión puede ser lenta o inestable (la VPS descarga
+        con internet limitado): un timeout de GCS NO debe matar el job. Si la descarga
+        se corta, se reanuda desde el byte donde quedó (Range), no desde cero."""
         dest.parent.mkdir(parents=True, exist_ok=True)
         blob = self.bucket.blob(self._key(key))
-        # Streaming por bloques: evita cargar el objeto en memoria y es más estable en
-        # archivos grandes que `download_to_filename` (que reinicia ante checksum).
-        with blob.open("rb", chunk_size=8 * 1024 * 1024) as src, open(dest, "wb") as out:
-            shutil.copyfileobj(src, out, length=8 * 1024 * 1024)
+        total = self.size(key) or 0
+        for i in range(attempts):
+            start = dest.stat().st_size if dest.exists() else 0
+            if total and start >= total:
+                return
+            try:
+                with blob.open("rb", chunk_size=8 * 1024 * 1024) as src, open(dest, "ab") as out:
+                    if start:
+                        src.seek(start)
+                    shutil.copyfileobj(src, out, length=8 * 1024 * 1024)
+                if not total or dest.stat().st_size >= total:
+                    return
+            except Exception as exc:  # noqa: BLE001 — reintenta y reanuda
+                log.warning("descarga de %s interrumpida en %d/%d bytes (intento %d/%d): %s",
+                            key, dest.stat().st_size if dest.exists() else 0, total,
+                            i + 1, attempts, exc)
+            time.sleep(min(30, 2 ** i))
+        raise RuntimeError(f"no se pudo descargar {key} tras {attempts} intentos "
+                           f"({dest.stat().st_size if dest.exists() else 0}/{total} bytes)")
 
     def get_range(self, key: str, start: int, end: int) -> bytes:
         """Rango inclusivo [start, end] (HTTP Range); GCS usa fin exclusivo."""

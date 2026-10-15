@@ -67,7 +67,7 @@ def test_ut_media_03_process_media_persists_segments_and_speakers():
 
     def fake_one(conn, sql, **params):
         if "UPDATE media" in sql and "RETURNING" in sql and "processing_status = 'ASR_RUNNING'" in sql:
-            return {"id": "media-1", "storage_uri": "local://key", "filename": "video.mp4", "mime_type": "video/mp4", "media_type": "video"}
+            return {"id": "media-1", "storage_uri": "local://key", "filename": "video.mp4", "mime_type": "video/mp4", "media_type": "video", "sha256": "abc123"}
         if "SELECT processing_status FROM media" in sql:
             return None
         if "SELECT id, display_name FROM speakers" in sql:
