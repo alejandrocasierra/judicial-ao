@@ -10,14 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { FolderKanban, Plus, ChevronRight, ChevronDown, ChevronUp, Pencil, Trash2, AlertTriangle, Activity, FileText, Video, GitBranch, Sparkles } from "lucide-react";
+import { FolderKanban, Plus, ChevronRight, ChevronDown, ChevronUp, Pencil, Trash2, AlertTriangle, Activity, GitBranch, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
 import { ProceduralChain } from "@/components/procedural-chain";
 import { ProceduralGraph } from "@/components/procedural-graph";
 import { TimelineAudit } from "@/components/timeline-audit";
-import { displayEventDate, effectiveDate, isRealAct, mmss, type TimelineEvent, type TimelineSource } from "@/components/timeline-types";
+import { displayEventDate, effectiveDate, isRealAct, type TimelineEvent, type TimelineSource } from "@/components/timeline-types";
 
 interface Case { id: string; case_number: string; title: string; created_at: string; version: number; }
 
@@ -202,30 +202,6 @@ export default function ProcesosPage() {
               <button type="button" onClick={() => toggleExpanded(ev.id)}
                 className="rounded border border-dashed px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
                 {open ? "ver menos" : `+${all.length - 6} vínculos`}
-              </button>
-            )}
-          </div>
-        );
-      })()}
-      {ev.sources?.length > 0 && (() => {
-        const all = ev.sources;
-        const open = expanded.has(`${ev.id}:src`);
-        const shown = open ? all : all.slice(0, 4);
-        return (
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            {shown.map((s) => (
-              <button key={s.citation_id} type="button" onClick={() => openSource(s)}
-                className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
-                {s.source_type === "document_page" ? <FileText className="h-3 w-3" /> : <Video className="h-3 w-3" />}
-                {s.filename || (s.source_type === "document_page" ? "documento" : "video")}
-                {s.source_type === "document_page" ? ` p.${s.page}` : ` ${mmss(s.start_ms)}`}
-              </button>
-            ))}
-            {all.length > 4 && (
-              <button type="button" onClick={() => toggleExpanded(`${ev.id}:src`)}
-                title="Orígenes donde se menciona esta actuación"
-                className="rounded border border-dashed px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
-                {open ? "ver menos" : `+${all.length - 4} orígenes`}
               </button>
             )}
           </div>
