@@ -56,7 +56,7 @@ const FLAG_ES: Record<string, string> = {
   sin_fuente_real: "sin fuente real", sin_fecha: "sin fecha",
 };
 // Banderas que NO se muestran en la UI porque generan ruido; se usan solo internamente.
-const HIDDEN_FLAGS = new Set(["duplicado", "fecha_inconsistente", "ambiguous"]);
+const HIDDEN_FLAGS = new Set(["duplicado", "fecha_inconsistente", "ambiguous", "sin_fecha", "sin_fuente_real"]);
 const REL_ES: Record<string, string> = {
   causes: "causa", responds_to: "responde a", appeals: "apela a", confirms: "confirma",
   revokes: "revoca", precede: "precede", precedes: "precede", refers_to: "refiere a", same_as: "idéntico a",
@@ -140,14 +140,17 @@ export default function ProcesosPage() {
     enabled: !!timelineCase,
   });
   const visible = soloReales ? timeline.filter(isRealAct) : timeline;
-  const tlInstances = Array.from(new Set(visible.map((e) => e.instance).filter(Boolean))) as string[];
-  const tlActors = Array.from(new Set(visible.map((e) => e.actor).filter(Boolean))) as string[];
+  // La vista principal (línea, cadena y grafo) muestra solo actuaciones CON fecha.
+  // Las que no tienen fecha (fragmentos de audiencia) viven en la pestaña Auditoría.
+  const dated = visible.filter((e) => effectiveDate(e) != null);
+  const tlInstances = Array.from(new Set(dated.map((e) => e.instance).filter(Boolean))) as string[];
+  const tlActors = Array.from(new Set(dated.map((e) => e.actor).filter(Boolean))) as string[];
   const tlGroups = INSTANCE_ORDER
-    .map((k) => [k, visible.filter((e) => (e.instance || (e.kind === "procedural" ? "otro" : "generico")) === k)] as const)
+    .map((k) => [k, dated.filter((e) => (e.instance || (e.kind === "procedural" ? "otro" : "generico")) === k)] as const)
     .filter(([, list]) => list.length > 0);
 
   // Línea cronológica pura: una sola secuencia ordenada por fecha efectiva.
-  const tlOrdered = [...visible].sort((a, b) =>
+  const tlOrdered = [...dated].sort((a, b) =>
     ((effectiveDate(a) ?? "").localeCompare(effectiveDate(b) ?? "")) || ((a.seq ?? 0) - (b.seq ?? 0)));
 
   // Una actuación de la línea de tiempo (se reutiliza en la vista cronológica y en la
@@ -516,30 +519,30 @@ export default function ProcesosPage() {
           <div className="max-h-[60vh] overflow-y-auto pr-1">
             {timelineLoading ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
-            ) : visible.length === 0 ? (
+            ) : dated.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 {timeline.length > 0
-                  ? `No hay actuaciones reales; el expediente solo tiene ${timeline.length} menciones citadas. Activa «Incluir citadas» para verlas.`
+                  ? `No hay actuaciones con fecha que mostrar (${timeline.length} eventos en total, incluyendo citadas y sin fecha). Revisa «Incluir citadas» o la pestaña Auditoría.`
                   : "No hay actuaciones en la línea de tiempo todavía. Se alimenta de la extracción de actuaciones procesales del expediente (autos, sentencias, recursos, pruebas, audiencias…)."}
               </p>
             ) : tlView === "auditoria" ? (
               <TimelineAudit events={visible} subtypeLabel={(s) => SUBTYPE_ES[s] || s} onOpenSource={openSource} />
             ) : tlView === "grafo" ? (
               <div className="space-y-3">
-                <ProceduralChain events={visible} onSelect={goToEvent} />
-                <ProceduralGraph events={visible} laneLabel={(k) => INSTANCE_ES[k] || k}
+                <ProceduralChain events={dated} onSelect={goToEvent} />
+                <ProceduralGraph events={dated} laneLabel={(k) => INSTANCE_ES[k] || k}
                   relationLabel={(k) => REL_ES[k] || k} onSelect={goToEvent} />
               </div>
             ) : tlView === "cronologica" ? (
               <div className="space-y-3">
-                <ProceduralChain events={visible} onSelect={goToEvent} />
+                <ProceduralChain events={dated} onSelect={goToEvent} />
                 <ol className="relative ml-2 border-l border-border">
                   {tlOrdered.map((ev) => renderRow(ev))}
                 </ol>
               </div>
             ) : (
               <div className="space-y-3">
-                <ProceduralChain events={visible} onSelect={goToEvent} />
+                <ProceduralChain events={dated} onSelect={goToEvent} />
                 <div>
                   {tlGroups.map(([instance, list]) => (
                     <section key={instance} className="mb-4">
