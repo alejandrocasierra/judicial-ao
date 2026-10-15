@@ -176,6 +176,12 @@ _ROLE_HEADERS: dict[str, str] = {
     "ponente": "magistrado",
 }
 
+# Apoderado + lado de la parte: "APODERADO DE LA PARTE DEMANDANTE", "APODERADA DEL DEMANDADO".
+_ATTORNEY_RE = re.compile(r"^apoderad[oa]s?\b")
+_SIDE_CLAIMANT_RE = re.compile(
+    r"\b(demandantes?|actora|actor|ejecutantes?|accionantes?|denunciantes?)\b")
+_SIDE_DEFENDANT_RE = re.compile(r"\b(demandad[oa]s?|ejecutad[oa]s?|denunciad[oa]s?)\b")
+
 # Líneas que NO son nombres (encabezados/ruido de OCR). Normalizadas sin acentos/espacios.
 _NAME_NOISE = {
     "CONTENIDODERADICACION", "CONTENIDO", "ACTUACIONES", "ACTUACIONESDELPROCESO", "UBICACION",
@@ -233,7 +239,16 @@ def _role_from_header(line: str) -> str | None:
     t = re.sub(r"[().:;\-]+$", "", t).strip()
     t = re.sub(r"\(s\)$", "", t).strip()
     t = re.sub(r"\s+", " ", t)
-    return _ROLE_HEADERS.get(t)
+    exact = _ROLE_HEADERS.get(t)
+    if exact:
+        return exact
+    # "Apoderado (de la parte) DEMANDANTE / DEMANDADA" -> rol con lado.
+    if _ATTORNEY_RE.match(t):
+        if _SIDE_DEFENDANT_RE.search(t):
+            return "attorney_defendant"
+        if _SIDE_CLAIMANT_RE.search(t):
+            return "attorney_claimant"
+    return None
 
 
 def extract_structured(conn: Connection, case_id: str) -> list[dict[str, Any]]:

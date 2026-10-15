@@ -22,10 +22,13 @@ DEFAULT_ROLES: list[tuple[str, str, int]] = [
     ("plaintiff", "Ejecutante", 30),
     ("respondent", "Ejecutado", 40),
     ("attorney", "Apoderado", 50),
+    ("attorney_claimant", "Apoderado parte demandante", 51),
+    ("attorney_defendant", "Apoderado parte demandada", 52),
     ("representative", "Representante", 60),
     ("third_party", "Tercero", 70),
     ("witness", "Testigo", 80),
     ("expert", "Perito", 90),
+    ("magistrado", "Magistrado", 95),
     ("judge", "Juez", 100),
 ]
 
@@ -38,10 +41,11 @@ def slugify(label: str) -> str:
 
 
 def ensure_defaults(conn: Connection, org_id: str, case_id: str) -> None:
-    """Siembra los roles por defecto si el caso aún no tiene catálogo."""
-    n = conn.execute(text("SELECT count(*) FROM party_roles WHERE case_id = :c"), {"c": case_id}).scalar()
-    if n:
-        return
+    """Asegura (idempotente) que existan los roles por defecto del caso.
+
+    No es un "solo si está vacío": si añadimos roles nuevos al catálogo (p. ej.
+    apoderado por parte), se agregan a los casos existentes sin pisar los editados.
+    """
     for code, label, order in DEFAULT_ROLES:
         conn.execute(text("""
             INSERT INTO party_roles (organization_id, case_id, code, label, is_system, sort_order)
