@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0043_subtype_catalog"
-down_revision = "0042_event_relationships_to_graph"
+down_revision = "0042_event_relationships_graph"
 branch_labels = None
 depends_on = None
 

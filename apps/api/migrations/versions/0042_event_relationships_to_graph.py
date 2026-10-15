@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0042_event_relationships_to_graph"
+revision = "0042_event_relationships_graph"
 down_revision = "0041_event_dates"
 branch_labels = None
 depends_on = None
