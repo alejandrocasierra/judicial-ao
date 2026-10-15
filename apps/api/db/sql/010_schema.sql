@@ -346,6 +346,24 @@ CREATE TABLE citations (
   CHECK (char_start IS NULL OR (char_start >= 0 AND char_end > char_start))
 );
 
+-- Invariante de trazabilidad: una actuación procesal SIEMPRE cita su evidencia.
+-- Trigger diferido: la cita puede insertarse después del evento en la misma transacción.
+CREATE OR REPLACE FUNCTION events_require_citation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.kind = 'procedural'
+     AND NOT EXISTS (SELECT 1 FROM citations c
+                     WHERE c.target_type = 'event' AND c.target_id = NEW.id) THEN
+    RAISE EXCEPTION 'evento procesal % sin cita de evidencia (invariante de trazabilidad)', NEW.id;
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE CONSTRAINT TRIGGER events_require_citation
+  AFTER INSERT ON events
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION events_require_citation();
+
 CREATE TABLE contradictions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES organizations(id),

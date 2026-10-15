@@ -1119,12 +1119,28 @@ def extract_procedural_events(
             continue
         events = data.get("events") or []
         evidence_map = {it["handle"]: it for it in items}
-        ids = _insert_procedural_events(conn, org_id, case_id, document_id, events, fallback_date,
+        # INVARIANTES (capa 1): una actuación solo se persiste si (a) cita al menos una
+        # evidencia real del lote y (b) tiene fecha (propia o del documento). Así no nacen
+        # actuaciones "sin fuente" ni "sin fecha" (las que antes llegaban a la línea de tiempo).
+        kept: list[dict[str, Any]] = []
+        for e in events:
+            valid_sources = [h for h in (e.get("sources") or []) if h in evidence_map]
+            if not valid_sources:
+                log.warning("actuación SIN FUENTE válida, descartada (case=%s): %r",
+                            case_id, (e.get("description") or "")[:80])
+                continue
+            e["sources"] = valid_sources
+            if e.get("date_type") in (None, "actuacion") and not (_safe_date(e.get("event_date")) or fallback_date):
+                log.warning("actuación SIN FECHA, descartada (case=%s): %r",
+                            case_id, (e.get("description") or "")[:80])
+                continue
+            kept.append(e)
+        ids = _insert_procedural_events(conn, org_id, case_id, document_id, kept, fallback_date,
                                         source_type, source_id)
-        for eid, e in zip(ids, events, strict=False):
+        for eid, e in zip(ids, kept, strict=False):
             _insert_citations(conn, org_id, case_id, "event", eid, e.get("sources") or [], evidence_map)
         n_events += len(ids)
-        n_citations += sum(len((e.get("sources") or [])) for e in events)
+        n_citations += sum(len((e.get("sources") or [])) for e in kept)
 
     return {"events": n_events, "citations": n_citations, "model_run": last_validation}
 

@@ -308,3 +308,40 @@ def test_ut_lex_16_insert_procedural_events_warns_on_unknown_subtype(monkeypatch
     assert params["st"] is None
     assert params["st_raw"] == "glorposidez"
     assert "glorposidez" in caplog.text
+
+
+def test_ut_lex_17_procedural_drops_unsourced_and_undated(monkeypatch):
+    """No se persiste una actuación sin evidencia resoluble ni una sin fecha."""
+    items = [{"handle": "E1", "source_type": "document_page", "document_id": DOC,
+              "page_number": 1, "text": "texto"}]
+    monkeypatch.setattr(lex, "build_evidence_blocks", lambda *_a, **_k: (items, "hash"))
+    monkeypatch.setattr(lex, "_annotate_segments", lambda _it: 0)
+    monkeypatch.setattr(lex, "_load_extraction_prompt",
+                        lambda *_a, **_k: ("system", "extract_procedural_events", "4"))
+    monkeypatch.setattr(lex, "_source_metadata",
+                        lambda *_a, **_k: {"document_date": None, "folder_path": None, "filename": None})
+    monkeypatch.setattr(lex, "_record_model_run", lambda *_a, **_k: None)
+    monkeypatch.setattr(lex, "_insert_citations", lambda *_a, **_k: None)
+
+    payload = {"events": [
+        {"id": str(uuid.uuid4()), "date_type": "actuacion", "event_date": "2024-03-15",
+         "subtype": "auto", "description": "ok", "sources": ["E1"]},
+        {"id": str(uuid.uuid4()), "date_type": "actuacion", "event_date": "2024-03-15",
+         "subtype": "auto", "description": "sin fuente", "sources": ["E9"]},
+        {"id": str(uuid.uuid4()), "date_type": "actuacion", "event_date": None,
+         "subtype": "auto", "description": "sin fecha", "sources": ["E1"]},
+    ]}
+    monkeypatch.setattr(lex, "_validate_and_parse", lambda *_a, **_k: (payload, {"schema_valid": True}))
+    monkeypatch.setattr(lex, "_call_llm", lambda *_a, **_k: _make_llm_result(payload))
+
+    captured: dict = {}
+
+    def _fake_insert(_conn, _org, _case, _doc, events, *_a, **_k):
+        captured["events"] = events
+        return [str(uuid.uuid4()) for _ in events]
+    monkeypatch.setattr(lex, "_insert_procedural_events", _fake_insert)
+
+    res = lex.extract_procedural_events(_FakeConn(), ORG, CASE, "document", DOC, ACTOR)
+    assert res["events"] == 1
+    assert [e["description"] for e in captured["events"]] == ["ok"]
+    assert captured["events"][0]["sources"] == ["E1"]
