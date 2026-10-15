@@ -153,6 +153,8 @@ def test_ut_lex_05_prompt_is_versioned_and_localized(monkeypatch):
 def test_ut_lex_07_safe_date_rejects_placeholders():
     assert lex._safe_date("1899-12-31") is None
     assert lex._safe_date("1900-01-01") is None
+    assert lex._safe_date("1969-12-31") is None
+    assert lex._safe_date("1970-01-01") is None
     assert lex._safe_date("0001-01-01") is None
     assert lex._safe_date("9999-12-31") is None
     assert lex._safe_date("1799-12-31") is None
@@ -160,6 +162,15 @@ def test_ut_lex_07_safe_date_rejects_placeholders():
     assert lex._safe_date("") is None
     assert lex._safe_date("unknown") is None
     assert lex._safe_date("2024-01-15") == "2024-01-15"
+
+
+def test_ut_lex_07b_year_sentinel_detection():
+    """1 de enero y 31 de diciembre son centinelas de 'solo año' (nunca actos judiciales)."""
+    assert lex._is_year_sentinel("2025-01-01") is True
+    assert lex._is_year_sentinel("2017-12-31") is True
+    assert lex._is_year_sentinel("2024-03-15") is False
+    assert lex._is_year_sentinel(None) is False
+    assert lex._is_year_sentinel("") is False
 
 
 def test_ut_lex_08_metadata_prompt_includes_folder_and_date():

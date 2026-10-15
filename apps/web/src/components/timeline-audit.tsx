@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { FileText, Video } from "lucide-react";
-import { displayDate, effectiveDate, mmss, type TimelineEvent, type TimelineSource } from "@/components/timeline-types";
+import { displayEventDate, effectiveDate, mmss, type TimelineEvent, type TimelineSource } from "@/components/timeline-types";
 
 // Panel de auditoría de la línea de tiempo: de qué documento/página salió cada actuación,
 // qué actuaciones quedaron sin fecha y qué marcas de revisión tienen. No inventa datos:
@@ -116,7 +116,7 @@ export function TimelineAudit({
               <li key={ev.id} className="rounded border px-2 py-1.5 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   {ev.code && <span className="font-mono text-[11px] text-muted-foreground">{ev.code}</span>}
-                  <span className="text-xs">{displayDate(effectiveDate(ev)) ?? "sin fecha"}</span>
+                  <span className="text-xs">{displayEventDate(ev) ?? "sin fecha"}</span>
                 </div>
                 <p className="text-sm">{ev.description}</p>
                 <ul className="mt-1 space-y-0.5">

@@ -17,7 +17,7 @@ import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
 import { ProceduralChain } from "@/components/procedural-chain";
 import { ProceduralGraph } from "@/components/procedural-graph";
 import { TimelineAudit } from "@/components/timeline-audit";
-import { displayDate, effectiveDate, mmss, type TimelineEvent, type TimelineSource } from "@/components/timeline-types";
+import { displayEventDate, effectiveDate, isRealAct, mmss, type TimelineEvent, type TimelineSource } from "@/components/timeline-types";
 
 interface Case { id: string; case_number: string; title: string; created_at: string; version: number; }
 
@@ -92,6 +92,9 @@ export default function ProcesosPage() {
   // Vista de la línea de tiempo: cronológica (una sola línea), por instancia (acordeón),
   // grafo causal (nodos y flechas) o auditoría (origen y marcas de cada actuación).
   const [tlView, setTlView] = useState<"cronologica" | "instancias" | "grafo" | "auditoria">("instancias");
+  // Por defecto la línea de tiempo muestra SOLO actuaciones reales: las "referenciadas",
+  // "documento" e "incorporacion" son metadatos/citas y generan ruido y duplicados.
+  const [soloReales, setSoloReales] = useState(true);
   const [pendingFocus, setPendingFocus] = useState<string | null>(null);
   const scrollToEvent = (id: string) =>
     document.getElementById(`ev-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -136,14 +139,15 @@ export default function ProcesosPage() {
     },
     enabled: !!timelineCase,
   });
-  const tlInstances = Array.from(new Set(timeline.map((e) => e.instance).filter(Boolean))) as string[];
-  const tlActors = Array.from(new Set(timeline.map((e) => e.actor).filter(Boolean))) as string[];
+  const visible = soloReales ? timeline.filter(isRealAct) : timeline;
+  const tlInstances = Array.from(new Set(visible.map((e) => e.instance).filter(Boolean))) as string[];
+  const tlActors = Array.from(new Set(visible.map((e) => e.actor).filter(Boolean))) as string[];
   const tlGroups = INSTANCE_ORDER
-    .map((k) => [k, timeline.filter((e) => (e.instance || (e.kind === "procedural" ? "otro" : "generico")) === k)] as const)
+    .map((k) => [k, visible.filter((e) => (e.instance || (e.kind === "procedural" ? "otro" : "generico")) === k)] as const)
     .filter(([, list]) => list.length > 0);
 
   // Línea cronológica pura: una sola secuencia ordenada por fecha efectiva.
-  const tlOrdered = [...timeline].sort((a, b) =>
+  const tlOrdered = [...visible].sort((a, b) =>
     ((effectiveDate(a) ?? "").localeCompare(effectiveDate(b) ?? "")) || ((a.seq ?? 0) - (b.seq ?? 0)));
 
   // Una actuación de la línea de tiempo (se reutiliza en la vista cronológica y en la
@@ -152,7 +156,7 @@ export default function ProcesosPage() {
     <li key={ev.id} id={`ev-${ev.id}`} className="relative mb-5 ml-4 scroll-mt-4">
       <span className="absolute -left-[21px] top-1.5 h-3 w-3 rounded-full border-2 border-background bg-primary" />
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold">{displayDate(effectiveDate(ev)) ?? "Sin fecha"}</span>
+        <span className="text-sm font-semibold">{displayEventDate(ev) ?? "Sin fecha"}</span>
         {ev.code && <span className="font-mono text-[10px] text-muted-foreground">{ev.code}</span>}
         {ev.subtype && <Badge variant="secondary" className="text-[10px]">{SUBTYPE_ES[ev.subtype] || ev.subtype}</Badge>}
         {ev.actor && <Badge variant="outline" className="text-[10px]">{ACTOR_ES[ev.actor] || ev.actor}</Badge>}
@@ -487,6 +491,12 @@ export default function ProcesosPage() {
                 {label}
               </Button>
             ))}
+            <span className="mx-1 h-4 w-px bg-border" />
+            <Button size="sm" variant={soloReales ? "default" : "outline"} className="h-7"
+              title="Muestra solo actuaciones reales del expediente. Al desactivar, incluye las menciones citadas dentro de otros documentos (referenciadas) y las de tipo documento e incorporación."
+              onClick={() => setSoloReales(!soloReales)}>
+              {soloReales ? "Solo actuaciones" : "Incluir citadas"}
+            </Button>
           </div>
           <details className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <summary className="cursor-pointer select-none font-medium">¿Qué significan los vínculos y las marcas?</summary>
@@ -506,29 +516,30 @@ export default function ProcesosPage() {
           <div className="max-h-[60vh] overflow-y-auto pr-1">
             {timelineLoading ? (
               <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
-            ) : timeline.length === 0 ? (
+            ) : visible.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                No hay actuaciones en la línea de tiempo todavía. Se alimenta de la extracción de actuaciones
-                procesales del expediente (autos, sentencias, recursos, pruebas, audiencias…).
+                {timeline.length > 0
+                  ? `No hay actuaciones reales; el expediente solo tiene ${timeline.length} menciones citadas. Activa «Incluir citadas» para verlas.`
+                  : "No hay actuaciones en la línea de tiempo todavía. Se alimenta de la extracción de actuaciones procesales del expediente (autos, sentencias, recursos, pruebas, audiencias…)."}
               </p>
             ) : tlView === "auditoria" ? (
-              <TimelineAudit events={timeline} subtypeLabel={(s) => SUBTYPE_ES[s] || s} onOpenSource={openSource} />
+              <TimelineAudit events={visible} subtypeLabel={(s) => SUBTYPE_ES[s] || s} onOpenSource={openSource} />
             ) : tlView === "grafo" ? (
               <div className="space-y-3">
-                <ProceduralChain events={timeline} onSelect={goToEvent} />
-                <ProceduralGraph events={timeline} laneLabel={(k) => INSTANCE_ES[k] || k}
+                <ProceduralChain events={visible} onSelect={goToEvent} />
+                <ProceduralGraph events={visible} laneLabel={(k) => INSTANCE_ES[k] || k}
                   relationLabel={(k) => REL_ES[k] || k} onSelect={goToEvent} />
               </div>
             ) : tlView === "cronologica" ? (
               <div className="space-y-3">
-                <ProceduralChain events={timeline} onSelect={goToEvent} />
+                <ProceduralChain events={visible} onSelect={goToEvent} />
                 <ol className="relative ml-2 border-l border-border">
                   {tlOrdered.map((ev) => renderRow(ev))}
                 </ol>
               </div>
             ) : (
               <div className="space-y-3">
-                <ProceduralChain events={timeline} onSelect={goToEvent} />
+                <ProceduralChain events={visible} onSelect={goToEvent} />
                 <div>
                   {tlGroups.map(([instance, list]) => (
                     <section key={instance} className="mb-4">

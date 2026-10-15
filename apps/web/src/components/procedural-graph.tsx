@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { displayDate, effectiveDate, type TimelineEvent } from "@/components/timeline-types";
+import { displayEventDate, effectiveDate, type TimelineEvent } from "@/components/timeline-types";
 
 // Vista de grafo causal: columnas por instancia, tiempo hacia abajo. Cada nodo es una
 // actuación (botón HTML, accesible por teclado) y las flechas son las relaciones del
@@ -121,7 +121,7 @@ export function ProceduralGraph({
                 flagged.length > 0 ? "border-amber-500/70" : "border-border"
               }`}
             >
-              <span className="truncate text-xs font-medium">{ev.code ? `${ev.code} · ` : ""}{displayDate(effectiveDate(ev)) ?? "sin fecha"}</span>
+              <span className="truncate text-xs font-medium">{ev.code ? `${ev.code} · ` : ""}{displayEventDate(ev) ?? "sin fecha"}</span>
               <span className="truncate text-[11px] text-muted-foreground">{ev.description}</span>
             </button>
           );

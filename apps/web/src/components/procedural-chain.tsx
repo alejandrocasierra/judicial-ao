@@ -1,6 +1,6 @@
 "use client";
 
-import { displayDate, effectiveDate, type TimelineEvent } from "@/components/timeline-types";
+import { displayEventDate, effectiveDate, type TimelineEvent } from "@/components/timeline-types";
 
 // Cadena procesal canónica: el orden típico de un proceso civil colombiano. Cada paso
 // se marca como presente (hay una actuación que lo acredita) o pendiente (no aparece).
@@ -90,7 +90,7 @@ export function ProceduralChain({
                 >
                   <span className="text-xs font-medium">{step.label}</span>
                   <span className="text-[11px] text-muted-foreground">
-                    {displayDate(effectiveDate(anchor)) ?? "sin fecha"}
+                    {displayEventDate(anchor) ?? "sin fecha"}
                     {count > 1 && ` · ${count}`}
                   </span>
                 </button>

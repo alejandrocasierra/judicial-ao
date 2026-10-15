@@ -54,10 +54,10 @@ def _absorb_event_citations(conn: Connection, org_id: str, case_id: str, from_ev
         existing = one(conn, """SELECT id FROM citations
                                 WHERE case_id = :c AND target_type = 'event' AND target_id = :to
                                   AND source_type = :st
-                                  AND COALESCE(document_id, '00000000-0000-0000-0000-000000000000') =
-                                      COALESCE(:did, '00000000-0000-0000-0000-000000000000')
-                                  AND COALESCE(media_id, '00000000-0000-0000-0000-000000000000') =
-                                      COALESCE(:mid, '00000000-0000-0000-0000-000000000000')
+                                  AND COALESCE(document_id, '00000000-0000-0000-0000-000000000000'::uuid) =
+                                      COALESCE(:did, '00000000-0000-0000-0000-000000000000'::uuid)
+                                  AND COALESCE(media_id, '00000000-0000-0000-0000-000000000000'::uuid) =
+                                      COALESCE(:mid, '00000000-0000-0000-0000-000000000000'::uuid)
                                   AND COALESCE(page_number, -1) = COALESCE(:pn, -1)
                                   AND COALESCE(start_ms, -1) = COALESCE(:sms, -1)""",
                        c=case_id, to=to_event_id, st=cit["source_type"], did=cit.get("document_id"),
@@ -93,6 +93,7 @@ def link_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
     # citas y el referenciado se elimina (evita duplicados y fechas inconsistentes).
     absorbed: list[str] = []
     deleted_refs: list[str] = []
+    refers_to_count = 0
     for r in refs:
         best, best_score = None, 0.0
         rd = _date(r["event_date"])
@@ -110,16 +111,14 @@ def link_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
             if score > best_score:
                 best, best_score = e, score
         if best is not None and best_score >= 0.5:
-            rel.append((str(r["id"]), str(best["id"]), "refers_to", round(best_score, 3)))
-            one(conn, "UPDATE events SET duplicate_of = :t WHERE id = :i RETURNING id",
-                t=str(best["id"]), i=str(r["id"]))
-            # Absorber citas del referenciado al evento real.
+            # El real absorbe las citas y el referenciado se borra: NO se crea una
+            # relación (apuntaría a un evento ya eliminado).
             _absorb_event_citations(conn, org_id, case_id, str(r["id"]), str(best["id"]))
-            absorbed.append(str(best["id"]))
-            # Borrar el evento referenciado (ya está representado por el real).
             conn.execute(text("DELETE FROM events WHERE id = :i AND case_id = :c"),
                          {"i": str(r["id"]), "c": case_id})
+            absorbed.append(str(best["id"]))
             deleted_refs.append(str(r["id"]))
+            refers_to_count += 1
 
     # (a) precede: actuaciones consecutivas por fecha dentro de la misma instancia.
     for inst in {e["instance"] for e in real}:
@@ -156,7 +155,7 @@ def link_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
             {"o": org_id, "c": case_id, "s": s, "t": t, "r": r, "conf": conf})
         n += 1
     return {"events": len(evs), "relationships": n,
-            "refers_to": sum(1 for x in rel if x[2] == "refers_to"),
+            "refers_to": refers_to_count,
             "precede": sum(1 for x in rel if x[2] == "precede"),
             "appeals": sum(1 for x in rel if x[2] == "appeals"),
             "responds_to": sum(1 for x in rel if x[2] == "responds_to")}

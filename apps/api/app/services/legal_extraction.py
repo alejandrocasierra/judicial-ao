@@ -353,7 +353,14 @@ _ALLOWED_ENTITY_TYPES = {"person", "organization", "contract", "asset", "account
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Fechas placeholder que los modelos usan cuando no encuentran una fecha real.
-_REJECT_DATES = {"1899-12-31", "1899-12-30", "1900-01-01", "0001-01-01"}
+_REJECT_DATES = {"1899-12-31", "1899-12-30", "1900-01-01", "1901-01-01",
+                 "1969-12-31", "1970-01-01", "0001-01-01", "9999-12-31"}
+
+
+def _is_year_sentinel(iso: str | None) -> bool:
+    """El modelo escribe YYYY-01-01 o YYYY-12-31 cuando solo conoce el AÑO.
+    Un acto judicial nunca cae en festivo, así que esos días son centinelas."""
+    return bool(iso) and len(iso) >= 10 and iso[5:] in ("01-01", "12-31")
 
 
 def _safe_date(value: Any) -> str | None:
@@ -368,8 +375,8 @@ def _safe_date(value: Any) -> str | None:
             try:
                 d = date.fromisoformat(v)
                 today = date.today()
-                # Rechazar fechas futuras (> 1 año) y fechas imposibles (año < 1800).
-                if 1800 <= d.year <= today.year + 1:
+                # Rechazar fechas futuras (> 1 año) y años imposibles (>= 1900).
+                if 1900 <= d.year <= today.year + 1:
                     return v
             except ValueError:
                 pass
@@ -976,6 +983,9 @@ def _insert_procedural_events(conn: Connection, org_id: str, case_id: str, docum
                 e["timeline_confidence"] = "inferred"
         if not event_date:
             date_precision = "unknown"
+        elif _is_year_sentinel(event_date):
+            # Solo se conoce el año: no mostrar un día inventado (2025-01-01 -> "2025").
+            date_precision = "year"
 
         raw_subtype = e.get("subtype")
         canonical_subtype = normalize_subtype(raw_subtype)

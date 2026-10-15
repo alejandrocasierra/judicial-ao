@@ -27,9 +27,9 @@ log = logging.getLogger(__name__)
 # Umbrales conservadores: preferimos dejar dos eventos separados antes que fusionar
 # actuaciones distintas que comparten subtipo y fecha.
 NEAR_DAYS = 3
-SIM_SAME_DAY = 0.62   # mismo día: descripciones claramente similares
-SIM_NEAR_DAYS = 0.80  # ±3 días: exigimos casi el mismo texto
-SIM_NO_DATE = 0.88    # sin fecha: solo si el texto es casi idéntico
+SIM_SAME_DAY = 0.55   # mismo día: descripciones claramente similares
+SIM_NEAR_DAYS = 0.75  # ±3 días: exigimos casi el mismo texto
+SIM_NO_DATE = 0.85    # sin fecha: solo si el texto es casi idéntico
 
 
 def _sim(a: str | None, b: str | None) -> float:
@@ -101,7 +101,7 @@ def _merge_cluster(conn: Connection, case_id: str, canonical: dict[str, Any],
 def consolidate_case_events(conn: Connection, org_id: str, case_id: str) -> dict[str, Any]:
     """Fusiona las actuaciones reales duplicadas del caso. Devuelve estadísticas."""
     evs = rows(conn, """
-        SELECT id, event_date, subtype, instance, authority, actor, description,
+        SELECT id, event_date, event_type, subtype, instance, authority, actor, description,
                document_id, page_number, participants, procedural_effect
         FROM events
         WHERE case_id = :c AND kind = 'procedural' AND date_type = 'actuacion'
@@ -110,8 +110,10 @@ def consolidate_case_events(conn: Connection, org_id: str, case_id: str) -> dict
 
     buckets: dict[tuple, list[dict[str, Any]]] = defaultdict(list)
     for e in evs:
-        if e.get("subtype"):
-            buckets[(e["subtype"], e.get("instance"))].append(e)
+        # Agrupa por subtipo O tipo de evento: muchos eventos llegan sin `subtype` y
+        # antes no se consolidaban nunca (por eso quedaban cientos de duplicados).
+        key = (e.get("subtype") or e.get("event_type") or "otro", e.get("instance"))
+        buckets[key].append(e)
 
     merged = deleted = 0
     for group in buckets.values():
