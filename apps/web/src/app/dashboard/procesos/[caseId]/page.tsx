@@ -16,10 +16,11 @@ import {
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
 import { PartiesButton } from "@/components/parties-panel";
+import { TimelineDialog } from "@/components/timeline-dialog";
 import {
   Folder, FolderOpen, FolderPlus, Upload, ChevronRight, ArrowLeft,
   FileText, FileSpreadsheet, FileImage, Video, File as FileIcon,
-  Download, Pencil, Trash2, Eye, Plus, Database, Search, X,
+  Download, Pencil, Trash2, Eye, Plus, Database, Search, X, Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,8 +34,6 @@ interface FileItem {
 interface SearchFolder { id: string; name: string; parent_id: string | null; path: string }
 interface SearchItem extends FileItem { folder_id: string | null; folder_path: string }
 interface SearchResults { query: string; folders: SearchFolder[]; items: SearchItem[] }
-interface UploadResult { filename: string; status: string; kind?: string; code?: string; processing?: string; ocr_mode?: string | null; }
-
 const ACCEPT = ".xlsx,.docx,.pdf,.jpg,.jpeg,.png,.svg,.mp4";
 
 // Extensiones que requieren procesamiento: documentos -> OCR, videos/audio -> ASR.
@@ -86,6 +85,7 @@ export default function ProcesoDetallePage() {
   const [renameValue, setRenameValue] = useState("");
   const [exporting, setExporting] = useState(false);
   const [savingCkp, setSavingCkp] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function downloadCkp() {
@@ -298,6 +298,10 @@ export default function ProcesoDetallePage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
               <DropdownMenuLabel>Opciones del proceso</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setTimelineOpen(true)}>
+                <Activity className="h-4 w-4" />
+                Línea de tiempo procesal
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => downloadCkp()} disabled={exporting}>
                 <Download className="h-4 w-4" />
                 {exporting ? "Exportando…" : "Exportar CKP"}
@@ -736,6 +740,12 @@ export default function ProcesoDetallePage() {
         filename={viewerMedia?.title || viewerMedia?.filename}
         processingStatus={viewerMedia?.processing_status ?? null}
         onClose={() => setViewerMedia(null)}
+      />
+
+      <TimelineDialog
+        caseItem={proc ? { id: proc.id, title: proc.title, case_number: proc.case_number } : null}
+        open={timelineOpen}
+        onOpenChange={setTimelineOpen}
       />
     </div>
   );

@@ -34,6 +34,18 @@ Las fechas placeholder (`1899-12-31`, `1900-01-01`, `0001-01-01`) se descartan e
 - **Grafo causal**: columnas por instancia, tiempo hacia abajo; flechas = relaciones del Process Graph.
 - **Auditoría**: documento/página de origen de cada actuación, actuaciones sin fecha y marcas de revisión.
 
+## Vínculo con las partes del proceso
+
+Cada actuación trae un `actor` canónico (demandante, demandado, apoderado_demandante, …).
+El backend lo resuelve al catálogo de roles de parte (`party_roles`) y, al mostrar la línea
+de tiempo, devuelve los datos ACTUALES de las partes vinculadas (`participants`). Esto significa:
+
+- Si cambias el nombre o rol de una parte, la línea de tiempo se actualiza al refrescar.
+- Si agregas una nueva parte con un rol que coincide con el `actor` de actuaciones
+  existentes, aparecerá vinculada inmediatamente.
+- La extracción futura guarda los `participants` en `events` para que el grafo y la
+  consolidación también los usen.
+
 ## Regeneración automática
 
 La secuencia `file_ingest → legal_extraction → procedural_links → graph_build` reconstruye

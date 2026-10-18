@@ -1,0 +1,413 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ChevronDown, ChevronUp, Activity, GitBranch, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
+import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
+import { ProceduralChain } from "@/components/procedural-chain";
+import { ProceduralGraph } from "@/components/procedural-graph";
+import { TimelineAudit } from "@/components/timeline-audit";
+import { displayEventDate, effectiveDate, isRealAct, type TimelineEvent, type TimelineSource } from "@/components/timeline-types";
+
+interface TimelineCase { id: string; case_number: string; title: string; }
+
+const INSTANCE_ES: Record<string, string> = {
+  primera: "Primera instancia", segunda: "Segunda instancia", casacion: "Casación", tutela: "Tutela",
+  incidente: "Incidente", cautelar: "Medida cautelar", ejecucion: "Ejecución", otro: "Otras actuaciones",
+  generico: "Otros eventos",
+};
+const ACTOR_ES: Record<string, string> = {
+  juzgado: "Juzgado", demandante: "Demandante", demandado: "Demandado",
+  apoderado_demandante: "Apod. demandante", apoderado_demandado: "Apod. demandado",
+  tercero: "Tercero", fiscal: "Fiscalía", secretario: "Secretaría", otro: "Otro",
+};
+const SUBTYPE_ES: Record<string, string> = {
+  demanda: "Demanda", reforma_demanda: "Reforma de demanda", subsanacion: "Subsanación", rechazo: "Rechazo",
+  inadmision: "Inadmisión", admision: "Admisión", reparto: "Reparto", radicacion: "Radicación",
+  contestacion: "Contestación", reconvencion: "Reconvención", excepciones: "Excepciones", memorial: "Memorial",
+  solicitud: "Solicitud", desistimiento: "Desistimiento", alegato: "Alegato", recurso: "Recurso", objecion: "Objeción",
+  auto: "Auto", auto_admisorio: "Auto admisorio", auto_pruebas: "Auto de pruebas", auto_fija_audiencia: "Fija audiencia",
+  auto_suspension: "Suspensión", auto_terminacion: "Terminación", sentencia: "Sentencia", correccion: "Corrección",
+  aclaracion: "Aclaración", adicion: "Adición", apremio: "Apremio", reposicion: "Reposición", apelacion: "Apelación",
+  queja: "Queja", casacion: "Casación", revision: "Revisión", nulidad: "Nulidad",
+  concesion_recurso: "Concesión de recurso", improcedencia_recurso: "Improcedencia del recurso",
+  notificacion_personal: "Notificación personal", notificacion_estado: "Notificación por estado",
+  notificacion_electronica: "Notificación electrónica", emplazamiento: "Emplazamiento", comunicacion: "Comunicación",
+  solicitud_prueba: "Solicitud de prueba", decreto_prueba: "Decreto de prueba", practica_prueba: "Práctica de prueba",
+  testimonio: "Testimonio", interrogatorio: "Interrogatorio", dictamen: "Dictamen", inspeccion_judicial: "Inspección judicial",
+  incorporacion_documental: "Incorporación documental", audiencia: "Audiencia", audiencia_inicial: "Audiencia inicial",
+  audiencia_juzgamiento: "Audiencia de juzgamiento", suspension_audiencia: "Suspensión de audiencia",
+  mandamiento_pago: "Mandamiento de pago", embargo: "Embargo", secuestro: "Secuestro", remate: "Remate",
+  liquidacion_credito: "Liquidación del crédito", avaluo: "Avalúo", otro: "Otro",
+};
+const INSTANCE_ORDER = ["primera", "segunda", "casacion", "tutela", "incidente", "cautelar", "ejecucion", "otro", "generico"];
+const FLAG_ES: Record<string, string> = {
+  duplicado: "duplicado", fecha_inconsistente: "fecha inconsistente",
+  sin_fuente_real: "sin fuente real", sin_fecha: "sin fecha",
+};
+const HIDDEN_FLAGS = new Set(["duplicado", "fecha_inconsistente", "ambiguous", "sin_fecha", "sin_fuente_real"]);
+const REL_ES: Record<string, string> = {
+  causes: "causa", responds_to: "responde a", appeals: "apela a", confirms: "confirma",
+  revokes: "revoca", precede: "precede", precedes: "precede", refers_to: "refiere a", same_as: "idéntico a",
+};
+
+interface TimelineDialogProps {
+  caseItem: TimelineCase | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function TimelineDialog({ caseItem, open, onOpenChange }: TimelineDialogProps) {
+  const qc = useQueryClient();
+  const [tlKind, setTlKind] = useState<string>("procedural");
+  const [tlInstance, setTlInstance] = useState<string>("all");
+  const [tlActor, setTlActor] = useState<string>("all");
+  const [collapsedInstances, setCollapsedInstances] = useState<Set<string>>(new Set());
+  const toggleInstance = (k: string) => {
+    setCollapsedInstances((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k); else next.add(k);
+      return next;
+    });
+  };
+  const expandAll = () => setCollapsedInstances(new Set());
+  const collapseAll = () => setCollapsedInstances(new Set(tlGroups.map(([k]) => k)));
+  const [docView, setDocView] = useState<{ caseId: string; id: string; page: number; name?: string | null } | null>(null);
+  const [mediaView, setMediaView] = useState<{ caseId: string; id: string; ms: number; name?: string | null } | null>(null);
+  const [aiJobId, setAiJobId] = useState<string | null>(null);
+  const [tlView, setTlView] = useState<"cronologica" | "instancias" | "grafo" | "auditoria">("instancias");
+  const [soloReales, setSoloReales] = useState(true);
+  const [pendingFocus, setPendingFocus] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const scrollToEvent = (id: string) =>
+    document.getElementById(`ev-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const goToEvent = (id: string) => {
+    const el = document.getElementById(`ev-${id}`);
+    if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    setTlView("instancias");
+    setPendingFocus(id);
+  };
+  useEffect(() => {
+    if (!pendingFocus) return;
+    const t = setTimeout(() => {
+      document.getElementById(`ev-${pendingFocus}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setPendingFocus(null);
+    }, 60);
+    return () => clearTimeout(t);
+  }, [pendingFocus]);
+  const openSource = (s: TimelineSource) => {
+    if (!caseItem) return;
+    if (s.source_type === "document_page" && s.document_id) {
+      setDocView({ caseId: caseItem.id, id: s.document_id, page: s.page || 1, name: s.filename });
+    } else if (s.media_id) {
+      setMediaView({ caseId: caseItem.id, id: s.media_id, ms: s.start_ms || 0, name: s.filename });
+    }
+  };
+
+
+
+  const { data: timeline = [], isLoading: timelineLoading } = useQuery({
+    queryKey: ["timeline", caseItem?.id, tlKind, tlInstance, tlActor],
+    queryFn: () => {
+      const params: Record<string, string> = {};
+      if (tlKind !== "all") params.kind = tlKind;
+      if (tlInstance !== "all") params.instance = tlInstance;
+      if (tlActor !== "all") params.actor = tlActor;
+      return api.get<TimelineEvent[]>(`/cases/${caseItem!.id}/timeline`, params);
+    },
+    enabled: !!caseItem,
+  });
+  const visible = soloReales ? timeline.filter(isRealAct) : timeline;
+  const dated = visible.filter((e) => effectiveDate(e) != null);
+  const tlInstances = Array.from(new Set(dated.map((e) => e.instance).filter(Boolean))) as string[];
+  const tlActors = Array.from(new Set(dated.map((e) => e.actor).filter(Boolean))) as string[];
+  const tlGroups = INSTANCE_ORDER
+    .map((k) => [k, dated.filter((e) => (e.instance || (e.kind === "procedural" ? "otro" : "generico")) === k)] as const)
+    .filter(([, list]) => list.length > 0);
+
+  const tlOrdered = [...dated].sort((a, b) =>
+    ((effectiveDate(a) ?? "").localeCompare(effectiveDate(b) ?? "")) || ((a.seq ?? 0) - (b.seq ?? 0)));
+
+  const renderRow = (ev: TimelineEvent) => (
+    <li key={ev.id} id={`ev-${ev.id}`} className="relative mb-5 ml-4 scroll-mt-4">
+      <span className="absolute -left-[21px] top-1.5 h-3 w-3 rounded-full border-2 border-background bg-primary" />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold">{displayEventDate(ev) ?? "Sin fecha"}</span>
+        {ev.code && <span className="font-mono text-[10px] text-muted-foreground">{ev.code}</span>}
+        {ev.subtype && <Badge variant="secondary" className="text-[10px]">{SUBTYPE_ES[ev.subtype] || ev.subtype}</Badge>}
+        {(ev.participants ?? []).length > 0 ? (
+          ev.participants!.map((p) => (
+            <Badge key={p.id} variant="outline" className="flex gap-1 text-[10px]">
+              <span className="font-medium">{p.role_label}</span>
+              <span className="text-muted-foreground">{p.name}</span>
+            </Badge>
+          ))
+        ) : (
+          ev.actor && <Badge variant="outline" className="text-[10px]">{ACTOR_ES[ev.actor] || ev.actor}</Badge>
+        )}
+        {ev.date_type === "referenciada" && (
+          <Badge variant="outline" className="border-amber-500 text-[10px] text-amber-600">referenciada</Badge>
+        )}
+        {(ev.review_flags ?? []).filter((f) => !HIDDEN_FLAGS.has(f)).map((f) => (
+          <Badge key={f} variant="outline" className="border-rose-500 text-[10px] text-rose-600">
+            {FLAG_ES[f] || f}
+          </Badge>
+        ))}
+        {ev.timeline_confidence && ev.timeline_confidence === "inferred" && (
+          <Badge variant="outline" className="text-[10px]">inferido</Badge>
+        )}
+      </div>
+      {ev.authority && <p className="mt-0.5 text-[11px] text-muted-foreground">{ev.authority}</p>}
+      <p className="mt-1 text-sm">{ev.description}</p>
+      {ev.procedural_effect && (
+        <p className="mt-0.5 text-xs text-muted-foreground"><b>Efecto:</b> {ev.procedural_effect}</p>
+      )}
+      {(ev.links ?? []).length > 0 && (() => {
+        const all = ev.links ?? [];
+        const open = expanded.has(ev.id);
+        const shown = open ? all : all.slice(0, 6);
+        return (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {shown.map((l, i) => (
+              <button key={`${l.other_id}-${l.relationship}-${i}`} type="button"
+                onClick={() => scrollToEvent(l.other_id)}
+                className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+                title={`Ir a ${l.other_code}`}>
+                {l.direction === "out" ? "→" : "←"} {REL_ES[l.relationship] || l.relationship} {l.other_code}
+              </button>
+            ))}
+            {all.length > 6 && (
+              <button type="button" onClick={() => toggleExpanded(ev.id)}
+                className="rounded border border-dashed px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
+                {open ? "ver menos" : `+${all.length - 6} vínculos`}
+              </button>
+            )}
+          </div>
+        );
+      })()}
+    </li>
+  );
+
+  const buildGraph = useMutation({
+    mutationFn: () => api.post<{ linked?: { relationships?: number }; reviewed?: { flagged?: number } }>(
+      `/cases/${caseItem!.id}/timeline/build`, {}),
+    onSuccess: (r: { linked?: { relationships?: number }; reviewed?: { flagged?: number } }) => {
+      toast.success(`Process Graph: ${r?.linked?.relationships ?? 0} relaciones · ${r?.reviewed?.flagged ?? 0} marcas`);
+      qc.invalidateQueries({ queryKey: ["timeline"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo construir el grafo"),
+  });
+
+  const buildGraphAi = useMutation({
+    mutationFn: () => api.post<{ background?: boolean; job_id?: string; status?: string; reused?: boolean;
+                                  linked?: { relationships?: number }; ai_links?: { links?: number } }>(
+      `/cases/${caseItem!.id}/timeline/build?llm=true&background=true`, {}),
+    onSuccess: (r) => {
+      if (r?.background && r.job_id) {
+        if (r.reused) {
+          toast.info("Ya hay un análisis de causas con IA en curso para este expediente.");
+        } else {
+          toast.info("Causas con IA: el proceso va a comenzar y se ejecutará en SEGUNDO PLANO. " +
+            "Puedes seguir trabajando; te aviso al terminar.", { duration: 9000 });
+        }
+        setAiJobId(r.job_id);
+      } else {
+        toast.success(`IA: ${r?.ai_links?.links ?? 0} relaciones causales · ${r?.linked?.relationships ?? 0} por reglas`);
+        qc.invalidateQueries({ queryKey: ["timeline"] });
+      }
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "La IA no pudo proponer relaciones (¿modelo/cuota?)"),
+  });
+
+  useEffect(() => {
+    const caseId = caseItem?.id;
+    if (!aiJobId || !caseId) return;
+    const started = Date.now();
+    const iv = setInterval(async () => {
+      if (Date.now() - started > 15 * 60 * 1000) { clearInterval(iv); setAiJobId(null); return; }
+      try {
+        const p = await api.get<{ jobs: { id: string; status: string; job_type: string }[] }>(
+          `/cases/${caseId}/processing`);
+        const job = p.jobs.find((j) => j.id === aiJobId);
+        if (job && (job.status === "SUCCEEDED" || job.status === "FAILED")) {
+          clearInterval(iv);
+          setAiJobId(null);
+          if (job.status === "SUCCEEDED") {
+            toast.success("Causas con IA: listo. Se agregaron las relaciones causales.");
+            qc.invalidateQueries({ queryKey: ["timeline"] });
+          } else {
+            toast.error("Causas con IA: el proceso falló. Revisa el monitor de jobs.");
+          }
+        }
+      } catch { /* reintento silencioso */ }
+    }, 8000);
+    return () => clearInterval(iv);
+  }, [aiJobId, caseItem?.id, qc]);
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-[1400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary" />Línea de tiempo procesal</span>
+              <span className="mr-6 flex items-center gap-2">
+                <Button size="sm" variant="outline" className="h-7 gap-1" disabled={buildGraph.isPending}
+                  title="Recalcula por reglas los vínculos entre actuaciones (causa/precede/apela/responde), resuelve las citadas y marca duplicados/inconsistencias. Instantáneo y sin IA."
+                  onClick={() => buildGraph.mutate()}>
+                  <GitBranch className="h-3.5 w-3.5" />{buildGraph.isPending ? "Analizando…" : "Analizar vínculos"}
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 gap-1" disabled={buildGraphAi.isPending}
+                  title="Lo mismo que Analizar vínculos y ADEMÁS un segundo pase con IA que propone relaciones causales (usa el modelo de la organización; consume tokens)."
+                  onClick={() => buildGraphAi.mutate()}>
+                  <Sparkles className="h-3.5 w-3.5" />{buildGraphAi.isPending ? "IA…" : "Causas con IA"}
+                </Button>
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+          <p className="-mt-2 text-sm text-muted-foreground">
+            {caseItem?.title} · <span className="font-mono">{caseItem?.case_number}</span>
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Filtros:</span>
+            <Button size="sm" variant={tlKind === "all" ? "default" : "outline"} className="h-7" onClick={() => setTlKind("all")}>Todo</Button>
+            <Button size="sm" variant={tlKind === "procedural" ? "default" : "outline"} className="h-7" onClick={() => setTlKind("procedural")}>Actuaciones</Button>
+            <Button size="sm" variant={tlKind === "generic" ? "default" : "outline"} className="h-7" onClick={() => setTlKind("generic")}>Otros</Button>
+            <span className="mx-1 h-4 w-px bg-border" />
+            <Button size="sm" variant={tlInstance === "all" ? "default" : "outline"} className="h-7" onClick={() => setTlInstance("all")}>Toda instancia</Button>
+            {tlInstances.map((i) => (
+              <Button key={i} size="sm" variant={tlInstance === i ? "default" : "outline"} className="h-7" onClick={() => setTlInstance(tlInstance === i ? "all" : i)}>
+                {INSTANCE_ES[i] || i}
+              </Button>
+            ))}
+            {tlActors.length > 0 && <span className="mx-1 h-4 w-px bg-border" />}
+            {tlActors.map((a) => (
+              <Button key={a} size="sm" variant={tlActor === a ? "default" : "outline"} className="h-7" onClick={() => setTlActor(tlActor === a ? "all" : a)}>
+                {ACTOR_ES[a] || a}
+              </Button>
+            ))}
+            {tlGroups.length > 1 && (
+              <>
+                <span className="mx-1 h-4 w-px bg-border" />
+                <Button size="sm" variant="outline" className="h-7 gap-1" onClick={expandAll} title="Expandir todas las instancias">
+                  <ChevronDown className="h-3.5 w-3.5" />Expandir
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 gap-1" onClick={collapseAll} title="Colapsar todas las instancias">
+                  <ChevronUp className="h-3.5 w-3.5" />Colapsar
+                </Button>
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Vista:</span>
+            {([
+              ["cronologica", "Cronológica"],
+              ["instancias", "Por instancia"],
+              ["grafo", "Grafo causal"],
+              ["auditoria", "Auditoría"],
+            ] as const).map(([key, label]) => (
+              <Button key={key} size="sm" variant={tlView === key ? "default" : "outline"} className="h-7"
+                onClick={() => setTlView(key)}>
+                {label}
+              </Button>
+            ))}
+            <span className="mx-1 h-4 w-px bg-border" />
+            <Button size="sm" variant={soloReales ? "default" : "outline"} className="h-7"
+              title="Muestra solo actuaciones reales del expediente. Al desactivar, incluye las menciones citadas dentro de otros documentos (referenciadas) y las de tipo documento e incorporación."
+              onClick={() => setSoloReales(!soloReales)}>
+              {soloReales ? "Solo actuaciones" : "Incluir citadas"}
+            </Button>
+          </div>
+          <details className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            <summary className="cursor-pointer select-none font-medium">¿Qué significan los vínculos y las marcas?</summary>
+            <div className="mt-2 space-y-1">
+              <p><b className="text-foreground">→ causa / ← causa</b>: relación causal — una actuación provocó/ordenó la otra (la detecta la IA o las reglas).</p>
+              <p><b className="text-foreground">→ precede / ← precede</b>: orden temporal entre actuaciones (la anterior y la siguiente).</p>
+              <p><b className="text-foreground">refiere a</b>: actuación que estaba citada dentro de otra y se resolvió a la actuación real.</p>
+              <p><b className="text-foreground">apela a / responde a</b>: recurso o escrito que apela/responde a un auto o sentencia previos.</p>
+              <p><b className="text-rose-600">duplicado</b>: se resuelve automáticamente (se borra el referenciado y se unen sus citas al evento real). Otras marcas: <i>sin_fuente_real</i>, <i>sin_fecha</i>.</p>
+              <p><b className="text-foreground">Chip 📄 al final</b>: documento y página de origen (clic para abrir la evidencia).</p>
+              <p className="pt-1">
+                <b className="text-foreground">Analizar vínculos</b> = recalcula por reglas (instantáneo, sin IA).
+                <b className="text-foreground"> Causas con IA</b> = además propone relaciones causales con el modelo de IA (más lento, consume tokens).
+              </p>
+            </div>
+          </details>
+          <div className="max-h-[60vh] overflow-y-auto pr-1">
+            {timelineLoading ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Cargando…</p>
+            ) : dated.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {timeline.length > 0
+                  ? `No hay actuaciones con fecha que mostrar (${timeline.length} eventos en total, incluyendo citadas y sin fecha). Revisa «Incluir citadas» o la pestaña Auditoría.`
+                  : "No hay actuaciones en la línea de tiempo todavía. Se alimenta de la extracción de actuaciones procesales del expediente (autos, sentencias, recursos, pruebas, audiencias…)."}
+              </p>
+            ) : tlView === "auditoria" ? (
+              <TimelineAudit events={visible} subtypeLabel={(s) => SUBTYPE_ES[s] || s} onOpenSource={openSource} />
+            ) : tlView === "grafo" ? (
+              <div className="space-y-3">
+                <ProceduralChain events={dated} onSelect={goToEvent} />
+                <ProceduralGraph events={dated} laneLabel={(k) => INSTANCE_ES[k] || k}
+                  relationLabel={(k) => REL_ES[k] || k} onSelect={goToEvent} />
+              </div>
+            ) : tlView === "cronologica" ? (
+              <div className="space-y-3">
+                <ProceduralChain events={dated} onSelect={goToEvent} />
+                <ol className="relative ml-2 border-l border-border">
+                  {tlOrdered.map((ev) => renderRow(ev))}
+                </ol>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <ProceduralChain events={dated} onSelect={goToEvent} />
+                <div>
+                  {tlGroups.map(([instance, list]) => (
+                    <section key={instance} className="mb-4">
+                      <button
+                        type="button"
+                        onClick={() => toggleInstance(instance)}
+                        className="mb-2 flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted/50"
+                        aria-expanded={!collapsedInstances.has(instance)}
+                      >
+                        <span>{INSTANCE_ES[instance] || instance} · {list.length}</span>
+                        {collapsedInstances.has(instance) ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                      </button>
+                      {!collapsedInstances.has(instance) && (
+                        <ol className="relative ml-2 border-l border-border">
+                          {list.map((ev) => renderRow(ev))}
+                        </ol>
+                      )}
+                    </section>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <DocumentOcrViewer
+        caseId={docView?.caseId ?? ""}
+        documentId={docView?.id ?? null}
+        filename={docView?.name}
+        initialPage={docView?.page}
+        onClose={() => setDocView(null)}
+      />
+      <MediaTranscriptViewer
+        caseId={mediaView?.caseId ?? ""}
+        mediaId={mediaView?.id ?? null}
+        filename={mediaView?.name}
+        initialMs={mediaView?.ms}
+        onClose={() => setMediaView(null)}
+      />
+    </>
+  );
+}
