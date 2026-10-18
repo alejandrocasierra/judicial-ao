@@ -395,7 +395,7 @@ def _assign_speakers_to_segments(
             "end_ms": seg["end_ms"],
             "text": seg["text"],
             "confidence": seg.get("confidence", 0.0),
-            "words": seg.get("words", []),
+            "words": seg.get("words") or [],
             "speaker_label": label,
             "visual_name": label_names.get(label),
         })
@@ -492,7 +492,7 @@ def _merge_asr_segments(segments: list[dict[str, Any]], max_gap_ms: int = 500,
     if not segments:
         return segments
     merged: list[dict[str, Any]] = [
-        dict(segments[0], words=list(segments[0].get("words", [])))
+        dict(segments[0], words=list(segments[0].get("words") or []))
     ]
     for seg in segments[1:]:
         prev = merged[-1]
@@ -506,9 +506,9 @@ def _merge_asr_segments(segments: list[dict[str, Any]], max_gap_ms: int = 500,
             prev["end_ms"] = seg["end_ms"]
             sep = "" if prev["text"].rstrip().endswith("-") else " "
             prev["text"] = (prev["text"].rstrip() + sep + seg["text"].lstrip()).strip()
-            prev["words"] = prev.get("words", []) + seg.get("words", [])
+            prev["words"] = (prev.get("words") or []) + (seg.get("words") or [])
         else:
-            merged.append(dict(seg, words=list(seg.get("words", []))))
+            merged.append(dict(seg, words=list(seg.get("words") or [])))
     return merged
 
 
@@ -571,7 +571,13 @@ def process_media(
         log.info("media %s already processed (status=%s); skipping", media_id, existing["processing_status"])
         return {"segments": 0, "speakers": 0, "skipped": True}
 
-    # Reprocesamiento idempotente: los segmentos son artefactos derivados.
+    # Reprocesamiento idempotente: los segmentos son artefactos derivados, pero las
+    # citas que apuntan a ellos tienen FK y bloquean el DELETE. Las citas también son
+    # derivadas (se regeneran al reindexar), así que se eliminan primero.
+    conn.execute(text("""
+        DELETE FROM citations
+        WHERE segment_id IN (SELECT id FROM transcript_segments WHERE media_id = :m)
+    """), {"m": media_id})
     conn.execute(text("DELETE FROM transcript_segments WHERE media_id = :m"), {"m": media_id})
 
     # Archivo local COMPARTIDO (api<->worker): si la subida lo dejó aquí, se procesa sin
@@ -1077,6 +1083,12 @@ def apply_diarization(
                          _fmt_ms(m["start_ms"]), _fmt_ms(m["end_ms"]),
                          m["speaker_name"], (m["text"] or "")[:120])
         if removed:
+            # Igual que en process_media: las citas a segmentos absorbidos por la
+            # fusión bloquean el DELETE por FK; son derivadas y se eliminan.
+            conn.execute(
+                text("DELETE FROM citations WHERE segment_id = ANY(:ids)"),
+                {"ids": removed},
+            )
             conn.execute(
                 text("DELETE FROM transcript_segments WHERE media_id = :m AND id = ANY(:ids)"),
                 {"m": media_id, "ids": removed},

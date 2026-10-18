@@ -1,19 +1,31 @@
-"""Sube los 9 videos faltantes del proceso 11001310302120180036100 a sus carpetas
+"""Sube los videos faltantes del proceso 11001310302120180036100 a sus carpetas
 exactas con ASR activado (ocr_mode=basico -> asr_mode='basico' -> Whisper local).
 
 Cadena automática por video: file_ingest -> ASR (large-v3) -> index pgvector ->
 media_diarize (pyannote + nombres) -> reindex -> graph_build.
+
+Actualizado: solo los 8 videos aún no subidos (se omite 0065GrabacionAudiencia13Dic2024.mp4
+que ya fue procesado).
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 import time
 
 import requests
 
-BASE = "http://127.0.0.1:8000/v1"
-CASE = "38865959-8d5f-44e4-bbc8-1226bd345b00"
+# Cargar .env si no vienen variables de entorno (ejecución local fuera de Docker).
+if not os.environ.get("JUDICIAL_ADMIN_PASSWORD"):
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(pathlib.Path(__file__).resolve().parents[1] / ".env")
+    except Exception:
+        pass
+
+BASE = os.environ.get("JUDICIAL_API_BASE", "http://127.0.0.1:8000/v1")
+CASE = os.environ.get("JUDICIAL_CASE_ID", "38865959-8d5f-44e4-bbc8-1226bd345b00")
 EMAIL = os.environ.get("JUDICIAL_ADMIN_EMAIL", "admin@judicial.ai")
 PASSWORD = os.environ["JUDICIAL_ADMIN_PASSWORD"]
 
@@ -21,7 +33,6 @@ ROOT = pathlib.Path(r"C:\Users\ale13\OneDrive\Escritorio\judicial-ai\11001310302
 
 TASKS = [
     ("370ded8a-f23e-4b6b-9cb0-3a0fb08c282f", ROOT / "0003AcumuladoEjecutHipotecario201800361", [
-        "0065GrabacionAudiencia13Dic2024.mp4",
         "0083Grabacion25Junio2025Parte1.mp4",
         "0084Grabacion25JunioParte2.mp4",
     ]),
@@ -37,7 +48,7 @@ TASKS = [
     ]),
 ]
 
-MIME = {".mp4": "video/mp4", ".mov": "video/quicktime"}
+MIME = {".mp4": "video/mp4", ".mov": "video/quicktime", ".MOV": "video/quicktime"}
 
 
 def login() -> str:
