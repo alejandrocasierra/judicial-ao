@@ -21,7 +21,7 @@ from app.schemas import (CaseCreate, CasePatch, LegalHoldIn, MemberIn, PartyBulk
 from app.security import rbac
 from app.security.deps import Principal, case_access, current_principal, require_org
 from app.services import (audit, event_consolidation, export, indexing, party_extraction,
-                          party_roles as party_roles_service, procedural_graph, purge)
+                          party_roles as party_roles_service, procedural_actor_roles, procedural_graph, purge)
 from app.services import speakers as speakers_service
 from app.services.case_tools import read as ct_read
 from app.workers.dispatcher import create_job, enqueue_if_pending, enqueue_job
@@ -553,7 +553,7 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
             SELECT e.id, e.kind, e.event_date, e.document_date, e.incorporation_date, e.date_precision,
                    e.event_type, e.subtype, e.instance, e.actor, e.authority, e.date_type,
                    e.procedural_effect, e.description, e.timeline_confidence, e.confidence,
-                   e.document_id, e.page_number, e.duplicate_of, e.review_flags,
+                   e.document_id, e.page_number, e.duplicate_of, e.review_flags, e.participants,
                    d.filename AS document_filename,
                    (SELECT coalesce(json_agg(json_build_object('citation_id', ci.id, 'source_type', ci.source_type,
                         'document_id', ci.document_id, 'page', ci.page_number, 'media_id', ci.media_id,
@@ -574,10 +574,31 @@ def timeline(case_id: UUID, kind: str | None = None, instance: str | None = None
         rels = rows(c, """SELECT source_event_id, target_event_id, relationship, confidence
                           FROM event_relationships WHERE case_id = :c""", c=str(case_id))
         code_map = ct_read.event_code_map(c, str(case_id))
+        parties = {str(r["id"]): dict(r) for r in rows(c, """
+            SELECT id, name, role, entity_type FROM parties WHERE case_id = :c""", c=str(case_id))}
+        role_labels = {r["code"]: r["label"] for r in party_roles_service.list_roles(c, str(case_id))}
     for e in evs:
         code = code_map.get(str(e["id"]))
         e["code"] = code
         e["seq"] = int(code.split("-")[1]) if code else None
+        # Resolver partes vinculadas: las que ya están en participants más las que
+        # corresponden al rol del actor textual. Así la línea de tiempo siempre muestra
+        # el nombre/rol ACTUAL de las partes del proceso.
+        pids = set(str(x) for x in (e.get("participants") or []) if x)
+        actor_role = procedural_actor_roles.role_code_for_actor(e.get("actor"))
+        if actor_role:
+            pids.update(pid for pid, pt in parties.items() if pt["role"] == actor_role)
+        e["participants"] = [
+            {
+                "id": pid,
+                "name": parties[pid]["name"],
+                "role": parties[pid]["role"],
+                "role_label": role_labels.get(parties[pid]["role"], parties[pid]["role"]),
+                "entity_type": parties[pid]["entity_type"],
+            }
+            for pid in sorted(pids)
+            if pid in parties
+        ]
     idx = {str(e["id"]): e for e in evs}
     links_map: dict[str, list[dict[str, object]]] = {k: [] for k in idx}
     for r in rels:

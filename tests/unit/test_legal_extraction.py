@@ -6,8 +6,13 @@ import pytest
 
 from app.providers.base import LLMResult
 from app.services import legal_extraction as lex
+from app.services import procedural_actor_roles as actor_roles
 
 pytestmark = pytest.mark.unit
+
+
+def _patch_actor_roles(monkeypatch):
+    monkeypatch.setattr(actor_roles, "parties_by_role", lambda _c, _cid: {})
 
 
 ORG = str(uuid.uuid4())
@@ -240,6 +245,7 @@ def test_ut_lex_13_insert_events_populates_document_and_incorporation_dates(monk
 
 def test_ut_lex_14_insert_procedural_events_populates_dates(monkeypatch):
     captured: list[dict] = []
+    _patch_actor_roles(monkeypatch)
 
     def _one(_c, s, **_p):
         captured.append({"sql": s, "params": _p})
@@ -265,6 +271,7 @@ def test_ut_lex_14_insert_procedural_events_populates_dates(monkeypatch):
 
 def test_ut_lex_15_insert_procedural_events_normalizes_subtype(monkeypatch, caplog):
     captured: list[dict] = []
+    _patch_actor_roles(monkeypatch)
 
     def _one(_c, s, **_p):
         captured.append({"sql": s, "params": _p})
@@ -288,6 +295,7 @@ def test_ut_lex_15_insert_procedural_events_normalizes_subtype(monkeypatch, capl
 
 def test_ut_lex_16_insert_procedural_events_warns_on_unknown_subtype(monkeypatch, caplog):
     captured: list[dict] = []
+    _patch_actor_roles(monkeypatch)
 
     def _one(_c, s, **_p):
         captured.append({"sql": s, "params": _p})

@@ -38,4 +38,5 @@ def test_timeline_uses_fallback_date_order(monkeypatch):
     sql = captured[0]["sql"]
     assert "e.document_date" in sql
     assert "e.incorporation_date" in sql
+    assert "e.participants" in sql
     assert "COALESCE(e.event_date, e.document_date, e.incorporation_date)" in sql

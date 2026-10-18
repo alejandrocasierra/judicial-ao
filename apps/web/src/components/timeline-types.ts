@@ -20,6 +20,14 @@ export interface TimelineLink {
   confidence?: number | null;
 }
 
+export interface TimelineParty {
+  id: string;
+  name: string;
+  role: string;
+  role_label: string;
+  entity_type: string;
+}
+
 export interface TimelineEvent {
   id: string;
   event_date: string | null;
@@ -45,6 +53,7 @@ export interface TimelineEvent {
   seq?: number;
   code?: string | null;
   links?: TimelineLink[] | null;
+  participants?: TimelineParty[];
 }
 
 /** Fechas centinela que NUNCA deben mostrarse (marcas de "sin fecha" del LLM). */

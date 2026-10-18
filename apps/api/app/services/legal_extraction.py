@@ -31,6 +31,7 @@ from app.core.db import one, rows
 from app.domain.procedural_catalog import normalize_subtype
 from app.providers import llm
 from app.providers.llm import LLMResult
+from app.services import procedural_actor_roles as actor_roles
 
 log = logging.getLogger(__name__)
 
@@ -970,6 +971,7 @@ def _insert_procedural_events(conn: Connection, org_id: str, case_id: str, docum
                               source_id: str | None = None) -> list[str]:
     document_date, incorporation_date = _source_dates(conn, case_id, source_type, source_id)
     ids: list[str] = []
+    parties_by_role = actor_roles.parties_by_role(conn, case_id)
     for e in events:
         eid = _valid_uuid_or_new(e.get("id"))
         ids.append(eid)
@@ -992,6 +994,9 @@ def _insert_procedural_events(conn: Connection, org_id: str, case_id: str, docum
         if canonical_subtype is None and raw_subtype is not None:
             log.warning("subtype procesal no reconocido: %r (case=%s)", raw_subtype, case_id)
         subtype_raw = raw_subtype if (raw_subtype is not None and canonical_subtype != raw_subtype) else None
+
+        parts: set[str] = set(_uuid_list(e.get("participants") or []))
+        parts.update(parties_by_role.get(actor_roles.role_code_for_actor(e.get("actor")), []))
 
         one(conn, """
             INSERT INTO events
@@ -1019,7 +1024,7 @@ def _insert_procedural_events(conn: Connection, org_id: str, case_id: str, docum
             docd=document_date, incd=incorporation_date,
             dp=date_precision, desc=e["description"],
             tc=e.get("timeline_confidence") or "source_backed", conf=e.get("confidence"),
-            parts=_uuid_list(e.get("participants") or []))
+            parts=sorted(parts))
     return ids
 
 

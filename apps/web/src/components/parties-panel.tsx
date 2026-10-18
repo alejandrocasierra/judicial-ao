@@ -57,7 +57,12 @@ export function PartiesButton({ caseId }: { caseId: string }) {
   const roles = rolesQ.data ?? [];
   const roleLabel = (code: string) => roles.find((r) => r.code === code)?.label || code;
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["parties", caseId] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["parties", caseId] });
+    // La línea de tiempo resuelve nombres/roles de partes en tiempo de lectura;
+    // al cambiar una parte debe refrescarse para reflejar la actualización.
+    qc.invalidateQueries({ queryKey: ["timeline", caseId] });
+  };
 
   const extract = useMutation({
     mutationFn: () => api.post<Candidate[]>(`/cases/${caseId}/parties/extract`, {}),
