@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlalchemy.engine import Connection
 
-from app.core.db import rows
+from app.core.db import one, rows
 from app.services import markdown
 
 
@@ -203,6 +203,9 @@ def chunk_document(conn: Connection, org_id: str, case_id: str, document_id: str
     Las páginas SIN fila en `document_ocr_versions` (p. ej. corregidas directamente
     sobre `document_pages`) se indexan igualmente desde su texto actual, con
     `ocr_mode` nulo, para que ninguna hoja quede sin chunk."""
+    doc_row = one(conn, "SELECT ocr_mode FROM documents WHERE id = :d", d=document_id)
+    doc_ocr_mode = doc_row.get("ocr_mode") if doc_row else None
+
     versions = rows(conn, """
         SELECT page_number, mode, text FROM document_ocr_versions
         WHERE document_id = :d ORDER BY page_number, mode
@@ -228,7 +231,7 @@ def chunk_document(conn: Connection, org_id: str, case_id: str, document_id: str
         else:
             text = (p["text"] or "").strip()
             if text:
-                chunks.extend(_document_page_chunks(conn, org_id, case_id, document_id, pn, None, p["folio"], text))
+                chunks.extend(_document_page_chunks(conn, org_id, case_id, document_id, pn, doc_ocr_mode, p["folio"], text))
 
     # Versiones de páginas que no estén en document_pages (caso raro): no perderlas.
     for pn, page_versions in versions_by_page.items():
@@ -241,6 +244,8 @@ def chunk_document(conn: Connection, org_id: str, case_id: str, document_id: str
 
 def chunk_media(conn: Connection, org_id: str, case_id: str, media_id: str) -> list[dict[str, Any]]:
     """Agrupa segmentos contiguos del mismo hablante en ventanas de testimonio."""
+    media_row = one(conn, "SELECT asr_mode FROM media WHERE id = :m", m=media_id)
+    asr_mode = media_row.get("asr_mode") if media_row else None
     segs = rows(conn, """
         SELECT id, speaker_id, start_ms, end_ms, text FROM transcript_segments
         WHERE media_id = :m ORDER BY start_ms
@@ -276,6 +281,7 @@ def chunk_media(conn: Connection, org_id: str, case_id: str, media_id: str) -> l
                 "metadata": {
                     "segment_id": str(s["id"]),
                     "speaker": speaker_label,
+                    "asr_mode": asr_mode,
                     "entities": _entities_for_segment(conn, case_id, str(s["id"])),
                 },
             }

@@ -20,9 +20,13 @@ log = logging.getLogger(__name__)
 
 
 def retrieve(conn: Connection, case_id: str, question: str,
-             document_ids: list[str] | None = None, media_ids: list[str] | None = None) -> list[dict]:
+             document_ids: list[str] | None = None, media_ids: list[str] | None = None,
+             ocr_mode: str | None = None, asr_mode: str | None = None) -> list[dict]:
     """Recuperación híbrida (FTS + pgvector + RRF). Si se pasan document_ids/media_ids
-    (los "@" del chat), la búsqueda se acota a esos archivos."""
+    (los "@" del chat), la búsqueda se acota a esos archivos.
+
+    `ocr_mode` y `asr_mode` filtran los chunks por el motor que los generó.
+    "todos" o None significa sin filtro."""
     s = get_settings()
     cfg, k, n, rrf_k = s.FTS_CONFIG, s.RETRIEVAL_TOP_K, s.RETRIEVAL_SNIPPET_MAX_CHARS, s.RETRIEVAL_RRF_K
 
@@ -36,6 +40,16 @@ def retrieve(conn: Connection, case_id: str, question: str,
         scope_sql = " AND (c.document_id = ANY(CAST(:dids AS uuid[])) OR c.media_id = ANY(CAST(:mids AS uuid[])))"
         scope_params = {"dids": "{" + ",".join(document_ids or []) + "}",
                         "mids": "{" + ",".join(media_ids or []) + "}"}
+
+    # Filtro por motor OCR/ASR. NULL en metadata = chunks antiguos o corregidos manualmente;
+    # los incluimos siempre para no perder evidencia cuando no hay metadata.
+    mode_filter_sql = ""
+    if ocr_mode and ocr_mode != "todos":
+        mode_filter_sql += " AND (c.metadata->>'ocr_mode' IS NULL OR c.metadata->>'ocr_mode' = :ocr_mode)"
+        scope_params["ocr_mode"] = ocr_mode
+    if asr_mode and asr_mode != "todos":
+        mode_filter_sql += " AND (c.metadata->>'asr_mode' IS NULL OR c.metadata->>'asr_mode' = :asr_mode)"
+        scope_params["asr_mode"] = asr_mode
 
     # Fallback a FTS legacy cuando el caso aún no tiene chunks indexados.
     has_chunks = conn.execute(text("SELECT 1 FROM chunks WHERE case_id = :c LIMIT 1"), {"c": case_id}).scalar() is not None
@@ -53,9 +67,9 @@ def retrieve(conn: Connection, case_id: str, question: str,
                    d.filename, ts_rank_cd(c.tsv, to_tsquery(CAST(:cfg AS regconfig), :q)) AS score
             FROM chunks c
             LEFT JOIN documents d ON d.id = c.document_id
-            WHERE c.case_id = :c AND c.tsv @@ to_tsquery(CAST(:cfg AS regconfig), :q)/*SCOPE*/
+            WHERE c.case_id = :c AND c.tsv @@ to_tsquery(CAST(:cfg AS regconfig), :q)/*SCOPE*//*MODE_FILTER*/
             ORDER BY score DESC LIMIT :k
-        """.replace("/*SCOPE*/", scope_sql), c=case_id, cfg=cfg, q=q_lex, n=n, k=k, **scope_params)
+        """.replace("/*SCOPE*/", scope_sql).replace("/*MODE_FILTER*/", mode_filter_sql), c=case_id, cfg=cfg, q=q_lex, n=n, k=k, **scope_params)
 
     vector_results: list[dict] = []
     try:
@@ -66,10 +80,10 @@ def retrieve(conn: Connection, case_id: str, question: str,
                    d.filename, 1 - (c.embedding <=> CAST(:emb AS vector)) AS score
             FROM chunks c
             LEFT JOIN documents d ON d.id = c.document_id
-            WHERE c.case_id = :c AND c.embedding IS NOT NULL/*SCOPE*/
+            WHERE c.case_id = :c AND c.embedding IS NOT NULL/*SCOPE*//*MODE_FILTER*/
             ORDER BY c.embedding <=> CAST(:emb AS vector)
             LIMIT :k
-        """.replace("/*SCOPE*/", scope_sql), c=case_id, n=n, k=k, emb=_vector_literal(emb), **scope_params)
+        """.replace("/*SCOPE*/", scope_sql).replace("/*MODE_FILTER*/", mode_filter_sql), c=case_id, n=n, k=k, emb=_vector_literal(emb), **scope_params)
     except Exception as exc:
         log.warning("vector search failed: %s", exc)
 
@@ -171,6 +185,8 @@ def _normalize_retrieved_item(it: dict) -> None:
         it["segment_id"] = meta.get("segment_id")
         it["speaker"] = meta.get("speaker")
     it["filename"] = it.get("filename")
+    it["ocr_mode"] = meta.get("ocr_mode")
+    it["asr_mode"] = meta.get("asr_mode")
 
 
 def _source_label(it: dict) -> str:

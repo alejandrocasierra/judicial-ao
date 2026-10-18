@@ -109,7 +109,8 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                     org_id: str | None = None, actor_id: str | None = None,
                     history_turns: list[dict[str, Any]] | None = None,
                     hints: list[str] | None = None,
-                    seed_evidence: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+                    seed_evidence: list[dict[str, Any]] | None = None,
+                    ocr_mode: str | None = None, asr_mode: str | None = None) -> dict[str, Any]:
     """Ejecuta el agente: tool loop → síntesis → verificación semántica.
 
     `agent_prompt` permite que un agente configurado en el panel dirija la consulta
@@ -124,7 +125,8 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
     """
     agent_tools.reset_handles()
     ctx = case_tools.ToolContext(org_id=org_id, actor_id=actor_id, locale=locale,
-                                 attachments=attachments or [])
+                                 attachments=attachments or [],
+                                 ocr_mode=ocr_mode, asr_mode=asr_mode)
     case_tools.set_context(ctx)
     # NOTA: las tools de escritura difieren la propagación (pgvector/grafo/jobs) en
     # ctx.post_commit; se devuelve en el resultado ("post_commit") y el llamador la

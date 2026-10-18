@@ -38,9 +38,12 @@ def test_ut_chk_01_document_indexa_ambos_modos_por_pagina(monkeypatch):
             return list(versions)
         if "document_pages" in sql:
             return list(folios)
+        if "documents" in sql:
+            return [{"ocr_mode": "basico"}]
         return []  # entities
 
     monkeypatch.setattr(chk, "rows", _rows)
+    monkeypatch.setattr(chk, "one", lambda _c, sql, **params: {"ocr_mode": "basico"})
     chunks = chk.chunk_document(object(), ORG, CASE, DOC)
 
     assert len(chunks) == 4  # 2 páginas × 2 modos
@@ -65,6 +68,7 @@ def test_ut_chk_02_document_omite_paginas_vacias(monkeypatch):
         return []
 
     monkeypatch.setattr(chk, "rows", _rows)
+    monkeypatch.setattr(chk, "one", lambda _c, sql, **params: {"ocr_mode": "document_ai"})
     chunks = chk.chunk_document(object(), ORG, CASE, DOC)
     assert len(chunks) == 1
     assert chunks[0]["page_number"] == 2
@@ -82,13 +86,17 @@ def test_ut_chk_03_media_groups_same_speaker(monkeypatch):
             return [{"label": "SPEAKER_00"}]
         if "entities" in sql:
             return []
+        if "FROM media" in sql:
+            return [{"asr_mode": "basico"}]
         return list(segs)
     monkeypatch.setattr(chk, "rows", _rows)
+    monkeypatch.setattr(chk, "one", lambda _c, sql, **params: {"asr_mode": "basico"})
     chunks = chk.chunk_media(object(), ORG, CASE, MEDIA)
     assert len(chunks) == 1
     assert "Primera parte." in chunks[0]["text"]
     assert "Segunda parte." in chunks[0]["text"]
     assert chunks[0]["metadata"]["speaker"] == "SPEAKER_00"
+    assert chunks[0]["metadata"]["asr_mode"] == "basico"
 
 
 def test_ut_chk_04_media_splits_on_large_gap(monkeypatch):
@@ -102,8 +110,11 @@ def test_ut_chk_04_media_splits_on_large_gap(monkeypatch):
             return [{"label": "SPEAKER_00"}]
         if "entities" in sql:
             return []
+        if "FROM media" in sql:
+            return [{"asr_mode": None}]
         return list(segs)
     monkeypatch.setattr(chk, "rows", _rows)
+    monkeypatch.setattr(chk, "one", lambda _c, sql, **params: {"asr_mode": None})
     chunks = chk.chunk_media(object(), ORG, CASE, MEDIA)
     assert len(chunks) == 2
 
@@ -118,11 +129,15 @@ def test_ut_chk_06_media_prefers_display_name(monkeypatch):
             return [{"label": "SPK-01", "display_name": "Álvaro Lúzico Álvarez"}]
         if "entities" in sql:
             return []
+        if "FROM media" in sql:
+            return [{"asr_mode": "document_ai"}]
         return list(segs)
 
     monkeypatch.setattr(chk, "rows", _rows)
+    monkeypatch.setattr(chk, "one", lambda _c, sql, **params: {"asr_mode": "document_ai"})
     chunks = chk.chunk_media(object(), ORG, CASE, MEDIA)
     assert chunks[0]["metadata"]["speaker"] == "Álvaro Lúzico Álvarez"
+    assert chunks[0]["metadata"]["asr_mode"] == "document_ai"
 
 
 def test_ut_chk_05_claims_skip_empty_text(monkeypatch):

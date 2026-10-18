@@ -222,6 +222,8 @@ class ChatSessionIn(Strict):
     agent_id: UUID | None = None
     model_id: UUID | None = None
     title: str | None = Field(default=None, max_length=200)
+    ocr_mode: Literal["todos", "basico", "document_ai"] | None = None
+    asr_mode: Literal["todos", "basico", "document_ai"] | None = None
 
     _t = field_validator("title")(_no_control)
 
@@ -232,6 +234,8 @@ class ChatMessageIn(Strict):
     content: str = Field(min_length=2, max_length=8000)
     attachments: list[QueryAttachment] = Field(default_factory=list, max_length=10)
     strategy: Literal["agent", "rag"] = "agent"
+    ocr_mode: Literal["todos", "basico", "document_ai"] | None = None
+    asr_mode: Literal["todos", "basico", "document_ai"] | None = None
 
     _c = field_validator("content")(_no_control)
 
@@ -244,6 +248,8 @@ class QueryIn(Strict):
     agent_id: UUID | None = None  # agente configurado que dirige la consulta
     model_id: UUID | None = None  # modelo configurado en /dashboard/models
     attachments: list[QueryAttachment] = Field(default_factory=list, max_length=10)  # los "@" del chat
+    ocr_mode: Literal["todos", "basico", "document_ai"] | None = None
+    asr_mode: Literal["todos", "basico", "document_ai"] | None = None
 
     _v = field_validator("question")(_no_control)
 

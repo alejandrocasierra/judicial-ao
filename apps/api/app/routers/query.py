@@ -73,11 +73,13 @@ def query(case_id: UUID, body: QueryIn, request: Request, p: Principal = Depends
     with metrics.track_stage("query_total", p.org_id):
         hints = query_hints.merge(query_hints.hint(body.question),
                                   role_answer.authoritative_hint(p.org_id, p.user_id, str(case_id), body.question))
-        return _run_query(case_id, body, request, p, locale, case, s, hints=hints)
+        return _run_query(case_id, body, request, p, locale, case, s, hints=hints,
+                          ocr_mode=body.ocr_mode, asr_mode=body.asr_mode)
 
 
 def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, locale: str, case: dict, s,
-               history: list[dict] | None = None, hints: list[str] | None = None) -> dict:
+               history: list[dict] | None = None, hints: list[str] | None = None,
+               ocr_mode: str | None = None, asr_mode: str | None = None) -> dict:
     from app.providers.llm import get_llm_for_model
 
     llm = get_llm_for_model(str(body.model_id), p.org_id, p.user_id) if body.model_id else get_llm()
@@ -99,7 +101,8 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                                                  agent_prompt=agent_prompt, llm=llm,
                                                  attachments=_attachment_dicts(body),
                                                  org_id=str(p.org_id), actor_id=str(p.user_id),
-                                                 history_turns=history, hints=hints, seed_evidence=seed)
+                                                 history_turns=history, hints=hints, seed_evidence=seed,
+                                                 ocr_mode=ocr_mode, asr_mode=asr_mode)
         # Propagación diferida por las tools de escritura (reindex pgvector, rebuild del
         # grafo, encolado de jobs): solo DESPUÉS de confirmar la transacción del loop.
         case_tools.drain_actions(agent_result.pop("post_commit", []))
@@ -141,13 +144,15 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         raw_text = agent_result.get("raw_text", "")
     else:
         with tx(p.org_id, p.user_id) as c:
-            items = answering.retrieve(c, str(case_id), body.question)
+            items = answering.retrieve(c, str(case_id), body.question,
+                                       ocr_mode=ocr_mode, asr_mode=asr_mode)
             if body.attachments:
                 # Los "@" acotan una primera pasada y se fusionan (primero lo adjunto, luego lo global).
                 doc_ids = [str(a.id) for a in body.attachments if a.kind == "document"]
                 media_ids = [str(a.id) for a in body.attachments if a.kind == "media"]
                 scoped = answering.retrieve(c, str(case_id), body.question,
-                                            document_ids=doc_ids or None, media_ids=media_ids or None)
+                                            document_ids=doc_ids or None, media_ids=media_ids or None,
+                                            ocr_mode=ocr_mode, asr_mode=asr_mode)
                 items = answering.merge_items(scoped, items)
                 file_cards = _attachment_file_cards(c, case_id, body)
         if not items:
@@ -213,13 +218,15 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     citations = []
     for h, cid in handle_to_cit.items():
         it = by_handle[h]
+        item_meta = it.get("metadata") or {}
+        mode_meta = {"ocr_mode": item_meta.get("ocr_mode"), "asr_mode": item_meta.get("asr_mode")}
         meta = ({"document_id": str(it["document_id"]) if it.get("document_id") else None,
                  "page": it.get("page_number"), "folio": it.get("folio"), "filename": it.get("filename")}
                 if it["source_type"] == "document_page" else
                 {"media_id": str(it["media_id"]) if it.get("media_id") else None,
                  "start_ms": it.get("start_ms"), "end_ms": it.get("end_ms"),
                  "speaker": it.get("speaker"), "filename": it.get("filename")})
-        citations.append({"citation_id": cid, "source_type": it["source_type"], **meta})
+        citations.append({"citation_id": cid, "source_type": it["source_type"], **meta, **mode_meta})
     answer = " ".join(cl["text"] for cl in claims)
     if not answer and items:
         # Preguntas de rol/agregación: respuesta DETERMINISTA con la lista calculada
@@ -236,9 +243,12 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                                 VALUES (:o,:c,'answer',:r,'document_page',:d,:pg,:f) RETURNING id""",
                                       o=p.org_id, c=str(case_id), r=run["id"], d=str(it["document_id"]),
                                       pg=it.get("page_number"), f=it.get("folio"))["id"]
+                            item_meta = it.get("metadata") or {}
                             citations.append({"citation_id": str(cid), "source_type": "document_page",
                                               "document_id": str(it["document_id"]), "page": it.get("page_number"),
-                                              "folio": it.get("folio"), "filename": it.get("filename")})
+                                              "folio": it.get("folio"), "filename": it.get("filename"),
+                                              "ocr_mode": item_meta.get("ocr_mode"),
+                                              "asr_mode": item_meta.get("asr_mode")})
         if not answer:
             # Hay evidencia, pero la síntesis no produjo frases verificables (o el modelo
             # varió su estrategia). En vez de decir «sin evidencia», se muestran las fuentes

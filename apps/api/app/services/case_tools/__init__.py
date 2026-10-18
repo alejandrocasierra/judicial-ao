@@ -31,6 +31,8 @@ class ToolContext:
     actor_id: str | None = None
     locale: str = "es"
     attachments: list[dict[str, Any]] = field(default_factory=list)
+    ocr_mode: str | None = None  # 'basico' | 'document_ai' | 'todos' | None
+    asr_mode: str | None = None  # 'basico' | 'document_ai' | 'todos' | None
     # Acciones diferidas (reindex pgvector, rebuild del grafo, encolado de jobs).
     # Se ejecutan DESPUÉS de que el llamador confirme su transacción (ver drain_post_commit).
     post_commit: list[Callable[[], None]] = field(default_factory=list)

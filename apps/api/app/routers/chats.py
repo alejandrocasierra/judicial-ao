@@ -116,13 +116,14 @@ def _format_locations(term: str, locs: list[dict], locale: str) -> tuple[str, li
             folio = f" (folio {it['folio']})" if it.get("folio") else ""
             line = f"- {it.get('filename')} · página {it.get('page_number')}{folio}"
             cite = {"citation_id": f"loc{i}", "source_type": "document_page", "filename": it.get("filename"),
-                    "document_id": it.get("document_id"), "page": it.get("page_number"), "folio": it.get("folio")}
+                    "document_id": it.get("document_id"), "page": it.get("page_number"), "folio": it.get("folio"),
+                    "ocr_mode": it.get("ocr_mode"), "asr_mode": it.get("asr_mode")}
         else:
             spk = f" · {it['speaker']}" if it.get("speaker") else ""
             line = f"- {it.get('filename')} · {mmss(it.get('start_ms'))}{spk}"
             cite = {"citation_id": f"loc{i}", "source_type": "transcript_segment", "filename": it.get("filename"),
                     "media_id": it.get("media_id"), "start_ms": it.get("start_ms"), "end_ms": it.get("end_ms"),
-                    "speaker": it.get("speaker")}
+                    "speaker": it.get("speaker"), "ocr_mode": it.get("ocr_mode"), "asr_mode": it.get("asr_mode")}
         if line in seen:
             continue
         seen.add(line)
@@ -145,6 +146,7 @@ def list_sessions(case_id: UUID, p: Principal = Depends(current_principal)):
     case_access(p, case_id, "case.read")
     with tx(p.org_id, p.user_id) as c:
         return rows(c, """SELECT s.id, s.title, s.agent_id, s.model_id, s.created_by, s.created_at, s.updated_at,
+                s.ocr_mode, s.asr_mode,
                 (SELECT count(*) FROM chat_messages m WHERE m.session_id = s.id) AS message_count
             FROM chat_sessions s WHERE s.case_id = :c AND s.archived_at IS NULL
             ORDER BY s.updated_at DESC""", c=str(case_id))
@@ -162,13 +164,17 @@ def create_session(case_id: UUID, body: ChatSessionIn, request: Request, p: Prin
             m = one(c, "SELECT id FROM ai_models WHERE id = :i", i=str(body.model_id))
             if not m:
                 raise AppError("NOT_FOUND", 404)
-        s = one(c, """INSERT INTO chat_sessions (organization_id, case_id, title, agent_id, model_id, created_by)
-            VALUES (:o, :c, :t, :a, :m, :u) RETURNING id, title, agent_id, model_id, created_at""",
+        s = one(c, """INSERT INTO chat_sessions (organization_id, case_id, title, agent_id, model_id,
+                            created_by, ocr_mode, asr_mode)
+            VALUES (:o, :c, :t, :a, :m, :u, :ocr, :asr) RETURNING id, title, agent_id, model_id,
+                     created_at, ocr_mode, asr_mode""",
                 o=p.org_id, c=str(case_id), t=body.title or "", a=str(body.agent_id) if body.agent_id else None,
-                m=str(body.model_id) if body.model_id else None, u=p.user_id)
+                m=str(body.model_id) if body.model_id else None, u=p.user_id,
+                ocr=body.ocr_mode, asr=body.asr_mode)
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="chat.session_created",
                      entity_type="chat_session", entity_id=str(s["id"]),
-                     after={"agent_id": str(body.agent_id) if body.agent_id else None}, request=request)
+                     after={"agent_id": str(body.agent_id) if body.agent_id else None,
+                            "ocr_mode": body.ocr_mode, "asr_mode": body.asr_mode}, request=request)
     return s
 
 
@@ -206,6 +212,17 @@ def send_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: 
             VALUES (:o, :s, 'user', :t, CAST(:a AS jsonb)) RETURNING id, created_at""",
                        o=p.org_id, s=str(session_id), t=body.content,
                        a=json.dumps([{"kind": a.kind, "id": str(a.id), "name": a.name} for a in body.attachments]))
+        # Modos OCR/ASR efectivos: se toman del mensaje si vienen, si no de la sesión.
+        ocr_mode = body.ocr_mode if body.ocr_mode is not None else session.get("ocr_mode")
+        asr_mode = body.asr_mode if body.asr_mode is not None else session.get("asr_mode")
+        # Persistir en la sesión cualquier cambio explícito.
+        if body.ocr_mode is not None or body.asr_mode is not None:
+            c.execute(text("""UPDATE chat_sessions
+                              SET ocr_mode = coalesce(:ocr, ocr_mode),
+                                  asr_mode = coalesce(:asr, asr_mode),
+                                  updated_at = now()
+                              WHERE id = :s"""),
+                      {"ocr": body.ocr_mode, "asr": body.asr_mode, "s": str(session_id)})
 
     # Flujo de corrección DETERMINISTA (Fase 6): si el usuario confirma o cancela y
     # hay una corrección pendiente en esta sesión, se aplica/descarta aquí mismo,
@@ -237,8 +254,10 @@ def send_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: 
                               role_answer.authoritative_hint(p.org_id, p.user_id, str(case_id), body.content))
     query_body = QueryIn(question=body.content, strategy=body.strategy,
                          agent_id=session["agent_id"], model_id=session["model_id"],
-                         attachments=body.attachments)
-    result = _run_query(case_id, query_body, request, p, locale, case, s, history=history, hints=hints)
+                         attachments=body.attachments,
+                         ocr_mode=ocr_mode, asr_mode=asr_mode)
+    result = _run_query(case_id, query_body, request, p, locale, case, s, history=history, hints=hints,
+                        ocr_mode=ocr_mode, asr_mode=asr_mode)
 
     # Los "@" siempre producen tarjeta ver/descargar, aunque el agente no llamara get_file.
     if body.attachments:
@@ -255,7 +274,8 @@ def send_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: 
         try:
             with tx(p.org_id, p.user_id) as c:
                 occ = case_tools.execute(c, str(case_id), "locate", {"term": term, "k": 300},
-                                         ctx=ToolContext(org_id=p.org_id, actor_id=p.user_id))
+                                         ctx=ToolContext(org_id=p.org_id, actor_id=p.user_id,
+                                                         ocr_mode=ocr_mode, asr_mode=asr_mode))
             _, occ_cites = _format_locations(term, occ, locale)
             if occ_cites:
                 result["occurrences"] = occ_cites

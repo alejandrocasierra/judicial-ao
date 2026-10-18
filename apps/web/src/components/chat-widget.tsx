@@ -32,6 +32,7 @@ interface Attachment { kind: "document" | "media"; id: string; name?: string }
 interface Citation {
   citation_id: string; source_type: string; filename?: string; folio?: string;
   document_id?: string; page?: number; media_id?: string; start_ms?: number; end_ms?: number; speaker?: string;
+  ocr_mode?: string | null; asr_mode?: string | null;
 }interface FileCard {
   kind: string; name: string; document_id?: string | null; media_id?: string | null;
   mime_type?: string; size_bytes?: number; page_count?: number | null; duration_ms?: number | null;
@@ -53,9 +54,12 @@ interface HistoryMessage {
   citations?: Citation[] | null;
   occurrences?: Citation[] | null;
 }
+type RecognitionMode = "todos" | "basico" | "document_ai";
+
 interface Session {
   id: string; title: string; agent_id: string | null; model_id: string | null;
   message_count: number; updated_at: string;
+  ocr_mode: RecognitionMode | null; asr_mode: RecognitionMode | null;
 }
 interface SendResponse {
   answer: string; citations?: Citation[]; occurrences?: Citation[]; file_cards?: FileCard[]; uncertainties?: string[];
@@ -76,6 +80,14 @@ function formatSize(bytes?: number) {
   if (!bytes) return "";
   if (bytes > 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
   return `${Math.round(bytes / 1024)} KB`;
+}
+
+function modeBadge(c: Citation) {
+  const mode = c.source_type === "document_page" ? c.ocr_mode : c.asr_mode;
+  if (!mode || mode === "todos") return null;
+  const label = mode === "basico" ? "básico" : "Document AI";
+  const kind = c.source_type === "document_page" ? "OCR" : "ASR";
+  return <span className="ml-1 rounded bg-muted px-1 text-[10px] text-muted-foreground">{kind} {label}</span>;
 }
 
 /** El chat vive DENTRO de un proceso: sin expediente abierto no hay botón flotante.
@@ -104,6 +116,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [models, setModels] = useState<Model[]>([]);
   const [selectedModel, setSelectedModel] = useState<Model | null>(null);
+  const [modeOverride, setModeOverride] = useState<{ ocr?: RecognitionMode; asr?: RecognitionMode } | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [menu, setMenu] = useState<{ type: "agent" | "file"; filter: string } | null>(null);
   const [docView, setDocView] = useState<{ id: string; page: number; name?: string } | null>(null);
@@ -175,6 +188,10 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
     })();
     return () => { cancelled = true; };
   }, [open, caseId, sessionId]);
+
+  const activeSession = useMemo(() => sessions.find((s) => s.id === sessionId), [sessions, sessionId]);
+  const ocrMode = modeOverride?.ocr ?? activeSession?.ocr_mode ?? "todos";
+  const asrMode = modeOverride?.asr ?? activeSession?.asr_mode ?? "todos";
 
   // Auto-scroll al último mensaje.
   useEffect(() => {
@@ -256,6 +273,8 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
         const created = await api.post<Session>(`/cases/${caseId}/chats`, {
           agent_id: selectedAgent?.id ?? null,
           model_id: selectedModel?.id ?? null,
+          ocr_mode: ocrMode,
+          asr_mode: asrMode,
         });
         sid = created.id;
         setSession(sid);
@@ -266,6 +285,8 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
         content: q,
         attachments: atts,
         strategy: "agent",
+        ocr_mode: ocrMode,
+        asr_mode: asrMode,
       });
       // El servidor es la fuente de verdad: recarga el historial (ambos mensajes)
       // en vez de añadirlos a mano (evita que la carga del historial los pise).
@@ -335,7 +356,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
         onClick={() => setOpen(!open)}
         className={cn(
           "fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 sm:bottom-6 sm:right-6 sm:h-14 sm:w-14",
-          open && "rotate-90",
+          open && "hidden",
         )}
         aria-label="Chat IA"
       >
@@ -343,11 +364,11 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
       </button>
 
       {open && (
-        <div className="fixed inset-x-3 bottom-20 z-40 flex h-[min(560px,calc(100dvh-6rem))] flex-col rounded-lg border bg-background shadow-xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:h-[560px] sm:w-[600px]">
+        <div className="fixed inset-2 z-40 flex h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] flex-col rounded-xl border bg-background shadow-xl sm:inset-4 sm:h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)]">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <h3 className="font-semibold">Chat IA</h3>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" title="Nueva conversación" onClick={() => { setSession(null); setMessages([]); }}>
+              <Button variant="ghost" size="icon" title="Nueva conversación" onClick={() => { setSession(null); setMessages([]); setModeOverride(null); }}>
                 <Plus className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" onClick={() => setOpen(false)}><X className="h-4 w-4" /></Button>
@@ -355,11 +376,11 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
           </div>
 
           <div className="space-y-2 border-b px-4 py-2">
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               {sessions.length > 0 && (
                 <Select value={sessionId ?? ""} onValueChange={(v) => {
-                  if (v === "__new__") { setSession(null); setMessages([]); setPendingCorrection(null); }
-                  else setSession(v || null);
+                  if (v === "__new__") { setSession(null); setMessages([]); setPendingCorrection(null); setModeOverride(null); }
+                  else { setSession(v || null); setModeOverride(null); }
                 }}>
                   <SelectTrigger className="h-8 flex-1 text-xs">
                     <SelectValue placeholder="Nueva conversación" />
@@ -407,6 +428,28 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                 </Select>
               )}
             </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Select value={ocrMode} onValueChange={(v) => setModeOverride((prev) => ({ ...prev, ocr: v as RecognitionMode }))}>
+                <SelectTrigger className="h-8 flex-1 text-xs">
+                  <SelectValue placeholder="OCR" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">OCR: todos</SelectItem>
+                  <SelectItem value="basico">OCR: básico</SelectItem>
+                  <SelectItem value="document_ai">OCR: Document AI</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={asrMode} onValueChange={(v) => setModeOverride((prev) => ({ ...prev, asr: v as RecognitionMode }))}>
+                <SelectTrigger className="h-8 flex-1 text-xs">
+                  <SelectValue placeholder="ASR" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">ASR: todos</SelectItem>
+                  <SelectItem value="basico">ASR: básico</SelectItem>
+                  <SelectItem value="document_ai">ASR: Document AI</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -416,7 +459,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
               </p>
             )}
             {messages.map((m, i) => (
-              <div key={i} className={cn("rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-8 bg-primary text-primary-foreground" : "mr-8 bg-muted")}>
+              <div key={i} className={cn("min-w-0 rounded-lg px-3 py-2 text-sm", m.role === "user" ? "ml-8 bg-primary text-primary-foreground" : "mr-8 bg-muted")}>
                 {m.attachments && m.attachments.length > 0 && m.role === "user" && (
                   <div className="mb-1 flex flex-wrap gap-1">
                     {m.attachments.map((a) => (
@@ -442,10 +485,10 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                     {m.citations.map((c) => (
                       <button key={c.citation_id} onClick={() => openCitation(c)}
                         title={c.source_type === "document_page" ? "Ver página (y corregir OCR)" : "Ver minuto (y corregir transcripción)"}
-                        className="inline-flex items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
+                        className="inline-flex max-w-full items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
                         {c.source_type === "document_page"
-                          ? <><FileText className="h-3 w-3" />{c.filename} p.{c.page}</>
-                          : <><Video className="h-3 w-3" />{c.filename} {c.start_ms != null ? mmss(c.start_ms) : ""}{c.speaker ? ` · ${c.speaker}` : ""}</>}
+                          ? <><FileText className="h-3 w-3 shrink-0" /><span className="min-w-0 truncate">{c.filename} p.{c.page}</span>{modeBadge(c)}</>
+                          : <><Video className="h-3 w-3 shrink-0" /><span className="min-w-0 truncate">{c.filename} {c.start_ms != null ? mmss(c.start_ms) : ""}{c.speaker ? ` · ${c.speaker}` : ""}</span>{modeBadge(c)}</>}
                       </button>
                     ))}
                   </div>
@@ -462,6 +505,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                           {c.source_type === "document_page"
                             ? `${c.filename} · página ${c.page}${c.folio ? ` (folio ${c.folio})` : ""}`
                             : `${c.filename} · ${c.start_ms != null ? mmss(c.start_ms) : ""}${c.speaker ? ` · ${c.speaker}` : ""}`}
+                          {modeBadge(c)}
                         </button>
                       ))}
                     </div>

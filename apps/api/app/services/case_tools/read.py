@@ -161,7 +161,8 @@ def search_case(conn: Connection, case_id: str, ctx: ToolContext, query: str, k:
                 document_ids: list[str] | None = None, media_ids: list[str] | None = None) -> list[dict[str, Any]]:
     doc_ids = [u for u in (_uuid(x) for x in (document_ids or [])) if u] or None
     med_ids = [u for u in (_uuid(x) for x in (media_ids or [])) if u] or None
-    items = answering.retrieve(conn, case_id, query, document_ids=doc_ids, media_ids=med_ids)
+    items = answering.retrieve(conn, case_id, query, document_ids=doc_ids, media_ids=med_ids,
+                               ocr_mode=ctx.ocr_mode, asr_mode=ctx.asr_mode)
     # Búsqueda AMPLIA (todas las fuentes): además del híbrido, cubre
     #  (1) transcripciones por TEXTO y por NOMBRE DE HABLANTE, y
     #  (2) coincidencias EXACTAS del término (insensible a tildes/mayúsculas), para que
@@ -288,7 +289,8 @@ def _segment_item(r: dict[str, Any], prefix: str = "TR") -> dict[str, Any]:
     return evidence_item(prefix, "transcript_segment", r["text"], media_id=str(r["media_id"]),
                          segment_id=str(r["id"]), start_ms=r["start_ms"], end_ms=r["end_ms"],
                          start_mmss=mmss(r["start_ms"]), end_mmss=mmss(r["end_ms"]),
-                         speaker=speaker, filename=r["filename"])
+                         speaker=speaker, filename=r["filename"],
+                         asr_mode=r.get("asr_mode"))
 
 
 @register("list_speakers",
@@ -1074,6 +1076,13 @@ def locate(conn: Connection, case_id: str, ctx: ToolContext, term: str, k: int =
         return _err("Se requiere un término de búsqueda")
     params: dict[str, Any] = {"c": case_id, "k": k}
     doc_where, doc_where_v, seg_where = [], [], []
+    if ctx.ocr_mode and ctx.ocr_mode != "todos":
+        doc_where.append("d.ocr_mode = :ocr_mode")
+        doc_where_v.append("v.mode = :ocr_mode")
+        params["ocr_mode"] = ctx.ocr_mode
+    if ctx.asr_mode and ctx.asr_mode != "todos":
+        seg_where.append("m.asr_mode = :asr_mode")
+        params["asr_mode"] = ctx.asr_mode
     speaker_fold = "translate(lower(coalesce(sp.display_name, sp.label, '')), 'áéíóúüñ', 'aeiouun')"
     text_fold_s = _FOLD_SQL.format(col="s.text")
     for i, tok in enumerate(tokens):
@@ -1094,7 +1103,7 @@ def locate(conn: Connection, case_id: str, ctx: ToolContext, term: str, k: int =
     out = _dedupe_pages(out)
     segs = rows(conn, """
         SELECT s.id, s.media_id, s.start_ms, s.end_ms, sp.label AS speaker, sp.display_name AS speaker_name,
-               left(s.text, 220) AS text, m.filename
+               left(s.text, 220) AS text, m.filename, m.asr_mode
         FROM transcript_segments s JOIN media m ON m.id = s.media_id
         LEFT JOIN speakers sp ON sp.id = s.speaker_id
         WHERE m.case_id = :c AND (/*SEG_CLAUSES*/)
@@ -1295,7 +1304,8 @@ def find_person(conn: Connection, case_id: str, ctx: ToolContext, name: str, k: 
     # no exista una ficha de persona en el grafo. Así "¿quién es X?" nunca se queda sin respuesta.
     mentions: list[dict[str, Any]] = []
     try:
-        mentions = answering.retrieve(conn, case_id, term)[: max(k, 5)]
+        mentions = answering.retrieve(conn, case_id, term,
+                                      ocr_mode=ctx.ocr_mode, asr_mode=ctx.asr_mode)[: max(k, 5)]
     except Exception:  # noqa: BLE001
         mentions = []
     if not out and mentions:
