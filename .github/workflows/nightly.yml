@@ -18,10 +18,10 @@ jobs:
       - run: python3 scripts/gen_env.py --out .env.test --set APP_ENV=test
              --set POSTGRES_DB=judicial_test --set POSTGRES_SUPERUSER_PASSWORD=ci-only-superuser
              --set STORAGE_LOCAL_ROOT=var/test-storage --set RATE_LIMIT_BACKEND=memory
-             --set CELERY_TASK_ALWAYS_EAGER=true
+             --set CELERY_TASK_ALWAYS_EAGER=true --set ASR_PROVIDER=fake --set OCR_PROVIDER=fake
       - name: Capa A (determinista, sin DB)
         run: python3 scripts/eval_offline.py
-      - name: Calibración de grounding y κ del juez
+      - name: CalibraciÃ³n de grounding y Îº del juez
         run: |
           python3 scripts/calibrate_grounding.py
           python3 scripts/judge_agreement.py --min-kappa 0.6
@@ -35,3 +35,4 @@ jobs:
         with:
           name: nightly-quality
           path: var/*.json
+

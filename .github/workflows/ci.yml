@@ -22,9 +22,9 @@ jobs:
         # CI no tiene Redis: rate limit en memoria (un solo proceso) y Celery en modo eager
         run: python3 scripts/gen_env.py --out .env.test --set APP_ENV=test --set POSTGRES_DB=judicial_test
              --set POSTGRES_SUPERUSER_PASSWORD=ci-only-superuser --set STORAGE_LOCAL_ROOT=var/test-storage
-             --set RATE_LIMIT_BACKEND=memory --set CELERY_TASK_ALWAYS_EAGER=true
+             --set RATE_LIMIT_BACKEND=memory --set CELERY_TASK_ALWAYS_EAGER=true --set ASR_PROVIDER=fake --set OCR_PROVIDER=fake
       - run: ruff check apps tests scripts
-      - name: Capa A — invariantes del compositor (sin DB, sin secretos)
+      - name: Capa A â€” invariantes del compositor (sin DB, sin secretos)
         run: python3 scripts/eval_offline.py
       - name: Tests unitarios (sin DB)
         run: SKIP_DB_RESET=1 python3 -m pytest -m unit -q
@@ -35,3 +35,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: {name: junit, path: var/junit.xml}
+
