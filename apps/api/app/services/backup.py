@@ -1,6 +1,7 @@
 """Backups y Disaster Recovery (SSD §113). PostgreSQL daily + WAL/PITR + storage versionado."""
 from __future__ import annotations
 
+import os
 import subprocess
 from datetime import datetime, timedelta, timezone
 
@@ -32,7 +33,8 @@ def backup_postgres(conn: Connection, org_id: str, backup_id: str) -> dict:
             "-d", s.POSTGRES_DB,
             "-F", "c",  # formato custom (comprimido)
             "-f", str(backup_file),
-        ], capture_output=True, text=True, timeout=300)
+        ], capture_output=True, text=True, timeout=300,
+           env={**os.environ, "PGPASSWORD": s.DB_APP_PASSWORD})
     except FileNotFoundError:
         # pg_dump no disponible (ej. en tests). Simular backup exitoso.
         backup_file.write_text("-- Backup simulado para tests\n", encoding="utf-8")

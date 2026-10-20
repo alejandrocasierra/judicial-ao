@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
 import openpyxl
 import pytest
@@ -150,7 +151,8 @@ def test_it_imp_03_deduplicates_by_sha256(client, auth, tmp_path: Path, owner_db
     # Copia exacta en otro cuaderno para forzar dedup
     dup_dir = root / "01PrimeraInstancia" / "0003 Duplicado"
     dup_dir.mkdir(parents=True)
-    (root / "01PrimeraInstancia" / "0001 DemandaPrincipal2018-361" / "0001 DemandaPrincipal2018-361.pdf").copy(
+    shutil.copy2(
+        root / "01PrimeraInstancia" / "0001 DemandaPrincipal2018-361" / "0001 DemandaPrincipal2018-361.pdf",
         dup_dir / "0001MismoDoc.pdf")
 
     from scripts.import_expediente import import_expediente
