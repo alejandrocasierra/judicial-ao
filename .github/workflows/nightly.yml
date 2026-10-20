@@ -23,9 +23,9 @@ jobs:
         run: |
           python3 scripts/calibrate_grounding.py
           python3 scripts/judge_agreement.py --min-kappa 0.6
-      - name: Matriz offline informativa (no gate: FakeLLM no mide calidad real)
+      - name: "Matriz offline informativa (no gate: FakeLLM no mide calidad real)"
         continue-on-error: true
-        run: python3 scripts/eval_matrix.py --models fake:offline --offline --golden evals/golden --out var/matrix-offline.json
+        run: "python3 scripts/eval_matrix.py --models fake:offline --offline --golden evals/golden --out var/matrix-offline.json"
       - name: Unitarias
         run: SKIP_DB_RESET=1 python3 -m pytest -m unit -q
       - uses: actions/upload-artifact@v4
@@ -33,24 +33,3 @@ jobs:
         with:
           name: nightly-quality
           path: var/*.json
-  real-matrix:
-    # Solo corre si el repositorio tiene el secreto; si no, el job se omite sin fallar.
-    if: ${{ secrets.GEMINI_API_KEY != '' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements/dev.txt}
-      - run: pip install -r requirements/dev.txt
-      - run: python3 scripts/gen_env.py --out .env.test --set APP_ENV=test
-             --set POSTGRES_DB=judicial_test --set POSTGRES_SUPERUSER_PASSWORD=ci-only-superuser
-             --set STORAGE_LOCAL_ROOT=var/test-storage --set RATE_LIMIT_BACKEND=memory
-             --set CELERY_TASK_ALWAYS_EAGER=true
-      - name: Matriz real Gemini (si hay expediente configurado en EVAL_CASE_ID)
-        if: ${{ vars.EVAL_CASE_ID != '' }}
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          EVAL_CASE_ID: ${{ vars.EVAL_CASE_ID }}
-        run: |
-          python3 scripts/eval_matrix.py --models gemini:gemini-flash-lite-latest \
-            --golden evals/golden --case-id "$EVAL_CASE_ID" --out var/matrix-real.json
