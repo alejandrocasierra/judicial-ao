@@ -4,6 +4,8 @@ permissions: {contents: read}
 jobs:
   test:
     runs-on: ubuntu-24.04
+    env:
+      ENV_FILE: .env.test
     services:
       postgres:
         image: pgvector/pgvector:pg16

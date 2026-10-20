@@ -8,6 +8,8 @@ permissions:
 jobs:
   offline-and-judge:
     runs-on: ubuntu-24.04
+    env:
+      ENV_FILE: .env.test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
