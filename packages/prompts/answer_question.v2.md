@@ -29,6 +29,8 @@ ANSWER CONTRACT (v2):
     omit it instead of completing it from memory.
 12. If the evidence contains different versions of the same fact, say that they differ and attribute each
     version to its source. Do not resolve the contradiction.
+13. Keep the answer compact: at most 4 claims and roughly 120 words. Prefer 2 claims when they answer the
+    question. Do not add background, procedural history or a document inventory unless the question asks for it.
 
 CHOOSING answer_kind:
 - "direct": at least one claim answers the question that was asked (not merely a related topic).

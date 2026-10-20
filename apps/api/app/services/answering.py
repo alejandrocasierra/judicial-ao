@@ -522,7 +522,11 @@ def build_user_prompt(question: str, items: list[dict]) -> str:
 
 def system_prompt(locale: str) -> tuple[str, str, str]:
     s = get_settings()
-    raw = (s.path(s.PROMPTS_DIR) / "answer_question.v1.md").read_text(encoding="utf-8")
+    path = s.path(s.PROMPTS_DIR)
+    target = path / "answer_question.v2.md"
+    if not target.exists():
+        target = path / "answer_question.v1.md"
+    raw = target.read_text(encoding="utf-8")
     meta, body = raw.split("---", 2)[1], raw.split("---", 2)[2]
     pid = re.search(r"prompt_id:\s*(\S+)", meta).group(1)
     ver = re.search(r"version:\s*(\S+)", meta).group(1)
