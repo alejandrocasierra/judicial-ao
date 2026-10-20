@@ -1,4 +1,5 @@
 -r base.txt
+-r mcp.txt
 pytest==9.1.1
 jsonschema==4.23.0
 ruff==0.8.4
