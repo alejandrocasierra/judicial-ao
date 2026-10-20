@@ -23,18 +23,23 @@ def backup_postgres(conn: Connection, org_id: str, backup_id: str) -> dict:
     backup_dir.mkdir(parents=True, exist_ok=True)
     backup_file = backup_dir / f"postgres_{org_id}_{timestamp}.sql"
 
+    # pg_dump necesita leer secuencias y tablas de auditoría: usar el rol owner,
+    # no el rol app restringido por RLS/grants.
+    dump_user = os.environ.get("DB_OWNER_USER", s.DB_APP_USER)
+    dump_password = os.environ.get("DB_OWNER_PASSWORD", s.DB_APP_PASSWORD)
+
     # pg_dump con formato custom para PITR
     try:
         result = subprocess.run([
             "pg_dump",
             "-h", s.POSTGRES_HOST,
             "-p", str(s.POSTGRES_PORT),
-            "-U", s.DB_APP_USER,
+            "-U", dump_user,
             "-d", s.POSTGRES_DB,
             "-F", "c",  # formato custom (comprimido)
             "-f", str(backup_file),
         ], capture_output=True, text=True, timeout=300,
-           env={**os.environ, "PGPASSWORD": s.DB_APP_PASSWORD})
+           env={**os.environ, "PGPASSWORD": dump_password})
     except FileNotFoundError:
         # pg_dump no disponible (ej. en tests). Simular backup exitoso.
         backup_file.write_text("-- Backup simulado para tests\n", encoding="utf-8")
