@@ -21,6 +21,12 @@ services:
       DOMAIN_DEVELOP: ${DOMAIN_DEVELOP:-develop.advisorlegal.co}
       DOMAIN_QUALITY: ${DOMAIN_QUALITY:-quality.advisorlegal.co}
       ACME_EMAIL: ${ACME_EMAIL:-admin@advisorlegal.co}
+      # advisor.cafe (proyecto hermano en /var/www/advisor.cafe). Se enruta por
+      # los MISMOS puertos 80/443: sólo un proxy puede publicarlos. Sus upstreams
+      # (advisor-cafe-site/develop/quality) viven en la misma judicial-net.
+      DOMAIN_CAFE_SITE: ${DOMAIN_CAFE_SITE:-advisor.cafe}
+      DOMAIN_CAFE_DEVELOP: ${DOMAIN_CAFE_DEVELOP:-develop.advisor.cafe}
+      DOMAIN_CAFE_QUALITY: ${DOMAIN_CAFE_QUALITY:-quality.advisor.cafe}
     volumes:
       - ./infra/docker/Caddyfile.shared:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

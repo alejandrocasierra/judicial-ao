@@ -1,9 +1,15 @@
-# Reverse proxy ÚNICO para las 3 instancias (infra compartida, red judicial-net).
-#  - /v1/* y /health  -> API (FastAPI) de la instancia
-#  - todo lo demás     -> Web (Next.js) de la instancia
-# Los upstreams son los alias de red de cada instancia: site-api/site-web,
-# develop-api/develop-web, quality-api/quality-web (los define docker-compose.shared-app.yml).
-# El frontend usa API_PUBLIC_URL=/v1 (mismo origen), así no hay CORS ni "localhost".
+# Reverse proxy ÚNICO para los 2 proyectos que comparten este servidor (red judicial-net).
+#
+#   advisorlegal.co  -> 3 instancias FastAPI+Next.js (site-api/site-web, develop-*, quality-*)
+#                        Rutas: /v1/* y /health -> API ; todo lo demás -> Web
+#   advisor.cafe     -> 3 instancias Express (advisor-cafe-site/develop/quality)
+#                        Express sirve API y frontend en el MISMO puerto, con fallback SPA
+#
+# Los upstreams son alias de red, no puertos del host. Por eso los puertos 3000-3002
+# del host ya ocupados por los contenedores judicial-* no generan conflicto.
+#
+# AGREGADO advisor.cafe: los upstreams de esa app están SIEMPRE en el puerto 3000
+# porque server.ts fija `const PORT = 3000` e ignora process.env.PORT.
 {
 	email {$ACME_EMAIL:admin@advisorlegal.co}
 }
@@ -39,4 +45,71 @@
 	handle {
 		reverse_proxy quality-web:3000
 	}
+}
+
+# #############################################################################
+# advisor.cafe — app Express (proyecto hermano, /var/www/advisor.cafe)
+#
+# A diferencia de advisorlegal.co, aquí NO hay separación API/Web: un solo
+# proceso Express sirve la API y el frontend compilado en el mismo puerto.
+#
+# El import `ambientes` evita repetir el mismo bloque tres veces. Un error de
+# config en un dominio y no en los otros dos es el tipo de fallo que cuesta
+# horas de diagnóstico.
+#
+# CF-Connecting-IP: Cloudflare manda el IP real del visitante. Se propaga como
+# X-Real-IP porque la app usa express-rate-limit con `trust proxy`, y sin esto
+# todas las peticiones aparecerían como si vinieran de Cloudflare.
+(ambientes) {
+	encode gzip
+
+	# Por debajo del tope de 100 MB de Cloudflare (plan Free, no ajustable).
+	request_body {
+		max_size 50MB
+	}
+
+	# Fallback de SPA: si la ruta devuelve 404 y es GET/HEAD, se sirve index.html
+	# para que el enrutado del cliente resuelva. Se limita a GET/HEAD para no
+	# convertir un 404 real de la API en un 200 con HTML.
+	@notFound expression `{http.error.status_code} == 404 && ({http.request.method} == "GET" || {http.request.method} == "HEAD")`
+	handle @notFound {
+		rewrite * /index.html
+		reverse_proxy {args[0]}:3000 {
+			header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+			header_up CF-Connecting-IP {http.request.header.CF-Connecting-IP}
+		}
+	}
+
+	handle {
+		reverse_proxy {args[0]}:3000 {
+			header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+			header_up CF-Connecting-IP {http.request.header.CF-Connecting-IP}
+		}
+	}
+
+	log {
+		output file {args[1]} {
+			roll_size 20MiB
+			roll_keep 5
+		}
+	}
+}
+
+# ------------------------- advisor.cafe: site (producción) ----------------
+# El Host original DEBE llegar intacto: server.ts arma las URLs de confirmación
+# de ePayco a partir de x-forwarded-host. Si este header se pierde, ePayco
+# entrega la confirmación en el dominio equivocado y los cobros quedan
+# "en proceso" sin explicación visible para el comprador.
+{$DOMAIN_CAFE_SITE:advisor.cafe}, www.{$DOMAIN_CAFE_SITE:advisor.cafe} {
+	import ambientes advisor-cafe-site /data/access-cafe-site.log
+}
+
+# ------------------------- advisor.cafe: develop ------------------------
+{$DOMAIN_CAFE_DEVELOP:develop.advisor.cafe} {
+	import ambientes advisor-cafe-develop /data/access-cafe-develop.log
+}
+
+# ------------------------- advisor.cafe: quality ------------------------
+{$DOMAIN_CAFE_QUALITY:quality.advisor.cafe} {
+	import ambientes advisor-cafe-quality /data/access-cafe-quality.log
 }

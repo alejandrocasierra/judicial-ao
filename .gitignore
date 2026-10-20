@@ -21,6 +21,11 @@ dist/
 # Cachés locales varias
 .cache/
 
+
+# Respaldos locales (el original vive en git; no hace falta versionar copias)
+*.bak
+*.bak-*
+
 # Editores: los swaps/respaldos NUNCA se versionan. Un `..env.swp` suelto
 # hacía que `git status --porcelain` marcara el repo como "sucio" y el
 # auto_deploy.sh omitiera el pull de esta instancia (ver AGENTS.md §12).
