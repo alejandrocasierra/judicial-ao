@@ -218,9 +218,11 @@ Gates: `coherence_pass=1.0`, `citation_precision â‰¥ 0.85`, `faithfulness â
 
 ### B2 — Despliegue
 - Las migraciones 0047–0050 están aplicadas en las tres bases.
-- El árbol local está listo para build/push; las imágenes del VPS deben
-  reconstruirse y redesplegarse. `scripts/deploy_all.sh` ya reindexa con
-  `--case-id --org-id --user-id` tras el deploy.
+- Commit `986715c` publicado en `main`, `develop` y `quality`.
+- El auto-deploy del VPS reconstruye las tres instancias; esta sesión no tiene
+  acceso SSH al host, por lo que la verificación final es el cron de despliegue
+  y el smoke test de `/messages/stream` en los tres dominios.
+- `scripts/deploy_all.sh` ya reindexa con `--case-id --org-id --user-id` tras el deploy.
 
 ### B3 — Permisos de tools
 - Mapa único `case_tools.required_permission()`; escritura solo con

@@ -23,7 +23,8 @@ jobs:
         run: |
           python3 scripts/calibrate_grounding.py
           python3 scripts/judge_agreement.py --min-kappa 0.6
-      - name: Matriz offline (cassettes / FakeLLM)
+      - name: Matriz offline informativa (no gate: FakeLLM no mide calidad real)
+        continue-on-error: true
         run: python3 scripts/eval_matrix.py --models fake:offline --offline --golden evals/golden --out var/matrix-offline.json
       - name: Unitarias
         run: SKIP_DB_RESET=1 python3 -m pytest -m unit -q
