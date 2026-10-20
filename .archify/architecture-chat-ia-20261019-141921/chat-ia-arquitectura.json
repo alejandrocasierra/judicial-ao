@@ -1,0 +1,236 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Chat IA — base de conocimiento y pipeline de respuesta",
+    "subtitle": "Cómo el expediente se convierte en evidencia citada (estado actual del repositorio)",
+    "output": ".archify/architecture-chat-ia-20261019-141921/chat-ia-arquitectura.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/alejandrocasierra/judicial-ao",
+      "provider": "github",
+      "revision": "86183341d2f9c86420eb75e569d370579ed17c73"
+    }
+  },
+  "components": [
+    {
+      "id": "abogado",
+      "type": "external",
+      "label": "Abogado/a",
+      "sublabel": "pregunta en el chat",
+      "icon": "person",
+      "pos": [20, 300],
+      "size": [110, 60]
+    },
+    {
+      "id": "chat",
+      "type": "frontend",
+      "label": "Chat IA",
+      "sublabel": "@ archivos · / agentes",
+      "pos": [240, 300],
+      "size": [150, 60],
+      "sources": [
+        { "path": "apps/web/src/components/chat-widget.tsx", "line": 284, "end_line": 293, "label": "envío del turno" }
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "API del chat",
+      "sublabel": "POST /messages · historial",
+      "tag": "JWT + RLS",
+      "pos": [430, 300],
+      "size": [220, 70],
+      "sources": [
+        { "path": "apps/api/app/routers/chats.py", "line": 195, "end_line": 260, "label": "sesión y turno" }
+      ]
+    },
+    {
+      "id": "agente",
+      "type": "backend",
+      "label": "Agente ReAct",
+      "sublabel": "máx. 5 pasos · tools",
+      "tag": "prompt v7 + skills",
+      "pos": [760, 300],
+      "size": [200, 70],
+      "sources": [
+        { "path": "apps/api/app/services/agent.py", "line": 157, "end_line": 205, "label": "loop y síntesis" }
+      ]
+    },
+    {
+      "id": "tools",
+      "type": "backend",
+      "label": "case_tools",
+      "sublabel": "buscar · leer · grafo · ubicar",
+      "tag": "una capa, dos clientes",
+      "pos": [1080, 300],
+      "size": [200, 70],
+      "sources": [
+        { "path": "apps/api/app/services/case_tools/read.py", "line": 153, "end_line": 196, "label": "search_case" },
+        { "path": "apps/api/app/services/case_tools/read.py", "line": 1062, "end_line": 1114, "label": "locate" }
+      ]
+    },
+    {
+      "id": "kb",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "chunks · pgvector · FTS · grafo",
+      "tag": "RLS por organización",
+      "pos": [1080, 60],
+      "size": [200, 120],
+      "sources": [
+        { "path": "apps/api/db/sql/010_schema.sql", "line": 470, "end_line": 505, "label": "chunks y grafo" }
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "Proveedor LLM",
+      "sublabel": "Anthropic · OpenAI · Gemini",
+      "tag": "modelo elegido por sesión",
+      "pos": [760, 520],
+      "size": [200, 80],
+      "sources": [
+        { "path": "apps/api/app/providers/llm.py", "line": 126, "end_line": 152, "label": "modelo → proveedor" }
+      ]
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "Servidor MCP",
+      "sublabel": "Claude Code · Cursor",
+      "tag": "mismas tools, mismo JWT",
+      "pos": [1080, 520],
+      "size": [200, 64],
+      "sources": [
+        { "path": "apps/mcp_server/server.py", "line": 62, "end_line": 70, "label": "wrapper de case_tools" }
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Workers OCR/ASR",
+      "sublabel": "Celery · PDF y video",
+      "pos": [30, 80],
+      "size": [160, 64],
+      "sources": [
+        { "path": "apps/api/app/services/document_pipeline.py", "line": 1, "label": "documentos" },
+        { "path": "apps/api/app/services/media_pipeline.py", "line": 1, "label": "media" }
+      ]
+    },
+    {
+      "id": "chunker",
+      "type": "backend",
+      "label": "Chunking",
+      "sublabel": "180–500 palabras",
+      "pos": [230, 80],
+      "size": [160, 64],
+      "sources": [
+        { "path": "apps/api/app/services/chunking.py", "line": 21, "end_line": 29, "label": "tamaño y ventana" }
+      ]
+    },
+    {
+      "id": "embedder",
+      "type": "backend",
+      "label": "Embeddings",
+      "sublabel": "EMBEDDING_MODEL",
+      "pos": [430, 80],
+      "size": [150, 64],
+      "sources": [
+        { "path": "apps/api/app/services/indexing.py", "line": 100, "end_line": 112, "label": "lotes y vector" }
+      ]
+    },
+    {
+      "id": "indexer",
+      "type": "backend",
+      "label": "Indexación",
+      "sublabel": "borra y recrea",
+      "pos": [620, 80],
+      "size": [160, 64],
+      "sources": [
+        { "path": "apps/api/app/services/indexing.py", "line": 72, "end_line": 97, "label": "reindex idempotente" }
+      ]
+    }
+  ],
+  "connections": [
+    { "id": "pregunta", "from": "abogado", "to": "chat", "label": "pregunta", "variant": "emphasis" },
+    { "id": "envia", "from": "chat", "to": "api", "label": "envía" },
+    { "id": "consulta", "from": "api", "to": "agente", "label": "consulta" },
+    { "id": "tool-call", "from": "agente", "to": "tools", "label": "tool call" },
+    { "id": "lee", "from": "tools", "to": "kb", "label": "lee / escribe", "fromSide": "top", "toSide": "bottom" },
+    { "id": "prompt", "from": "agente", "to": "llm", "label": "prompt / claims", "fromSide": "bottom", "toSide": "top" },
+    { "id": "mcp-tools", "from": "mcp", "to": "tools", "label": "mismas tools", "variant": "dashed", "fromSide": "top", "toSide": "bottom" },
+    {
+      "id": "respuesta",
+      "from": "agente",
+      "to": "chat",
+      "label": "claims + citas",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [[860, 450], [315, 450]],
+      "labelAt": [587, 438]
+    },
+    { "id": "ingesta", "from": "worker", "to": "chunker" },
+    { "id": "chunk-embed", "from": "chunker", "to": "embedder" },
+    { "id": "embed-index", "from": "embedder", "to": "indexer" },
+    { "id": "index-kb", "from": "indexer", "to": "kb", "label": "chunks + embeddings" }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Ingesta asíncrona: el conocimiento se construye antes de preguntar",
+      "wraps": ["worker", "chunker", "embedder", "indexer"],
+      "pad": 26
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Un turno, en orden",
+      "items": [
+        "1. El chat crea sesión y fija agente y modelo; guarda el mensaje del usuario.",
+        "2. La API arma pregunta + últimos K turnos + pistas y llama al agente.",
+        "3. El agente pide tools: buscar, leer página, ubicar término, consultar grafo.",
+        "4. La síntesis devuelve claims con citas; sin cita válida el claim se descarta.",
+        "5. La API persiste mensaje, citas, model_run y devuelve answer + occurrences.",
+        "6. La UI pinta Markdown, citas clicables, ubicaciones y tarjetas de archivo."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "La base de conocimiento real",
+      "items": [
+        "Todo vive en PostgreSQL: no hay una base vectorial aparte.",
+        "chunks guarda texto, metadata, tsv generado y embedding vector(EMBEDDING_DIMENSIONS).",
+        "La recuperación es híbrida: FTS en español + similitud coseno, fusionadas con RRF.",
+        "El grafo son tablas (graph_nodes / graph_edges), no Neo4j.",
+        "Los .md de packages/prompts son prompts versionados, no conocimiento indexado."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Por qué no suena a chat nativo",
+      "items": [
+        "La respuesta no se transmite en streaming: se espera el turno completo.",
+        "answer = claims unidos con espacios; se pierde la prosa del modelo.",
+        "occurrences se calcula con locate() aparte del answer: puede haber 6 ubicaciones y 0 claims.",
+        "No hay reescritura de consulta con el historial ni re-ranking de evidencia.",
+        "No hay compositor final: el contrato de citas manda sobre la naturalidad.",
+        "La evaluación dorada existe en evals/, pero run_evals.py aún no está implementado."
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Palancas de refinamiento",
+      "items": [
+        "Streaming SSE con estados: buscando → leyendo → verificando.",
+        "Query rewriting + multi-query y re-ranking (cross-encoder o LLM barato).",
+        "Compositor de respuesta que reescribe los claims validados en prosa, sin añadir hechos.",
+        "Memoria resumida por sesión, no solo últimos K turnos.",
+        "Evaluación automática con set dorado y jueces de varios modelos.",
+        "MCP como superficie de agentes externos, con las mismas garantías."
+      ]
+    }
+  ]
+}

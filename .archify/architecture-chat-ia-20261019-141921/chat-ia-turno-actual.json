@@ -1,0 +1,217 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Un turno del Chat IA, paso a paso",
+    "subtitle": "Router → retrieval → síntesis → compositor → SSE (implementación 2026-10-19)",
+    "output": ".archify/architecture-chat-ia-20261019-141921/chat-ia-turno-actual.html",
+    "viewBox": [
+      945,
+      608
+    ],
+    "column_fit": "spread",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "Abogado/a",
+      "sublabel": "pregunta"
+    },
+    {
+      "id": "chat",
+      "type": "frontend",
+      "label": "Chat IA",
+      "sublabel": "SSE · citas"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "API",
+      "sublabel": "JWT + RLS + deadline"
+    },
+    {
+      "id": "router",
+      "type": "backend",
+      "label": "Router",
+      "sublabel": "intención"
+    },
+    {
+      "id": "retrieval",
+      "type": "backend",
+      "label": "Retrieval",
+      "sublabel": "FTS + vector + MMR"
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "LLM",
+      "sublabel": "claims + citas"
+    },
+    {
+      "id": "composer",
+      "type": "backend",
+      "label": "Compositor",
+      "sublabel": "answer_kind"
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "FTS · vector"
+    }
+  ],
+  "segments": [],
+  "messages": [
+    {
+      "id": "pregunta",
+      "from": "user",
+      "to": "chat",
+      "y": 160,
+      "label": "pregunta + adjuntos",
+      "variant": "emphasis"
+    },
+    {
+      "id": "stream",
+      "from": "chat",
+      "to": "api",
+      "y": 194,
+      "label": "POST /messages/stream",
+      "variant": "emphasis"
+    },
+    {
+      "id": "classify",
+      "from": "api",
+      "to": "router",
+      "y": 228,
+      "label": "classify",
+      "variant": "default"
+    },
+    {
+      "id": "sql",
+      "from": "api",
+      "to": "db",
+      "y": 262,
+      "label": "FTS + vector + RRF",
+      "variant": "emphasis"
+    },
+    {
+      "id": "evidencia",
+      "from": "db",
+      "to": "api",
+      "y": 296,
+      "label": "E1..En",
+      "variant": "return"
+    },
+    {
+      "id": "sintesis",
+      "from": "api",
+      "to": "llm",
+      "y": 330,
+      "label": "evidencia + prompt",
+      "variant": "emphasis"
+    },
+    {
+      "id": "claims",
+      "from": "llm",
+      "to": "api",
+      "y": 364,
+      "label": "claims + citas",
+      "variant": "return"
+    },
+    {
+      "id": "valida",
+      "from": "api",
+      "to": "composer",
+      "y": 398,
+      "label": "validar números y citas",
+      "variant": "default"
+    },
+    {
+      "id": "compose",
+      "from": "composer",
+      "to": "api",
+      "y": 432,
+      "label": "Markdown + answer_kind",
+      "variant": "return"
+    },
+    {
+      "id": "done",
+      "from": "api",
+      "to": "chat",
+      "y": 466,
+      "label": "done + token validado",
+      "variant": "emphasis"
+    },
+    {
+      "id": "render",
+      "from": "chat",
+      "to": "user",
+      "y": 500,
+      "label": "Markdown + fuentes",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "api",
+      "from": 155,
+      "to": 510,
+      "type": "backend"
+    },
+    {
+      "participant": "router",
+      "from": 220,
+      "to": 238,
+      "type": "backend"
+    },
+    {
+      "participant": "db",
+      "from": 255,
+      "to": 310,
+      "type": "database"
+    },
+    {
+      "participant": "llm",
+      "from": 325,
+      "to": 370,
+      "type": "external"
+    },
+    {
+      "participant": "composer",
+      "from": 390,
+      "to": 430,
+      "type": "backend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Qué decide el código",
+      "items": [
+        "La intención se clasifica antes de recuperar; navegar no es el camino por defecto.",
+        "El compositor decide answer_kind, el presupuesto de citas y la coherencia con occurrences.",
+        "El LLM solo propone claims; nunca decide el formato final."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Qué ve el usuario",
+      "items": [
+        "Etapas SSE desde el primer evento: routing, retrieving, synthesizing, validating.",
+        "El texto llega ya compuesto y validado, no tokens crudos.",
+        "Citas numeradas, fuentes colapsables y ocurrencias agrupadas solo si aplican."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Degradación",
+      "items": [
+        "Deadline: si se agota, se devuelve la mejor respuesta disponible y degraded=true.",
+        "Juez semántico fuera de la ruta crítica; circuit breaker por proveedor.",
+        "Fallback SSE idempotente al POST normal si el stream falla."
+      ]
+    }
+  ]
+}

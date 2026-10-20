@@ -76,7 +76,8 @@ def test_it_bc_05_grill_agent_merges_skill_prompts_at_query(client, auth, ids):
 
     FakeLLM.script = script
     r = client.post(f"/v1/cases/{ids['pago']}/chats/{sid}/messages", headers=h,
-                    json={"content": "¿Quién presentó la demanda y qué contradice eso?"})
+                    json={"content": "¿Quién presentó la demanda y qué contradice eso?",
+                          "strategy": "agent"})
     assert r.status_code == 201, r.text
     system = captured["system"]
     assert "interrogatorio" in system.lower(), "la skill Grill-me debe fusionarse"

@@ -8,7 +8,6 @@ la actuación con las partes reales del proceso.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any
 
 from sqlalchemy.engine import Connection
 

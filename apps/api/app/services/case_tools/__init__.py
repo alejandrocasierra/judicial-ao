@@ -33,6 +33,10 @@ class ToolContext:
     attachments: list[dict[str, Any]] = field(default_factory=list)
     ocr_mode: str | None = None  # 'basico' | 'document_ai' | 'todos' | None
     asr_mode: str | None = None  # 'basico' | 'document_ai' | 'todos' | None
+    # El loop del LLM NUNCA puede aplicar una escritura: solo el servidor, después
+    # de una confirmación explícita del usuario, pone allow_write=True.
+    allow_write: bool = False
+    permissions: set[str] | None = None
     # Acciones diferidas (reindex pgvector, rebuild del grafo, encolado de jobs).
     # Se ejecutan DESPUÉS de que el llamador confirme su transacción (ver drain_post_commit).
     post_commit: list[Callable[[], None]] = field(default_factory=list)
@@ -125,6 +129,26 @@ def register(name: str, description: str, parameters: dict[str, Any], kind: str 
 # Descripciones en el formato histórico usado por builtin_agents.tool_names().
 TOOL_DESCRIPTIONS: dict[str, dict[str, Any]] = {}
 
+# Mapa único tool → permiso. Es la fuente de verdad para el chat y para MCP.
+READ_PERMISSION = "ai.query"
+WRITE_PERMISSION_BY_TOOL: dict[str, str] = {
+    "correct_ocr_page": "document.upload",
+    "correct_transcript_segment": "media.upload",
+    "rename_speaker": "media.upload",
+    "merge_speakers": "media.upload",
+    "suggest_reprocess": "document.upload",
+    "reprocess_low_confidence": "document.upload",
+}
+
+
+def required_permission(tool: str, arguments: dict[str, Any] | None = None) -> str:
+    """Permiso mínimo de una tool, sin depender de quién la llame."""
+    if tool in WRITE_PERMISSION_BY_TOOL:
+        if tool == "suggest_reprocess" and (arguments or {}).get("media_id"):
+            return "media.upload"
+        return WRITE_PERMISSION_BY_TOOL[tool]
+    return READ_PERMISSION
+
 
 def execute(conn: Connection, case_id: str, tool: str, arguments: dict[str, Any],
             ctx: ToolContext | None = None) -> list[dict[str, Any]]:
@@ -132,7 +156,16 @@ def execute(conn: Connection, case_id: str, tool: str, arguments: dict[str, Any]
     spec = TOOL_REGISTRY.get(tool)
     if spec is None:
         raise ValueError(f"unknown tool: {tool}")
-    return spec.handler(conn, case_id, ctx, **dict(arguments or {}))
+    args = dict(arguments or {})
+    if spec.kind == "write" and bool(args.get("confirm")):
+        # Doble barrera: el contexto debe habilitar escritura y, si el llamador
+        # declara permisos, debe tener el permiso específico de la tool.
+        if not ctx.allow_write:
+            raise PermissionError("WRITE_TOOL_REQUIRES_SERVER_CONFIRMATION")
+        perm = required_permission(tool, args)
+        if ctx.permissions is not None and perm not in ctx.permissions:
+            raise PermissionError(f"MISSING_PERMISSION:{perm}")
+    return spec.handler(conn, case_id, ctx, **args)
 
 
 def tool_names() -> list[str]:

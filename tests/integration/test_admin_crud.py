@@ -58,6 +58,28 @@ def test_it_acr_02_model_catalog_and_crud(client, auth):
     client.delete(f"/v1/admin/models/{m['id']}", headers=h)
 
 
+def test_it_acr_04_executable_skill_fields(client, auth):
+    h = auth("admin.alfa")
+    sk = client.post("/v1/admin/skills", headers=h, json={
+        "name": "Skill ejecutable", "system_prompt": "Busca en el expediente.",
+        "tools": ["search_case", "locate"], "parameters": {"focus": "pagos"}, "position": 2,
+    })
+    assert sk.status_code == 200, sk.text
+    body = sk.json()
+    assert body["tools"] == ["search_case", "locate"]
+    assert body["parameters"] == {"focus": "pagos"}
+    assert body["position"] == 2
+    # Una tool inexistente no se acepta (allowlist del registro real).
+    bad = client.post("/v1/admin/skills", headers=h, json={
+        "name": "Skill inválida", "system_prompt": "x", "tools": ["no_existe"]})
+    assert bad.status_code == 422 and bad.json()["error"]["code"] == "UNKNOWN_TOOL"
+    up = client.patch(f"/v1/admin/skills/{body['id']}", headers=h,
+                      json={"tools": ["read_document"], "position": 1})
+    assert up.status_code == 200 and up.json()["tools"] == ["read_document"]
+    assert up.json()["position"] == 1
+    client.delete(f"/v1/admin/skills/{body['id']}", headers=h)
+
+
 def test_it_acr_03_roles_list_and_custom(client, auth):
     h = auth("admin.alfa")
     roles = client.get("/v1/admin/roles", headers=h).json()

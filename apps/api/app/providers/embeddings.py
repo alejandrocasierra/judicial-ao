@@ -45,6 +45,55 @@ class FakeEmbedding:
         return out
 
 
+class LocalNgramEmbedding:
+    """Embedding local determinista de 1024 dimensiones (sin red, sin GPU).
+
+    No pretende sustituir a un modelo semántico: es un **fallback de transición**
+    para que pgvector nunca quede con vectores aleatorios ni vacío cuando el
+    proveedor externo no tiene crédito. Codifica palabras, bigramas y n-gramas de
+    caracteres con hashing con signo; textos morfológicamente parecidos quedan
+    cerca. El modelo se etiqueta como `local-ngram-1024`, de modo que el filtro
+    por `embedding_model` impide mezclarlo con Gemini.
+    """
+
+    name = "local-hash"
+
+    def __init__(self, settings: Settings | None = None):
+        self.settings = settings or get_settings()
+        self.dimensions = self.settings.EMBEDDING_DIMENSIONS
+        self.max_chars = self.settings.EMBEDDING_MAX_CHARS
+
+    @staticmethod
+    def _grams(text: str) -> list[tuple[str, float]]:
+        from app.services import text_terms
+
+        normalized = text_terms.norm(text)[:8000]
+        words = [w for w in normalized.split() if w]
+        grams: list[tuple[str, float]] = []
+        for word in words:
+            grams.append((f"w:{word}", 1.0))
+            for n in (3, 4, 5):
+                if len(word) >= n:
+                    for i in range(len(word) - n + 1):
+                        grams.append((f"c:{word[i:i + n]}", 0.35))
+        for a, b in zip(words, words[1:], strict=False):
+            grams.append((f"b:{a}_{b}", 0.6))
+        return grams
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        out: list[list[float]] = []
+        for text in texts:
+            vec = [0.0] * self.dimensions
+            for gram, weight in self._grams(_truncate(text, self.max_chars)):
+                digest = hashlib.sha256(gram.encode("utf-8")).digest()
+                idx = int.from_bytes(digest[:4], "big") % self.dimensions
+                sign = 1.0 if digest[4] & 1 else -1.0
+                vec[idx] += sign * weight
+            norm = sum(v * v for v in vec) ** 0.5 or 1.0
+            out.append([v / norm for v in vec])
+        return out
+
+
 class OpenAIEmbedding:
     """Cliente OpenAI (o compatible) para embeddings."""
 
@@ -110,8 +159,23 @@ def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvide
     s = settings or get_settings()
     if s.EMBEDDING_PROVIDER == "fake":
         return FakeEmbedding(s)
+    if s.EMBEDDING_PROVIDER == "local-hash":
+        return LocalNgramEmbedding(s)
     if s.EMBEDDING_PROVIDER == "openai":
         return OpenAIEmbedding(s)
     if s.EMBEDDING_PROVIDER == "sentence-transformers":
         return SentenceTransformersEmbedding(s)
     raise ValueError(f"unknown EMBEDDING_PROVIDER: {s.EMBEDDING_PROVIDER}")
+
+
+def get_embedding_provider_for_model(model: str | None, settings: Settings | None = None) -> EmbeddingProvider:
+    """Proveedor coherente con la etiqueta del índice.
+
+    Si el índice fue construido con el fallback local, la consulta debe usar el
+    mismo espacio vectorial aunque el entorno siga apuntando a Gemini. Así el
+    cambio de proveedor no deja la rama vectorial vacía ni mezcla modelos.
+    """
+    s = settings or get_settings()
+    if model and model.startswith("local-ngram"):
+        return LocalNgramEmbedding(s)
+    return get_embedding_provider(s)

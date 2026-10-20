@@ -21,8 +21,8 @@ if not os.environ.get("JUDICIAL_ADMIN_PASSWORD"):
     try:
         from dotenv import load_dotenv
         load_dotenv(pathlib.Path(__file__).resolve().parents[1] / ".env")
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        print(f"[warn] no se pudo cargar .env: {exc}")
 
 BASE = os.environ.get("JUDICIAL_API_BASE", "http://127.0.0.1:8000/v1")
 CASE = os.environ.get("JUDICIAL_CASE_ID", "38865959-8d5f-44e4-bbc8-1226bd345b00")

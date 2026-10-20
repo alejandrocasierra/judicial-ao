@@ -1,0 +1,3 @@
+# Las cassettes guardan respuestas generadas a partir de expedientes reales:
+# no se versionan. CI usa FakeLLM (determinista) y no necesita red.
+*.jsonl

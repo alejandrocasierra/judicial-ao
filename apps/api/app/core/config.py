@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     MCP_ALLOWED_HOSTS: str
     # Chat multi-turn: turnos de historial que recibe el agente por mensaje
     CHAT_HISTORY_TURNS: int = Field(gt=0, le=40)
+    # Presupuesto de caracteres del historial que entra al agente y a la
+    # reescritura. Se recorta desde el turno más antiguo, nunca a mitad de turno.
+    CHAT_HISTORY_MAX_CHARS: int = Field(default=6000, gt=0)
+    # Cada RESULT de tool que ve el modelo. 400 chars perdía folios/contexto;
+    # 1200 mantiene la ventana acotada sin mutilar la evidencia.
+    AGENT_TOOL_RESULT_MAX_CHARS: int = Field(default=1200, gt=0)
     LOG_LEVEL: str
     DEFAULT_LOCALE: str
     SUPPORTED_LOCALES: str
@@ -86,6 +92,9 @@ class Settings(BaseSettings):
     STARTUP_REAP_MINUTES: int = 1
 
     JWT_SECRET: str
+    # Clave maestra para cifrar secretos en reposo (API keys, SMTP). Si está
+    # vacía se deriva de JWT_SECRET; definirla permite rotar JWT sin perder claves.
+    ENCRYPTION_MASTER_KEY: str = ""
     JWT_ALGORITHM: Literal["HS256", "HS384", "HS512"]
     JWT_ISSUER: str
     JWT_AUDIENCE: str
@@ -211,11 +220,43 @@ class Settings(BaseSettings):
     RETRIEVAL_TOP_K: int = Field(gt=0, le=50)
     RETRIEVAL_RRF_K: int = Field(gt=0)
     RETRIEVAL_SNIPPET_MAX_CHARS: int = Field(gt=100)
+    # Embudo de recuperación (chat): candidatos por rama antes del rerank y
+    # evidencias finales que llegan a la síntesis.
+    RETRIEVAL_CANDIDATE_K: int = Field(default=50, gt=0, le=500)
+    RETRIEVAL_FINAL_K: int = Field(default=10, gt=0, le=50)
+    RETRIEVAL_DOC_QUOTA: float = Field(default=0.6, ge=0.0, le=1.0)
+    RETRIEVAL_MAX_PER_FILE: int = Field(default=2, gt=0, le=20)
+    RETRIEVAL_MAX_PER_PAGE: int = Field(default=2, gt=0, le=20)
+    RETRIEVAL_STRICT_EMBEDDING_VERSION: bool = False
+    # Si los chunks están etiquetados con otro modelo, NO se mezclan vectores por
+    # defecto: se usa FTS y se registra el desajuste. Se activa solo tras decidir
+    # conscientemente que los vectores antiguos son compatibles.
+    RETRIEVAL_ALLOW_EMBEDDING_FALLBACK: bool = False
+    RETRIEVAL_CACHE_TTL_SECONDS: int = Field(default=600, ge=0)
+    # Presupuesto de latencia de un turno. Al agotarse se degrada la respuesta
+    # (sin juez, sin rerank o con la mejor evidencia disponible) en vez de colgar.
+    REQUEST_DEADLINE_MS: int = Field(default=12000, gt=0)
+    # Presupuesto de citas visibles del compositor.
+    MAX_VISIBLE_CITATIONS: int = Field(default=4, gt=0, le=20)
+    MAX_CITATIONS_PER_FILE: int = Field(default=2, gt=0, le=20)
+    NAV_MAX_OCCURRENCES: int = Field(default=8, gt=0, le=100)
     ANSWER_MIN_GROUNDING_OVERLAP: float = Field(ge=0.0, le=1.0)
+    # Verificación semántica: sync (bloquea), async (post-response) u off.
+    VERIFY_MODE: Literal["sync", "async", "off"] = "async"
+    # Reescribir la consulta con el historial (determinista + sinónimos; el LLM
+    # opcional solo se usa si LLM_ROUTING define "query_rewrite").
+    QUERY_REWRITE_ENABLED: bool = True
+    # Re-ranker cross-encoder local opcional. Si falta la dependencia o el
+    # modelo, se cae al reranker determinista sin romper el turno.
+    RERANK_CROSSENCODER: bool = False
+    RERANK_CROSSENCODER_MODEL: str = "BAAI/bge-reranker-v2-m3"
     ABSTENTION_MIN_TERM_COVERAGE: float = Field(ge=0.0, le=1.0)
+    # Gate del compositor. No es la abstención del retrieval: 0.6 era demasiado
+    # alto y convertía preguntas respondibles con 2/4 términos en "insuficiente".
+    COMPOSE_MIN_COVERAGE: float = Field(default=0.5, ge=0.0, le=1.0)
     PROMPTS_DIR: str
 
-    EMBEDDING_PROVIDER: Literal["fake", "openai", "sentence-transformers"]
+    EMBEDDING_PROVIDER: Literal["fake", "openai", "sentence-transformers", "local-hash"]
     EMBEDDING_MODEL: str
     EMBEDDING_API_KEY: str
     EMBEDDING_API_BASE_URL: str

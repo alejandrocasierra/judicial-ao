@@ -89,5 +89,6 @@ def send_reset_email(email: str, full_name: str, link: str, locale: str) -> None
 
 
 def encrypt_password(pw: str) -> str:
-    """Placeholder para cifrado de contraseña SMTP."""
-    return pw  # TODO: implementar cifrado simétrico
+    """Cifra la contraseña SMTP en reposo (Fernet; ver core/secrets)."""
+    from app.core import secrets as secret_store
+    return secret_store.encrypt(pw) or ""

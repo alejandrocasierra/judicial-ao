@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "04023dea-0330-47da-99cf-c3656e5eadd5",
+  "status": "current",
+  "command": "deliver",
+  "type": "sequence",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\architecture-chat-ia-20261019-141921\\chat-ia-turno-actual.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\architecture-chat-ia-20261019-141921\\chat-ia-turno-actual.html",
+  "specification": {
+    "sha256": "dc1087aca68dc42b99e2a1587f5729547de0ec38176a834f2a92577b9f59e331",
+    "bytes": 4987
+  },
+  "artifact": {
+    "sha256": "db4fb7bf398d01168980b7d6491de987b71b326adc8cd44a44b421116d8cd260",
+    "bytes": 760328
+  }
+}

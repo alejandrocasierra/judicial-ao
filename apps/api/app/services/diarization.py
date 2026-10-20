@@ -30,7 +30,7 @@ def _torchaudio():
     return torchaudio
 
 
-def _load_audio(wav_path: Path, sample_rate: int = 16000) -> torch.Tensor:
+def _load_audio(wav_path: Path, sample_rate: int = 16000) -> Any:
     # soundfile evita incompatibilidades entre torchaudio 2.14 y soundfile 0.13
     # (torchaudio.load pasa argumentos que soundfile no acepta).
     torch = _torch()
@@ -108,8 +108,8 @@ def _pyannote_hook(progress_cb: Any | None, base: float = 0.0, span: float = 1.0
             try:
                 frac = max(0.0, min(1.0, float(completed or 0) / float(total)))
                 progress_cb(f"{prefix}{step_name}", base + span * frac, 1.0)
-            except Exception:  # noqa: BLE001 — el progreso no debe tumbar la diarización
-                pass
+            except Exception as exc:  # noqa: BLE001 — el progreso no debe tumbar la diarización
+                log.debug("progress_cb de diarización falló: %s", exc)
     return _hook
 
 
@@ -262,7 +262,7 @@ def _pyannote_diarization_chunked(wav_path: Path, pipeline, chunk_s: int,
     # Se DESCARTAN los embeddings inválidos (NaN o norma 0): pyannote produce NaN en
     # tramos con segmentos vacíos ("Mean of empty slice") y sklearn rechaza los NaN.
     valid = [(k, np.nan_to_num(np.asarray(v, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0))
-             for k, v in zip(keys, vectors)
+             for k, v in zip(keys, vectors, strict=False)
              if np.all(np.isfinite(v)) and float(np.linalg.norm(np.asarray(v, dtype=np.float32))) > 0]
     key_to_global: dict[tuple[int, str], str] = {}
     seed_names = _seed_names_from_visual(turns, keys, visual_names)
@@ -272,7 +272,7 @@ def _pyannote_diarization_chunked(wav_path: Path, pipeline, chunk_s: int,
     if valid and seed_names:
         x = np.vstack([v for _, v in valid])
         x = x / (np.linalg.norm(x, axis=1, keepdims=True) + 1e-9)
-        vec_of = {k: v for (k, _), v in zip(valid, x)}
+        vec_of = {k: v for (k, _), v in zip(valid, x, strict=False)}
         # Grupos por semilla (un hablante global por nombre inequívoco).
         label_for_seed: dict[str, str] = {}
         centroids: dict[str, list[np.ndarray]] = {}
@@ -311,7 +311,7 @@ def _pyannote_diarization_chunked(wav_path: Path, pipeline, chunk_s: int,
                     else:
                         groups = [0]
                     base = len(label_for_seed)
-                    for i, g in zip(unmatched, groups):
+                    for i, g in zip(unmatched, groups, strict=False):
                         key_to_global[rest_keys[i]] = f"SPEAKER_{base + int(g):02d}"
     elif len(valid) >= 2:
         keys_v = [k for k, _ in valid]
@@ -320,7 +320,7 @@ def _pyannote_diarization_chunked(wav_path: Path, pipeline, chunk_s: int,
         cl = AgglomerativeClustering(n_clusters=None, distance_threshold=threshold,
                                      metric="cosine", linkage="average")
         groups = cl.fit_predict(x)
-        for k, g in zip(keys_v, groups):
+        for k, g in zip(keys_v, groups, strict=False):
             key_to_global[k] = f"SPEAKER_{int(g):02d}"
     elif valid:
         key_to_global[valid[0][0]] = "SPEAKER_00"

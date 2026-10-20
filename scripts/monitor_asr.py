@@ -13,6 +13,7 @@ Reparaciones (requieren conexión a BD; usa las mismas credenciales que la API):
 from __future__ import annotations
 
 import argparse
+import tempfile
 import os
 import pathlib
 import sys
@@ -30,8 +31,8 @@ if not os.environ.get("JUDICIAL_ADMIN_PASSWORD"):
     try:
         from dotenv import load_dotenv
         load_dotenv(pathlib.Path(__file__).resolve().parents[1] / ".env")
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        print(f"[warn] {exc}")
 
 BASE = os.environ.get("JUDICIAL_API_BASE", "http://127.0.0.1:8000/v1")
 CASE = os.environ.get("JUDICIAL_CASE_ID", "")
@@ -44,7 +45,7 @@ PASSWORD = os.environ.get("JUDICIAL_ADMIN_PASSWORD") or os.environ.get("BOOTSTRA
 if not PASSWORD:
     raise SystemExit("Falta JUDICIAL_ADMIN_PASSWORD (o BOOTSTRAP_ADMIN_PASSWORD en .env)")
 
-LOCK_FILE = pathlib.Path(os.environ.get("LOCALAPPDATA", "/tmp")) / "Temp" / "opencode" / "monitor_asr.lock"
+LOCK_FILE = pathlib.Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "Temp" / "opencode" / "monitor_asr.lock"
 
 
 def acquire_lock() -> bool:
@@ -70,8 +71,8 @@ def acquire_lock() -> bool:
                 if "monitor_asr.py" in cmd:
                     print(f"[lock] Ya hay un monitor corriendo (PID {old_pid}).")
                     return False
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                print(f"[warn] no se pudo inspeccionar el PID {old_pid}: {exc}")
         # Lock abandonado: reutilizar.
         LOCK_FILE.write_text(str(current_pid))
         return True
@@ -88,8 +89,8 @@ def release_lock() -> None:
     try:
         if LOCK_FILE.exists() and LOCK_FILE.read_text().strip() == str(os.getpid()):
             LOCK_FILE.unlink()
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        print(f"[warn] {exc}")
 
 
 # Nombres a seguir (opcional): JUDICIAL_MEDIA_NAMES="a.mp4,b.mov". Vacío = todos.
@@ -201,8 +202,8 @@ def build_report(state: dict) -> list[dict]:
             try:
                 updated = datetime.fromisoformat(job_updated.replace("Z", "+00:00"))
                 stalled = (datetime.now(timezone.utc) - updated).total_seconds() > _STALL_MINUTES * 60
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                print(f"[warn] no se pudo parsear la fecha del job: {exc}")
 
         report.append({
             "media_id": mid,
@@ -378,7 +379,7 @@ def main() -> int:
     p.add_argument("--repair", action="store_true", help="Repara fallos/huérfanos detectados")
     p.add_argument("--interval", type=int, default=60, help="Segundos entre ciclos (default 60)")
     p.add_argument("--log-file", type=pathlib.Path,
-                   default=pathlib.Path(os.environ.get("LOCALAPPDATA", "/tmp")) / "Temp" / "opencode" / "monitor_asr.log",
+                   default=pathlib.Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "Temp" / "opencode" / "monitor_asr.log",
                    help="Archivo de log")
     args = p.parse_args()
 

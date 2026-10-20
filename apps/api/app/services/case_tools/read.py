@@ -1,6 +1,6 @@
-"""Tools de LECTURA del caso: OCR, ASR, pgvector (híbrido), archivos y grafo.
+"""Tools de LECTURA del caso: OCR, ASR, pgvector (hÃ­brido), archivos y grafo.
 
-Todas acotan por `case_id` (y la conexión ya viene con RLS por organización),
+Todas acotan por `case_id` (y la conexiÃ³n ya viene con RLS por organizaciÃ³n),
 de modo que un id de otro expediente u otra org simplemente no devuelve filas.
 """
 from __future__ import annotations
@@ -12,7 +12,6 @@ from typing import Any
 
 from sqlalchemy.engine import Connection
 
-from app.core.config import get_settings
 from app.core.db import one, rows
 from app.services import answering, graph, markdown
 from app.services.case_tools import ToolContext, evidence_item, register
@@ -30,7 +29,7 @@ def _err(msg: str) -> list[dict[str, Any]]:
 
 
 def mmss(ms: int | None) -> str:
-    """842000 ms -> '14:02' (para '¿en qué minuto se dijo?')."""
+    """842000 ms -> '14:02' (para 'Â¿en quÃ© minuto se dijo?')."""
     if ms is None:
         return ""
     total = int(ms) // 1000
@@ -52,47 +51,48 @@ def _ilike_terms(query: str, column: str = "text") -> tuple[str, dict[str, Any]]
 
 
 # Palabras de la pregunta que NO son el nombre buscado (para aislar "Paola" en
-# "¿en qué minuto habló la doctora Paola?").
+# "Â¿en quÃ© minuto hablÃ³ la doctora Paola?").
 _QUESTION_WORDS = {
     "que", "qué", "quien", "quién", "quienes", "quiénes", "en", "el", "la", "los", "las", "un", "una",
     "del", "de", "al", "video", "vídeo", "minuto", "minutos", "segundo", "segundos", "hablo", "habló",
-    "hablaron", "habla", "hablar", "dijo", "dijeron", "menciono", "mencionó", "mencionaron", "sobre", "cual", "cuál",
-    "donde", "dónde", "cuando", "cuándo", "doctor", "doctora", "señor", "señora", "senor", "senora",
-    "parte", "audio", "grabacion", "grabación", "audiencia", "transcripcion", "transcripción", "por", "para",
-    # verbos/palabras de pregunta que no son el término buscado
-    "me", "te", "puedes", "podrias", "podrías", "decir", "dime", "cuentame", "cuéntame", "resume", "resumen",
+    "hablaron", "habla", "hablar", "dijo", "dijeron", "menciono", "mencionÃ³", "mencionaron", "sobre", "cual", "cuÃ¡l",
+    "donde", "dÃ³nde", "cuando", "cuÃ¡ndo", "doctor", "doctora", "seÃ±or", "seÃ±ora", "senor", "senora",
+    "parte", "audio", "grabacion", "grabaciÃ³n", "audiencia", "transcripcion", "transcripciÃ³n", "por", "para",
+    # verbos/palabras de pregunta que no son el tÃ©rmino buscado
+    "me", "te", "puedes", "podrias", "podrÃ­as", "decir", "dime", "cuentame", "cuÃ©ntame", "resume", "resumen",
     "es", "son", "fue", "fueron", "ser", "hay", "tiene", "tienen", "hacer", "hacen", "explica", "explicar",
-    "conocer", "sabes", "saber", "dame", "muestra", "muestrame", "muéstrame", "informacion", "información",
-    "este", "esta", "estos", "estas", "ese", "esa", "esos", "esas", "cuales", "cuáles", "tales",
-    # verbos genéricos de la pregunta (no son el término buscado)
-    "hace", "realiza", "realizo", "realizó", "realizaron", "presenta", "presento", "presentó",
-    "presentaron", "solicita", "solicito", "solicitó", "tramita", "existe", "existen", "contiene", "figura",
+    "conocer", "sabes", "saber", "dame", "muestra", "muestrame", "muÃ©strame", "informacion", "informaciÃ³n",
+    "este", "esta", "estos", "estas", "ese", "esa", "esos", "esas", "cuales", "cuÃ¡les", "tales",
+    # verbos genÃ©ricos de la pregunta (no son el tÃ©rmino buscado)
+    "hace", "realiza", "realizo", "realizÃ³", "realizaron", "presenta", "presento", "presentÃ³",
+    "presentaron", "solicita", "solicito", "solicitÃ³", "tramita", "existe", "existen", "contiene", "figura",
     "trata", "consta", "obra", "ver", "listar", "lista", "encontrar",
-    # sustantivos de "dónde/archivo": no son el término buscado
+    # sustantivos de "dÃ³nde/archivo": no son el tÃ©rmino buscado
     "documento", "documentos", "archivo", "archivos", "expediente", "carpeta",
-    "pagina", "página", "paginas", "páginas", "folio", "folios", "anexo", "anexos",
+    "pagina", "pÃ¡gina", "paginas", "pÃ¡ginas", "folio", "folios", "anexo", "anexos",
 }
 
 
 def _speaker_candidate(query: str) -> str | None:
     """Extrae un posible nombre propio/sustantivo de la consulta; None si no hay."""
-    tokens = re.findall(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,}", query or "")
-    cands = [t for t in tokens if t.lower() not in _QUESTION_WORDS]
+    from app.services import text_terms
+    tokens = text_terms.content_terms(query, min_len=3)
+    cands = [t for t in tokens if t not in _QUESTION_WORDS]
     if not cands:
         return None
-    proper = [t for t in cands if t[:1].isupper()]
+    proper = [t for t in re.findall(r"[^\W\d_]{3,}", query or "", re.UNICODE) if t[:1].isupper()]
     return max(proper, key=len) if proper else max(cands, key=len)
 
 
 def _tsquery(conn: Connection, query: str) -> str | None:
-    """Lexemas del caso (FTS_CONFIG) unidos con OR, citados de forma segura."""
-    cfg = get_settings().FTS_CONFIG
+    """Lexemas del caso (español + sin tildes, 0049) unidos con OR, citados de forma segura."""
+    cfg = "spanish"
     return rows(conn, "SELECT string_agg(quote_literal(lexeme), ' | ') AS q FROM unnest(to_tsvector(CAST(:cfg AS regconfig), :t)) "
-                      "WHERE length(lexeme) >= 3", cfg=cfg, t=query)[0]["q"]
+                      "WHERE length(lexeme) >= 3", cfg=cfg, t=_fold_py(query))[0]["q"]
 
 
 # ---------------------------------------------------------------------------
-# Búsqueda híbrida (FTS + pgvector) acotable por los "@" del chat
+# BÃºsqueda hÃ­brida (FTS + pgvector) acotable por los "@" del chat
 # ---------------------------------------------------------------------------
 
 def _fold_py(s: str) -> str:
@@ -100,13 +100,13 @@ def _fold_py(s: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", s.lower()) if not unicodedata.combining(c))
 
 
-_FOLD_SQL = "translate(lower({col}), 'áéíóúüñ', 'aeiouun')"
+_FOLD_SQL = "translate(lower({col}), 'Ã¡Ã©Ã­Ã³ÃºÃ¼Ã±', 'aeiouun')"
 
 
 def _phrase_pattern(term: str) -> str | None:
-    """Patrón de FRASE: tokens en orden con hasta 8 caracteres no alfanuméricos entre ellos
-    («pagaré 001» -> \\mpagare[^a-z0-9]{0,8}0*1\\M, que halla «PAGARE No. 01»)."""
-    toks = [t for t in re.split(r"[^0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+", term or "") if t]
+    """PatrÃ³n de FRASE: tokens en orden con hasta 8 caracteres no alfanumÃ©ricos entre ellos
+    (Â«pagarÃ© 001Â» -> \\mpagare[^a-z0-9]{0,8}0*1\\M, que halla Â«PAGARE No. 01Â»)."""
+    toks = [t for t in re.split(r"[^0-9A-Za-zÃÃ‰ÃÃ“ÃšÃœÃ‘Ã¡Ã©Ã­Ã³ÃºÃ¼Ã±]+", term or "") if t]
     if not toks:
         return None
     parts = []
@@ -120,8 +120,8 @@ def _phrase_pattern(term: str) -> str | None:
 
 
 def _exact_matches(conn: Connection, case_id: str, term: str, k: int) -> list[dict[str, Any]]:
-    """Páginas y segmentos que contienen la FRASE buscada (insensible a tildes/mayúsculas),
-    ordenadas por longitud (las páginas de un título valor son cortas y directas)."""
+    """PÃ¡ginas y segmentos que contienen la FRASE buscada (insensible a tildes/mayÃºsculas),
+    ordenadas por longitud (las pÃ¡ginas de un tÃ­tulo valor son cortas y directas)."""
     pat = _phrase_pattern(term)
     if not pat:
         return []
@@ -143,18 +143,23 @@ def _exact_matches(conn: Connection, case_id: str, term: str, k: int) -> list[di
 
 
 def _content_term(query: str) -> str | None:
-    """Términos de contenido de la pregunta (sin palabras vacías), p. ej.
-    «¿Qué me puedes decir del pagaré 001?» -> «pagaré 001». None si no queda nada útil."""
-    tokens = re.findall(r"[0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}", query or "")
-    keep = [t for t in tokens if t.lower() not in _QUESTION_WORDS and len(t) >= 2]
-    return " ".join(keep[:4]).strip() or None
+    """TÃ©rminos de contenido de la pregunta (sin palabras de reporte), p. ej.
+    Â«Â¿QuÃ© evidencia hay sobre pagos?Â» -> Â«pagosÂ». None si no queda nada Ãºtil.
+
+    Usa la MISMA definiciÃ³n de tÃ©rmino que retrieval y occurrences: si aquÃ­ se
+    colara Â«evidenciaÂ» o Â«documentoÂ», `locate` buscarÃ­a la frase de reporte y
+    devolverÃ­a ruido masivo."""
+    from app.services import text_terms
+    terms = text_terms.content_terms(query)
+    # Primer tÃ©rmino = tema; si hay nÃºmeros ("pagarÃ© 001") tambiÃ©n viajan.
+    return " ".join(terms[:4]).strip() or None
 
 
 @register("search_case",
-          "Búsqueda híbrida (texto completo + vectores pgvector) en TODO el expediente: "
-          "páginas OCR y transcripciones. Puede acotarse a archivos adjuntos con document_ids/media_ids.",
-          {"query": {"type": "string", "description": "Pregunta o términos en lenguaje natural"},
-           "k": {"type": "integer", "default": 8, "description": "Máximo de resultados"},
+          "BÃºsqueda hÃ­brida (texto completo + vectores pgvector) en TODO el expediente: "
+          "pÃ¡ginas OCR y transcripciones. Puede acotarse a archivos adjuntos con document_ids/media_ids.",
+          {"query": {"type": "string", "description": "Pregunta o tÃ©rminos en lenguaje natural"},
+           "k": {"type": "integer", "default": 8, "description": "MÃ¡ximo de resultados"},
            "document_ids": {"type": "array", "items": {"type": "string"}, "description": "Opcional: limitar a estos documentos"},
            "media_ids": {"type": "array", "items": {"type": "string"}, "description": "Opcional: limitar a estos audios/videos"}})
 def search_case(conn: Connection, case_id: str, ctx: ToolContext, query: str, k: int = 8,
@@ -163,10 +168,10 @@ def search_case(conn: Connection, case_id: str, ctx: ToolContext, query: str, k:
     med_ids = [u for u in (_uuid(x) for x in (media_ids or [])) if u] or None
     items = answering.retrieve(conn, case_id, query, document_ids=doc_ids, media_ids=med_ids,
                                ocr_mode=ctx.ocr_mode, asr_mode=ctx.asr_mode)
-    # Búsqueda AMPLIA (todas las fuentes): además del híbrido, cubre
+    # BÃºsqueda AMPLIA (todas las fuentes): ademÃ¡s del hÃ­brido, cubre
     #  (1) transcripciones por TEXTO y por NOMBRE DE HABLANTE, y
-    #  (2) coincidencias EXACTAS del término (insensible a tildes/mayúsculas), para que
-    #      entre la página que literalmente contiene lo buscado (p. ej. «PAGARE No. 001»).
+    #  (2) coincidencias EXACTAS del tÃ©rmino (insensible a tildes/mayÃºsculas), para que
+    #      entre la pÃ¡gina que literalmente contiene lo buscado (p. ej. Â«PAGARE No. 001Â»).
     if not doc_ids and not med_ids:
         tr: list[dict[str, Any]] = []
         try:
@@ -186,7 +191,7 @@ def search_case(conn: Connection, case_id: str, ctx: ToolContext, query: str, k:
 
 
 @register("search_documents",
-          "Búsqueda léxica (FTS) en documentos OCRizados y transcripciones. "
+          "BÃºsqueda lÃ©xica (FTS) en documentos OCRizados y transcripciones. "
           "Preferir search_case salvo que se necesite coincidencia literal.",
           {"query": {"type": "string"}, "k": {"type": "integer", "default": 5}})
 def search_documents(conn: Connection, case_id: str, ctx: ToolContext, query: str, k: int = 5) -> list[dict[str, Any]]:
@@ -216,8 +221,8 @@ def _resolve_document(conn: Connection, case_id: str, value: Any) -> str | None:
 
 
 @register("read_document",
-          "Lee un documento completo o un rango de páginas (máx. 10 por llamada). "
-          "Úsalo cuando el usuario adjunta un archivo (@) y pregunta qué dice.",
+          "Lee un documento completo o un rango de pÃ¡ginas (mÃ¡x. 10 por llamada). "
+          "Ãšsalo cuando el usuario adjunta un archivo (@) y pregunta quÃ© dice.",
           {"document_id": {"type": "string", "format": "uuid"},
            "from_page": {"type": "integer", "default": 1},
            "to_page": {"type": "integer", "description": "Opcional; por defecto from_page+9"}})
@@ -236,14 +241,14 @@ def read_document(conn: Connection, case_id: str, ctx: ToolContext, document_id:
         FROM document_pages p WHERE p.document_id = :d AND p.page_number BETWEEN :a AND :b
         ORDER BY p.page_number""", d=doc_id, a=from_page, b=to_page)
     if not pages:
-        return _err(f"El documento {doc[0]['filename']} no tiene páginas OCRizadas en el rango {from_page}-{to_page}")
+        return _err(f"El documento {doc[0]['filename']} no tiene pÃ¡ginas OCRizadas en el rango {from_page}-{to_page}")
     return [evidence_item("P", "document_page", pg["text"], document_id=doc_id, page_number=pg["page_number"],
                           folio=pg["folio"], filename=doc[0]["filename"],
                           ocr_confidence=pg["ocr_confidence"], needs_review=pg["needs_review"]) for pg in pages]
 
 
 @register("get_document_page",
-          "Obtiene el texto OCR completo de una página específica de un documento.",
+          "Obtiene el texto OCR completo de una pÃ¡gina especÃ­fica de un documento.",
           {"document_id": {"type": "string", "format": "uuid"},
            "page_number": {"type": "integer"}})
 def get_document_page(conn: Connection, case_id: str, ctx: ToolContext, document_id: str,
@@ -257,14 +262,14 @@ def get_document_page(conn: Connection, case_id: str, ctx: ToolContext, document
         WHERE p.document_id = :d AND p.page_number = :n AND d.case_id = :c
     """, d=doc_id, n=page_number, c=case_id)
     if not r:
-        return _err("Página no encontrada")
+        return _err("PÃ¡gina no encontrada")
     return [evidence_item("P", "document_page", r[0]["text"], document_id=doc_id,
                           page_number=page_number, folio=r[0]["folio"], filename=r[0]["filename"])]
 
 
 @register("get_document_markdown",
-          "Devuelve el documento OCR completo YA ESTRUCTURADO en Markdown (títulos, listas y secciones "
-          "por página). Úsalo para LEER y comprender un documento largo de una vez; para CITAR una página "
+          "Devuelve el documento OCR completo YA ESTRUCTURADO en Markdown (tÃ­tulos, listas y secciones "
+          "por pÃ¡gina). Ãšsalo para LEER y comprender un documento largo de una vez; para CITAR una pÃ¡gina "
           "concreta usa read_document/get_document_page.",
           {"document_id": {"type": "string", "format": "uuid",
                            "description": "id del documento o el nombre del archivo"}})
@@ -281,7 +286,7 @@ def get_document_markdown(conn: Connection, case_id: str, ctx: ToolContext, docu
 
 
 # ---------------------------------------------------------------------------
-# Transcripciones (ASR) y búsqueda por minuto
+# Transcripciones (ASR) y bÃºsqueda por minuto
 # ---------------------------------------------------------------------------
 
 def _segment_item(r: dict[str, Any], prefix: str = "TR") -> dict[str, Any]:
@@ -294,9 +299,9 @@ def _segment_item(r: dict[str, Any], prefix: str = "TR") -> dict[str, Any]:
 
 
 @register("list_speakers",
-          "Lista los hablantes (diarización) del expediente: speaker_id, etiqueta, nombre visible, rol, "
-          "estado de resolución y cuántos segmentos habla. Úsalo para resolver quién es quién antes de "
-          "renombrar un hablante o responder '¿cómo se llama el juez / la apoderada?'.",
+          "Lista los hablantes (diarizaciÃ³n) del expediente: speaker_id, etiqueta, nombre visible, rol, "
+          "estado de resoluciÃ³n y cuÃ¡ntos segmentos habla. Ãšsalo para resolver quiÃ©n es quiÃ©n antes de "
+          "renombrar un hablante o responder 'Â¿cÃ³mo se llama el juez / la apoderada?'.",
           {})
 def list_speakers(conn: Connection, case_id: str, ctx: ToolContext) -> list[dict[str, Any]]:
     sps = rows(conn, """
@@ -313,7 +318,7 @@ def list_speakers(conn: Connection, case_id: str, ctx: ToolContext) -> list[dict
 
 
 # ---------------------------------------------------------------------------
-# Personas por rol (preguntas de agregación: "¿cuántos jueces han intervenido?")
+# Personas por rol (preguntas de agregaciÃ³n: "Â¿cuÃ¡ntos jueces han intervenido?")
 # ---------------------------------------------------------------------------
 _ROLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "juez": ("juez", "jueza"),
@@ -325,7 +330,7 @@ _ROLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "parte": ("demandante", "demandado"),
 }
 
-# Patrones para el ROL CONFIRMADO por el usuario en speakers.speaker_role (español o inglés).
+# Patrones para el ROL CONFIRMADO por el usuario en speakers.speaker_role (espaÃ±ol o inglÃ©s).
 _ROLE_CONFIRMED: dict[str, tuple[str, ...]] = {
     "juez": ("juez", "jueza", "judge", "magistrad"),
     "apoderado": ("apoderad", "abogad", "attorney"),
@@ -336,38 +341,40 @@ _ROLE_CONFIRMED: dict[str, tuple[str, ...]] = {
     "parte": ("parte", "party", "demandante", "demandado"),
 }
 
-# Palabras que NO son nombres de persona (roles, cargos, números en letras, etc.).
+# Palabras que NO son nombres de persona (roles, cargos, nÃºmeros en letras, etc.).
 _STOP_NAME_TOKENS = frozenset("""
-JUEZ JUEZA JUZGADO CIRCUITO BOGOTA BOGOTÁ COLOMBIA REPUBLICA REPÚBLICA CIVIL TRIBUNAL PENAL LABORAL
+JUEZ JUEZA JUZGADO CIRCUITO BOGOTA BOGOTÃ COLOMBIA REPUBLICA REPÃšBLICA CIVIL TRIBUNAL PENAL LABORAL
 FAMILIA SALA CORTE SUPREMA CONSEJO ESTADO SUPERIOR JUDICATURA ADMINISTRATIVO SECRETARIO SECRETARIA
-NOTARIA NOTARIAL PROCESO PROCESAL EJECUTIVO EJECUTIVA AUTO AUTOS SEÑOR SEÑORA SENOR DOCTOR DOCTORA
-ABOGADO ABOGADA APODERADO APODERADA DEMANDA DEMANDADO DEMANDANTE RECURSO APELACION APELACIÓN SENTENCIA
+NOTARIA NOTARIAL PROCESO PROCESAL EJECUTIVO EJECUTIVA AUTO AUTOS SEÃ‘OR SEÃ‘ORA SENOR DOCTOR DOCTORA
+ABOGADO ABOGADA APODERADO APODERADA DEMANDA DEMANDADO DEMANDANTE RECURSO APELACION APELACIÃ“N SENTENCIA
 PROVIDENCIA RESUELVE CONSTANCIA PODER HOJA RADICADO EXPEDIENTE HONORABLE ATENCION ATENTAMENTE CORDIAL
-ASUNTO REF MAIL CORREO OUTLOOK INFORMATIVO INFORME SECRETARIAL RESUMEN VERSION VERSIÓN FECHA FIRMA
+ASUNTO REF MAIL CORREO OUTLOOK INFORMATIVO INFORME SECRETARIAL RESUMEN VERSION VERSIÃ“N FECHA FIRMA
 FIRMADO COMO DEL POR PARA CON ENTRE LOS LAS UNO UNA UNOS UNAS DOS TRES CUATRO CINCO SEIS SIETE OCHO
 NUEVE DIEZ ONCE DOCE QUINCE VEINTE TREINTA CUARENTA CINCUENTA SESENTA SETENTA OCHENTA NOVENTA CIENTO
 DOSCIENTOS TRESCIENTOS CUATROCIENTOS QUINIENTOS SEISCIENTOS SETECIENTOS OCHOCIENTOS NOVECIENTOS MIL
-MILLONES BILLONES PESOS PESO CENTAVOS CENTAVO DOLAR DÓLAR DOLARES DÓLARES MCTE INTERESES CAPITAL
-QUIROGRAFARIO DENTRO ACUMULADO GARANTIA GARANTÍA REAL EFECTIVIDAD
+MILLONES BILLONES PESOS PESO CENTAVOS CENTAVO DOLAR DÃ“LAR DOLARES DÃ“LARES MCTE INTERESES CAPITAL
+QUIROGRAFARIO DENTRO ACUMULADO GARANTIA GARANTÃA REAL EFECTIVIDAD
 HACE SABER TIPO LEY APLICA LINK SOLICITUD RESPETADA RESPETADO RESPETABLE SRA DRA CIU CTO BOG SIENDO
-TITULADA TITULADO DERECHO DERECHOS ABOGACIA ESPECIALISTA ESPECIALISTAS MAESTRIA MAESTRÍA
+TITULADA TITULADO DERECHO DERECHOS ABOGACIA ESPECIALISTA ESPECIALISTAS MAESTRIA MAESTRÃA
 """.split())
 
 _NAME_RE = re.compile(
-    r"\b([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,}(?:\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,}){1,3})\b"
+    r"\b([A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,}"
+    r"(?:\s+[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑa-záéíóúüñ]{1,}){1,3})\b",
+    re.UNICODE,
 )
 
 
 def _clean_name(raw: str) -> str | None:
-    """Normaliza un candidato a nombre: 2-4 tokens alfabéticos que no sean cargos/números."""
+    """Normaliza un candidato a nombre: 2-4 tokens alfabÃ©ticos que no sean cargos/nÃºmeros."""
     toks = [t for t in (raw or "").split()
             if len(t) >= 3 and t.isalpha() and t.upper() not in _STOP_NAME_TOKENS]
     return " ".join(toks) if 2 <= len(toks) <= 4 else None
 
 
 def _name_candidates(text: str) -> list[str]:
-    """Secuencias de 2-4 palabras tipo nombre propio (MAYÚSCULAS o Capitalizadas),
-    descartando cargos, números en letras y palabras no alfabéticas."""
+    """Secuencias de 2-4 palabras tipo nombre propio (MAYÃšSCULAS o Capitalizadas),
+    descartando cargos, nÃºmeros en letras y palabras no alfabÃ©ticas."""
     return [n for m in _NAME_RE.findall(text or "") if (n := _clean_name(m))]
 
 
@@ -378,7 +385,8 @@ def _strip_accents(s: str) -> str:
 
 def _name_tokens(name: str) -> set[str]:
     """Tokens significativos del nombre (≥3 letras, sin acentos, en mayúsculas) para agrupar variantes OCR."""
-    return {t for t in re.split(r"[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+", _strip_accents(name).upper()) if len(t) >= 3}
+    return {t for t in re.split(r"[^\w]+", _strip_accents(name).upper(), flags=re.UNICODE)
+            if len(t) >= 3 and t.isalpha()}
 
 
 def _concat_norm(name: str) -> str:
@@ -386,7 +394,7 @@ def _concat_norm(name: str) -> str:
 
 
 def _fuzzy_same(a: str, b: str) -> bool:
-    """Dos nombres son la misma persona pese a OCR: 'ALBALUCY COCKKEVAREZ' ≈ 'ALBA LUCY COCK ALVAREZ'."""
+    """Dos nombres son la misma persona pese a OCR: 'ALBALUCY COCKKEVAREZ' â‰ˆ 'ALBA LUCY COCK ALVAREZ'."""
     ca, cb = _concat_norm(a), _concat_norm(b)
     if min(len(ca), len(cb)) < 8:
         return False
@@ -399,8 +407,8 @@ def _fuzzy_same(a: str, b: str) -> bool:
 def _role_signature_matches(text: str, keywords: tuple[str, ...]) -> list[tuple[str, str]]:
     """Pares (nombre, fragmento) en la FIRMA (nombre seguido del cargo, p. ej. 'JUAN PEREZ JUEZ').
 
-    Se usa sólo el patrón nombre→cargo: es el de las firmas de autos. El patrón
-    inverso ('SEÑOR JUEZ' + destinatario) traía a las partes del encabezado como ruido."""
+    Se usa sÃ³lo el patrÃ³n nombreâ†’cargo: es el de las firmas de autos. El patrÃ³n
+    inverso ('SEÃ‘OR JUEZ' + destinatario) traÃ­a a las partes del encabezado como ruido."""
     out: list[tuple[str, str]] = []
     txt = text or ""
     for kw in keywords:
@@ -416,12 +424,12 @@ def _role_signature_matches(text: str, keywords: tuple[str, ...]) -> list[tuple[
 
 
 @register("list_people_by_role",
-          "Lista CANDIDATOS de personas por rol (juez, apoderado, testigo, perito, secretario, parte) leídos "
-          "de las firmas/encabezados de los documentos, con el número de menciones y su cita. Úsalo para "
-          "preguntas de agregación como '¿cuántos jueces han intervenido en el proceso?'. Es heurístico y "
+          "Lista CANDIDATOS de personas por rol (juez, apoderado, testigo, perito, secretario, parte) leÃ­dos "
+          "de las firmas/encabezados de los documentos, con el nÃºmero de menciones y su cita. Ãšsalo para "
+          "preguntas de agregaciÃ³n como 'Â¿cuÃ¡ntos jueces han intervenido en el proceso?'. Es heurÃ­stico y "
           "puede traer ruido: cita y verifica antes de concluir; no es una lista oficial.",
           {"role": {"type": "string", "description": "juez, apoderado, testigo, perito, secretario o parte"},
-           "k": {"type": "integer", "default": 15, "description": "Máximo de nombres a devolver"}})
+           "k": {"type": "integer", "default": 15, "description": "MÃ¡ximo de nombres a devolver"}})
 def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: str,
                         k: int = 15) -> list[dict[str, Any]]:
     role_key = (role or "").strip().lower()
@@ -430,7 +438,7 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
         return _err("rol no soportado; usa uno de: " + ", ".join(sorted(_ROLE_KEYWORDS)))
     cpats = "{" + ",".join(f"%{kw}%" for kw in _ROLE_CONFIRMED.get(role_key, (role_key,))) + "}"
 
-    # 1) Roles CONFIRMADOS por el usuario (speakers.speaker_role) → conteo EXACTO (no heurístico).
+    # 1) Roles CONFIRMADOS por el usuario (speakers.speaker_role) â†’ conteo EXACTO (no heurÃ­stico).
     confirmed = rows(conn, """
         SELECT sp.id, sp.label, sp.display_name, sp.speaker_role, sp.resolved_party_id, pt.name AS party_name,
                (SELECT count(*) FROM transcript_segments t WHERE t.speaker_id = sp.id) AS segments,
@@ -445,7 +453,7 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
         ORDER BY segments DESC, sp.label
     """, c=case_id, pats=cpats)
     if confirmed:
-        # source_type transcript_segment cuando hay un segmento representativo: así el
+        # source_type transcript_segment cuando hay un segmento representativo: asÃ­ el
         # conteo por rol confirmado es evidencia PRIMARIA (citable) y no una nota.
         items: list[dict[str, Any]] = []
         for sp in confirmed[:k]:
@@ -453,7 +461,7 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
             items.append(evidence_item(
                 "PER", "transcript_segment" if sp["media_id"] else "speaker",
                 f"{name}"
-                + (f" — {sp['speaker_role']}" if sp["speaker_role"] else "")
+                + (f" â€” {sp['speaker_role']}" if sp["speaker_role"] else "")
                 + (f" ({sp['party_name']})" if sp["party_name"] else ""),
                 speaker_id=str(sp["id"]), label=sp["label"], display_name=sp["display_name"],
                 person_name=name, role=role_key, speaker_role=sp["speaker_role"], segments=sp["segments"],
@@ -469,12 +477,12 @@ def list_people_by_role(conn: Connection, case_id: str, ctx: ToolContext, role: 
         if auth:
             return auth
 
-    # 3) Respaldo HEURÍSTICO (firmas/encabezados) si aún no hay roles confirmados.
+    # 3) Respaldo HEURÃSTICO (firmas/encabezados) si aÃºn no hay roles confirmados.
     return _role_candidates_heuristic(conn, case_id, role_key, keywords, k)
 
 
 # --- Autoridades judiciales (juez/fiscal/secretario) ---
-_AUTHORITY_ROLES: set[str] = set()  # rol «juez» → PERSONAS (nombres), no despachos; ver nota arriba
+_AUTHORITY_ROLES: set[str] = set()  # rol Â«juezÂ» â†’ PERSONAS (nombres), no despachos; ver nota arriba
 _AUTHORITY_KEYWORDS: dict[str, tuple[str, ...]] = {
     "juez": ("juez", "jueza", "juzgado", "tribunal", "corte", "magistrad", "sala"),
     "fiscal": ("fiscal", "fiscalia"),
@@ -502,16 +510,16 @@ _UNITS = {"UNO": 1, "DOS": 2, "TRES": 3, "CUATRO": 4, "CINCO": 5, "SEIS": 6, "SI
 
 
 def _authority_signature(name: str) -> str:
-    """Firma canónica de una autoridad para agrupar variantes OCR: tipo + número + clase.
+    """Firma canÃ³nica de una autoridad para agrupar variantes OCR: tipo + nÃºmero + clase.
 
-    'Juzgado 21 Civil del Circuito de Bogotá' = 'Juzgado Veintiuno (21) Civil del
-    Circuito … D.C.' = 'JUZGADO 021 Civil del Circuito' → misma firma.
+    'Juzgado 21 Civil del Circuito de BogotÃ¡' = 'Juzgado Veintiuno (21) Civil del
+    Circuito â€¦ D.C.' = 'JUZGADO 021 Civil del Circuito' â†’ misma firma.
     """
     raw: list[str] = []
     for t in re.split(r"[^A-Z0-9]+", _strip_accents(name or "").upper()):
         if t and t not in _AUTHORITY_DROP:
             raw.append(t)
-    # Combina decenas + unidades ANTES de mapear a dígitos: "CUARENTA","Y","CINCO" → "45".
+    # Combina decenas + unidades ANTES de mapear a dÃ­gitos: "CUARENTA","Y","CINCO" â†’ "45".
     merged: list[str] = []
     i = 0
     while i < len(raw):
@@ -548,7 +556,7 @@ def _authority_signature(name: str) -> str:
 
 
 def _authority_candidates(conn: Connection, case_id: str, role_key: str, k: int) -> list[dict[str, Any]]:
-    """Autoridades judiciales del expediente (línea de tiempo + entidades), normalizadas."""
+    """Autoridades judiciales del expediente (lÃ­nea de tiempo + entidades), normalizadas."""
     keywords = _AUTHORITY_KEYWORDS.get(role_key)
     if not keywords:
         return []
@@ -572,7 +580,7 @@ def _authority_candidates(conn: Connection, case_id: str, role_key: str, k: int)
     agg: dict[str, dict[str, Any]] = {}
     for r in list(ev) + list(en):
         key = _authority_signature(r["name"])
-        if key.startswith("OTRO|") or key.endswith("|") or "||" in key:  # sin número ni clase → ruido
+        if key.startswith("OTRO|") or key.endswith("|") or "||" in key:  # sin nÃºmero ni clase â†’ ruido
             continue
         g = agg.setdefault(key, {"display": r["name"], "best": 0, "n": 0,
                                  "document_id": None, "page_number": None, "filename": None})
@@ -583,9 +591,9 @@ def _authority_candidates(conn: Connection, case_id: str, role_key: str, k: int)
             g["document_id"], g["page_number"], g["filename"] = r["document_id"], r["page_number"], r["filename"]
     out: list[dict[str, Any]] = []
     for g in sorted(agg.values(), key=lambda g: g["n"], reverse=True)[:k]:
-        # source_type document_page: las autoridades se citan por la página de sus
-        # actuaciones (así cuentan como evidencia primaria citable, no como nota).
-        out.append(evidence_item("AUT", "document_page", f"{g['display']} · {g['n']} actuaciones",
+        # source_type document_page: las autoridades se citan por la pÃ¡gina de sus
+        # actuaciones (asÃ­ cuentan como evidencia primaria citable, no como nota).
+        out.append(evidence_item("AUT", "document_page", f"{g['display']} Â· {g['n']} actuaciones",
                                  document_id=g["document_id"], filename=g["filename"],
                                  page_number=g["page_number"] or 1,
                                  authority=g["display"], person_name=g["display"], role=role_key, mentions=g["n"]))
@@ -594,7 +602,7 @@ def _authority_candidates(conn: Connection, case_id: str, role_key: str, k: int)
 
 def _role_candidates_heuristic(conn: Connection, case_id: str, role_key: str,
                                keywords: tuple[str, ...], k: int = 15) -> list[dict[str, Any]]:
-    """Candidatos por rol leídos de las firmas (heurístico): nombre, menciones y cita."""
+    """Candidatos por rol leÃ­dos de las firmas (heurÃ­stico): nombre, menciones y cita."""
     pats = "{" + ",".join(f"%{kw}%" for kw in keywords) + "}"
     pages = rows(conn, """
         SELECT p.document_id, d.filename, p.page_number, p.folio, p.text
@@ -634,7 +642,7 @@ def _role_candidates_heuristic(conn: Connection, case_id: str, role_key: str,
     groups.sort(key=lambda g: g["n"], reverse=True)
     items: list[dict[str, Any]] = []
     for g in groups[:k]:
-        text = f"{g['snippet']} ⟦{role_key}: {g['display']} · {g['n']} menciones⟧"
+        text = f"{g['snippet']} âŸ¦{role_key}: {g['display']} Â· {g['n']} mencionesâŸ§"
         items.append(evidence_item("PER", "document_page", text, document_id=g["did"], filename=g["fn"],
                                    page_number=g["pn"], folio=g["folio"], person_name=g["display"],
                                    role=role_key, mentions=g["n"]))
@@ -642,7 +650,7 @@ def _role_candidates_heuristic(conn: Connection, case_id: str, role_key: str,
 
 
 def _all_role_candidates(conn: Connection, case_id: str, k: int = 12) -> list[dict[str, Any]]:
-    """Candidatos heurísticos de TODOS los roles, con tokens del nombre para emparejar."""
+    """Candidatos heurÃ­sticos de TODOS los roles, con tokens del nombre para emparejar."""
     entries: list[dict[str, Any]] = []
     for role_key, keywords in _ROLE_KEYWORDS.items():
         for it in _role_candidates_heuristic(conn, case_id, role_key, keywords, k):
@@ -650,7 +658,7 @@ def _all_role_candidates(conn: Connection, case_id: str, k: int = 12) -> list[di
             entries.append({"role": role_key, "name": name, "tokens": _name_tokens(name),
                             "mentions": it.get("mentions", 0), "filename": it.get("filename"),
                             "page_number": it.get("page_number"),
-                            "snippet": (it.get("text") or "").split("⟦")[0].strip()})
+                            "snippet": (it.get("text") or "").split("âŸ¦")[0].strip()})
     return entries
 
 
@@ -679,7 +687,7 @@ def _match_party(toks: set[str], side: str | None, parties: list[dict[str, Any]]
 
 
 def role_suggestions(conn: Connection, case_id: str) -> list[dict[str, Any]]:
-    """Sugiere, por hablante: rol (heurística de firmas) y parte (por nombre o por el lado demandante/demandado)."""
+    """Sugiere, por hablante: rol (heurÃ­stica de firmas) y parte (por nombre o por el lado demandante/demandado)."""
     entries = _all_role_candidates(conn, case_id)
     parties = rows(conn, "SELECT id, name, role, aliases FROM parties WHERE case_id = :c ORDER BY name", c=case_id)
     sps = rows(conn, "SELECT id, label, display_name, speaker_role, resolved_party_id FROM speakers "
@@ -718,11 +726,11 @@ def role_suggestions(conn: Connection, case_id: str) -> list[dict[str, Any]]:
 
 
 @register("list_low_confidence_pages",
-          "Lista las páginas OCR con MENOR confianza del expediente (documento, página, motor y %). "
-          "Úsala para '¿qué páginas tienen menor confianza?', '¿qué hojas revisar?' o '¿dónde está peor el OCR?'. "
+          "Lista las pÃ¡ginas OCR con MENOR confianza del expediente (documento, pÃ¡gina, motor y %). "
+          "Ãšsala para 'Â¿quÃ© pÃ¡ginas tienen menor confianza?', 'Â¿quÃ© hojas revisar?' o 'Â¿dÃ³nde estÃ¡ peor el OCR?'. "
           "La confianza arranca en 100% y baja al corregir contenido "
-          "(= 100% − palabras editadas ÷ palabras totales).",
-          {"limit": {"type": "integer", "default": 20, "description": "Máximo de páginas a devolver"},
+          "(= 100% âˆ’ palabras editadas Ã· palabras totales).",
+          {"limit": {"type": "integer", "default": 20, "description": "MÃ¡ximo de pÃ¡ginas a devolver"},
            "max_confidence": {"type": "number", "default": 1.0, "description": "Umbral 0..1 (por defecto 1 = todas)"},
            "mode": {"type": "string", "enum": ["basico", "document_ai"],
                     "description": "Opcional: filtrar por motor OCR"}})
@@ -745,8 +753,8 @@ def list_low_confidence_pages(conn: Connection, case_id: str, ctx: ToolContext,
         ORDER BY v.ocr_confidence ASC, d.filename, v.page_number
         LIMIT :k""", **params)
     return [evidence_item("PG", "document_page",
-                          f"{r['filename']} p.{r['page_number']} · {r['mode']} · "
-                          f"confianza {round(float(r['ocr_confidence']) * 1000) / 10}% — {(r['snippet'] or '').strip()[:180]}",
+                          f"{r['filename']} p.{r['page_number']} Â· {r['mode']} Â· "
+                          f"confianza {round(float(r['ocr_confidence']) * 1000) / 10}% â€” {(r['snippet'] or '').strip()[:180]}",
                           document_id=str(r["document_id"]), filename=r["filename"], page_number=r["page_number"],
                           folio=r["folio"], mode=r["mode"], confidence=float(r["ocr_confidence"]),
                           role=None) for r in pages]
@@ -754,20 +762,20 @@ def list_low_confidence_pages(conn: Connection, case_id: str, ctx: ToolContext,
 
 _REL_ES: dict[str, str] = {
     "causes": "causa", "responds_to": "responde a", "appeals": "apela a", "confirms": "confirma",
-    "revokes": "revoca", "precedes": "precede", "refers_to": "refiere a", "same_as": "idéntico a",
+    "revokes": "revoca", "precedes": "precede", "refers_to": "refiere a", "same_as": "idÃ©ntico a",
 }
 _CAUSAL_RELS = ["causes", "responds_to", "appeals", "confirms", "revokes", "refers_to"]
 
 
 def event_code_map(conn: Connection, case_id: str) -> dict[str, str]:
-    """Código estable por actuación (EV-0001, EV-0002…) ordenando por fecha (procesales primero)."""
+    """CÃ³digo estable por actuaciÃ³n (EV-0001, EV-0002â€¦) ordenando por fecha (procesales primero)."""
     evs = rows(conn, """SELECT id FROM events WHERE case_id = :c
                         ORDER BY (kind <> 'procedural'), event_date NULLS LAST, id""", c=case_id)
     return {str(e["id"]): f"EV-{i:04d}" for i, e in enumerate(evs, 1)}
 
 
 def _resolve_event(conn: Connection, case_id: str, ref: str) -> dict[str, Any] | None:
-    """Resuelve una actuación por id, código (EV-0004) o texto."""
+    """Resuelve una actuaciÃ³n por id, cÃ³digo (EV-0004) o texto."""
     ref = (ref or "").strip()
     if not ref:
         return None
@@ -790,17 +798,17 @@ def _resolve_event(conn: Connection, case_id: str, ref: str) -> dict[str, Any] |
 
 
 @register("event_relations",
-          "Relaciones de una actuación en el Process Graph: a qué actuaciones LLEVA y de qué depende "
+          "Relaciones de una actuaciÃ³n en el Process Graph: a quÃ© actuaciones LLEVA y de quÃ© depende "
           "(causes/responds_to/appeals/confirms/revokes/precedes/refers_to), con evidencia. "
-          "Acepta id, código EV-0004 o texto (p. ej. 'sentencia de segunda instancia').",
-          {"event": {"type": "string", "description": "id, EV-0004 o texto de la actuación"},
-           "relationship": {"type": "string", "description": "Opcional: filtrar por tipo de relación"},
+          "Acepta id, cÃ³digo EV-0004 o texto (p. ej. 'sentencia de segunda instancia').",
+          {"event": {"type": "string", "description": "id, EV-0004 o texto de la actuaciÃ³n"},
+           "relationship": {"type": "string", "description": "Opcional: filtrar por tipo de relaciÃ³n"},
            "k": {"type": "integer", "default": 40}})
 def event_relations(conn: Connection, case_id: str, ctx: ToolContext, event: str,
                     relationship: str | None = None, k: int = 40) -> list[dict[str, Any]]:
     ev = _resolve_event(conn, case_id, event)
     if not ev:
-        return _err("No encontré la actuación (pasa id, EV-0004 o texto).")
+        return _err("No encontrÃ© la actuaciÃ³n (pasa id, EV-0004 o texto).")
     codes = event_code_map(conn, case_id)
     me = codes.get(str(ev["id"]), "?")
     rels = rows(conn, """
@@ -822,7 +830,7 @@ def event_relations(conn: Connection, case_id: str, ctx: ToolContext, event: str
         desc = r["t_desc"] if is_out else r["s_desc"]
         subtype = r["t_subtype"] if is_out else r["s_subtype"]
         date = r["t_date"] if is_out else r["s_date"]
-        arrow = "→" if is_out else "←"
+        arrow = "â†’" if is_out else "â†"
         out.append(evidence_item("REL", "event_relation",
                                  f"{me} {arrow} {_REL_ES.get(r['relationship'], r['relationship'])} {other_code}: "
                                  f"{(desc or '')[:150]}",
@@ -834,11 +842,11 @@ def event_relations(conn: Connection, case_id: str, ctx: ToolContext, event: str
 
 
 @register("process_path",
-          "Reconstruye la CADENA de una actuación por las relaciones del Process Graph "
-          "(¿por qué se llegó a X?, ¿qué causó Y?): antecedentes (direction='to', por defecto) o "
-          "consecuencias (direction='from'). Acepta id, código EV-0004 o texto; devuelve la secuencia "
-          "cronológica con evidencia.",
-          {"event": {"type": "string", "description": "id, EV-0004 o texto de la actuación"},
+          "Reconstruye la CADENA de una actuaciÃ³n por las relaciones del Process Graph "
+          "(Â¿por quÃ© se llegÃ³ a X?, Â¿quÃ© causÃ³ Y?): antecedentes (direction='to', por defecto) o "
+          "consecuencias (direction='from'). Acepta id, cÃ³digo EV-0004 o texto; devuelve la secuencia "
+          "cronolÃ³gica con evidencia.",
+          {"event": {"type": "string", "description": "id, EV-0004 o texto de la actuaciÃ³n"},
            "direction": {"type": "string", "enum": ["to", "from"], "default": "to",
                          "description": "to = antecedentes; from = consecuencias"},
            "depth": {"type": "integer", "default": 6},
@@ -847,7 +855,7 @@ def process_path(conn: Connection, case_id: str, ctx: ToolContext, event: str,
                  direction: str = "to", depth: int = 6, include_precedes: bool = False) -> list[dict[str, Any]]:
     target = _resolve_event(conn, case_id, event)
     if not target:
-        return _err("No encontré la actuación (pasa id, EV-0004 o texto).")
+        return _err("No encontrÃ© la actuaciÃ³n (pasa id, EV-0004 o texto).")
     rels_allowed = list(_CAUSAL_RELS) + (["precedes"] if include_precedes else [])
     codes = event_code_map(conn, case_id)
     seen = {str(target["id"])}
@@ -881,9 +889,9 @@ def process_path(conn: Connection, case_id: str, ctx: ToolContext, event: str,
     out: list[dict[str, Any]] = []
     for e in evs:
         code = codes.get(str(e["id"]), "?")
-        mark = " ★" if str(e["id"]) == str(target["id"]) else ""
+        mark = " â˜…" if str(e["id"]) == str(target["id"]) else ""
         out.append(evidence_item("EV", "event",
-                                 f"{code}{mark} · {e['event_date'] or 's/f'} | {e['subtype']} | {e['actor']} — "
+                                 f"{code}{mark} Â· {e['event_date'] or 's/f'} | {e['subtype']} | {e['actor']} â€” "
                                  f"{(e['description'] or '')[:170]}",
                                  event_id=str(e["id"]), event_code=code,
                                  event_date=str(e["event_date"]) if e["event_date"] else None,
@@ -899,7 +907,7 @@ def process_path(conn: Connection, case_id: str, ctx: ToolContext, event: str,
            "media_id": {"type": "string", "format": "uuid", "description": "Opcional: limitar a un video/audio"}})
 def search_transcripts(conn: Connection, case_id: str, ctx: ToolContext, query: str, k: int = 5,
                        media_id: str | None = None) -> list[dict[str, Any]]:
-    cfg = get_settings().FTS_CONFIG
+    cfg = "spanish"  # 0049: search_tsv usa español + unaccent
     q = _tsquery(conn, query)
     if not q:
         return []
@@ -907,7 +915,7 @@ def search_transcripts(conn: Connection, case_id: str, ctx: ToolContext, query: 
     media_filter = ""
     mid = _uuid(media_id) if media_id else None
     if media_id and not mid:
-        return _err("media_id inválido")
+        return _err("media_id invÃ¡lido")
     if mid:
         media_filter = "AND s.media_id = :mid"
         params["mid"] = mid
@@ -917,17 +925,17 @@ def search_transcripts(conn: Connection, case_id: str, ctx: ToolContext, query: 
         FROM transcript_segments s
         JOIN media m ON m.id = s.media_id
         LEFT JOIN speakers sp ON sp.id = s.speaker_id
-        WHERE m.case_id = :c AND s.tsv @@ to_tsquery(CAST(:cfg AS regconfig), :q) /*MEDIA_FILTER*/
-        ORDER BY ts_rank_cd(s.tsv, to_tsquery(CAST(:cfg AS regconfig), :q)) DESC LIMIT :k
+        WHERE m.case_id = :c AND s.search_tsv @@ to_tsquery(CAST(:cfg AS regconfig), :q) /*MEDIA_FILTER*/
+        ORDER BY ts_rank_cd(s.search_tsv, to_tsquery(CAST(:cfg AS regconfig), :q)) DESC LIMIT :k
     """.replace("/*MEDIA_FILTER*/", media_filter), **params)
     return [_segment_item(r) for r in rows_]
 
 
 @register("search_transcript_by_time",
-          "Responde '¿en qué minuto se habló de X?' y '¿quién lo dijo?': busca en las transcripciones "
+          "Responde 'Â¿en quÃ© minuto se hablÃ³ de X?' y 'Â¿quiÃ©n lo dijo?': busca en las transcripciones "
           "y devuelve cada segmento con su minuto exacto (mm:ss) y el hablante identificado. "
-          "También lista lo dicho en un rango: from_minute/to_minute (ej. 'qué se dijo entre el min 10 y 15').",
-          {"query": {"type": "string", "description": "Opcional: tema a buscar; vacío lista el rango"},
+          "TambiÃ©n lista lo dicho en un rango: from_minute/to_minute (ej. 'quÃ© se dijo entre el min 10 y 15').",
+          {"query": {"type": "string", "description": "Opcional: tema a buscar; vacÃ­o lista el rango"},
            "media_id": {"type": "string", "format": "uuid", "description": "Opcional: limitar a un video/audio"},
            "from_minute": {"type": "number", "description": "Opcional: minuto inicial (ej. 10 o 10.5)"},
            "to_minute": {"type": "number", "description": "Opcional: minuto final"},
@@ -935,12 +943,12 @@ def search_transcripts(conn: Connection, case_id: str, ctx: ToolContext, query: 
 def search_transcript_by_time(conn: Connection, case_id: str, ctx: ToolContext, query: str | None = None,
                               media_id: str | None = None, from_minute: float | None = None,
                               to_minute: float | None = None, k: int = 10) -> list[dict[str, Any]]:
-    cfg = get_settings().FTS_CONFIG
+    cfg = "spanish"  # 0049: search_tsv usa español + unaccent
     where, params = ["m.case_id = :c"], {"c": case_id, "cfg": cfg, "k": k}
     if media_id:
         mid = _uuid(media_id)
         if not mid:
-            return _err("media_id inválido")
+            return _err("media_id invÃ¡lido")
         where.append("s.media_id = :mid")
         params["mid"] = mid
     if from_minute is not None:
@@ -952,17 +960,17 @@ def search_transcript_by_time(conn: Connection, case_id: str, ctx: ToolContext, 
     order = "s.start_ms"
     if query:
         q = _tsquery(conn, query)
-        # El agente puede pasar la oración completa; aun así detectamos el nombre propio
-        # («¿en qué minuto habló la doctora Paola?» → «Paola») para filtrar por HABLANTE.
+        # El agente puede pasar la oraciÃ³n completa; aun asÃ­ detectamos el nombre propio
+        # (Â«Â¿en quÃ© minuto hablÃ³ la doctora Paola?Â» â†’ Â«PaolaÂ») para filtrar por HABLANTE.
         candidate = _speaker_candidate(query)
         params["like"] = f"%{candidate}%" if candidate else f"%{query.strip()}%"
         clauses = []
         if q:
-            clauses.append("s.tsv @@ to_tsquery(CAST(:cfg AS regconfig), :q)")
+            clauses.append("s.search_tsv @@ to_tsquery(CAST(:cfg AS regconfig), :q)")
             params["q"] = q
         clauses.append("(sp.display_name ILIKE :like OR sp.label ILIKE :like)")
         where.append("(" + " OR ".join(clauses) + ")")
-        # Primero los segmentos DEL hablante buscado, luego las menciones; cronológico.
+        # Primero los segmentos DEL hablante buscado, luego las menciones; cronolÃ³gico.
         order = "CASE WHEN sp.display_name ILIKE :like OR sp.label ILIKE :like THEN 0 ELSE 1 END, s.start_ms"
     rows_ = rows(conn, """
         SELECT s.id, s.media_id, s.start_ms, s.end_ms, sp.label AS speaker, sp.display_name AS speaker_name,
@@ -977,7 +985,7 @@ def search_transcript_by_time(conn: Connection, case_id: str, ctx: ToolContext, 
 
 
 @register("get_video_segment",
-          "Obtiene el texto de un segmento de transcripción, por segment_id o por minuto (at_minute).",
+          "Obtiene el texto de un segmento de transcripciÃ³n, por segment_id o por minuto (at_minute).",
           {"media_id": {"type": "string", "format": "uuid"},
            "segment_id": {"type": "string", "format": "uuid", "description": "Opcional si se usa at_minute"},
            "at_minute": {"type": "number", "description": "Opcional: minuto del video (ej. 14.5)"}})
@@ -985,11 +993,11 @@ def get_video_segment(conn: Connection, case_id: str, ctx: ToolContext, media_id
                       segment_id: str | None = None, at_minute: float | None = None) -> list[dict[str, Any]]:
     mid = _uuid(media_id)
     if not mid:
-        return _err("media_id inválido")
+        return _err("media_id invÃ¡lido")
     if segment_id:
         sid = _uuid(segment_id)
         if not sid:
-            return _err("segment_id inválido")
+            return _err("segment_id invÃ¡lido")
         r = rows(conn, """
             SELECT s.id, s.media_id, s.text, s.start_ms, s.end_ms, sp.label AS speaker,
                    sp.display_name AS speaker_name, m.filename
@@ -1007,7 +1015,7 @@ def get_video_segment(conn: Connection, case_id: str, ctx: ToolContext, media_id
             WHERE s.media_id = :mid AND m.case_id = :c AND s.start_ms <= :ms AND s.end_ms >= :ms
             ORDER BY s.start_ms LIMIT 1
         """, mid=mid, c=case_id, ms=ms)
-        if not r:  # el minuto cae en un hueco: el segmento más cercano
+        if not r:  # el minuto cae en un hueco: el segmento mÃ¡s cercano
             r = rows(conn, """
                 SELECT s.id, s.media_id, s.text, s.start_ms, s.end_ms, sp.label AS speaker,
                        sp.display_name AS speaker_name, m.filename
@@ -1025,7 +1033,7 @@ def get_video_segment(conn: Connection, case_id: str, ctx: ToolContext, media_id
 
 def _page_items(conn: Connection, case_id: str, table: str, alias: str, clauses: list[str],
                 params: dict, k: int, with_folio: bool, mode_expr: str, order: str = "file") -> list[dict[str, Any]]:
-    """Evidencias de página desde una tabla de OCR (principal o versiones por motor)."""
+    """Evidencias de pÃ¡gina desde una tabla de OCR (principal o versiones por motor)."""
     folio = f"{alias}.folio" if with_folio else "NULL"
     order_sql = (f"length({alias}.text) ASC, d.filename, {alias}.page_number" if order == "len"
                  else f"d.filename, {alias}.page_number")
@@ -1060,20 +1068,20 @@ def _dedupe_pages(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 @register("locate",
-          "Lista TODAS las ubicaciones donde aparece un término: cada documento con su página y folio, "
-          "y cada video/audio con su minuto y hablante. Úsala cuando el usuario pregunte dónde se habla/"
-          "menciona algo o en qué archivos/páginas aparece.",
-          {"term": {"type": "string", "description": "Término o frase a localizar (ej. 'pagaré 001')"},
-           "k": {"type": "integer", "default": 300, "description": "Máximo de ubicaciones"}})
+          "Lista TODAS las ubicaciones donde aparece un tÃ©rmino: cada documento con su pÃ¡gina y folio, "
+          "y cada video/audio con su minuto y hablante. Ãšsala cuando el usuario pregunte dÃ³nde se habla/"
+          "menciona algo o en quÃ© archivos/pÃ¡ginas aparece.",
+          {"term": {"type": "string", "description": "TÃ©rmino o frase a localizar (ej. 'pagarÃ© 001')"},
+           "k": {"type": "integer", "default": 300, "description": "MÃ¡ximo de ubicaciones"}})
 def locate(conn: Connection, case_id: str, ctx: ToolContext, term: str, k: int = 300) -> list[dict[str, Any]]:
     import unicodedata
 
     def fold(s: str) -> str:
         return "".join(c for c in unicodedata.normalize("NFKD", s.lower()) if not unicodedata.combining(c))
 
-    tokens = [t for t in re.split(r"[^0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+", term or "") if len(t) >= 2][:6]
+    tokens = [t for t in re.split(r"[^0-9A-Za-zÃÃ‰ÃÃ“ÃšÃœÃ‘Ã¡Ã©Ã­Ã³ÃºÃ¼Ã±]+", term or "") if len(t) >= 2][:6]
     if not tokens:
-        return _err("Se requiere un término de búsqueda")
+        return _err("Se requiere un tÃ©rmino de bÃºsqueda")
     params: dict[str, Any] = {"c": case_id, "k": k}
     doc_where, doc_where_v, seg_where = [], [], []
     if ctx.ocr_mode and ctx.ocr_mode != "todos":
@@ -1083,7 +1091,7 @@ def locate(conn: Connection, case_id: str, ctx: ToolContext, term: str, k: int =
     if ctx.asr_mode and ctx.asr_mode != "todos":
         seg_where.append("m.asr_mode = :asr_mode")
         params["asr_mode"] = ctx.asr_mode
-    speaker_fold = "translate(lower(coalesce(sp.display_name, sp.label, '')), 'áéíóúüñ', 'aeiouun')"
+    speaker_fold = "translate(lower(coalesce(sp.display_name, sp.label, '')), 'Ã¡Ã©Ã­Ã³ÃºÃ¼Ã±', 'aeiouun')"
     text_fold_s = _FOLD_SQL.format(col="s.text")
     for i, tok in enumerate(tokens):
         key = f"t{i}"
@@ -1113,7 +1121,7 @@ def locate(conn: Connection, case_id: str, ctx: ToolContext, term: str, k: int =
 
 
 # ---------------------------------------------------------------------------
-# Archivos del expediente (para "tráeme el PDF" y el @ del chat)
+# Archivos del expediente (para "trÃ¡eme el PDF" y el @ del chat)
 # ---------------------------------------------------------------------------
 
 def _file_item(kind: str, r: dict[str, Any], case_id: str) -> dict[str, Any]:
@@ -1122,9 +1130,9 @@ def _file_item(kind: str, r: dict[str, Any], case_id: str) -> dict[str, Any]:
     name = r.get("title") or r["filename"]
     extra = ""
     if kind == "document":
-        extra = f", {r.get('page_count') or '?'} páginas"
+        extra = f", {r.get('page_count') or '?'} pÃ¡ginas"
     elif r.get("duration_ms"):
-        extra = f", duración {mmss(r['duration_ms'])}"
+        extra = f", duraciÃ³n {mmss(r['duration_ms'])}"
     item = evidence_item("A", "file", f"Archivo: {name} ({'PDF' if kind == 'document' else 'video/audio'}{extra})",
                          kind=kind, filename=r["filename"], name=name,
                          size_bytes=r.get("size_bytes"), mime_type=r.get("mime_type"),
@@ -1142,7 +1150,7 @@ def _file_item(kind: str, r: dict[str, Any], case_id: str) -> dict[str, Any]:
 
 
 @register("get_file",
-          "'Tráeme el PDF/video': localiza un archivo del expediente por nombre (o id) y devuelve "
+          "'TrÃ¡eme el PDF/video': localiza un archivo del expediente por nombre (o id) y devuelve "
           "una tarjeta con sus datos y la URL para VERLO y DESCARGARLO.",
           {"query": {"type": "string", "description": "Nombre (o parte) del archivo, ej. '001' o 'CuadernoPrincipal'"},
            "document_id": {"type": "string", "format": "uuid"},
@@ -1152,7 +1160,7 @@ def get_file(conn: Connection, case_id: str, ctx: ToolContext, query: str | None
     if document_id or media_id:
         fid = _uuid(document_id or media_id)
         if not fid:
-            return _err("id inválido")
+            return _err("id invÃ¡lido")
         if document_id:
             r = rows(conn, """SELECT d.id, d.filename, NULL AS title, d.size_bytes, d.mime_type, d.sha256,
                        d.page_count, d.ocr_mode,
@@ -1174,13 +1182,13 @@ def get_file(conn: Connection, case_id: str, ctx: ToolContext, query: str | None
                    FROM media WHERE case_id = :c AND (filename ILIKE :q OR title ILIKE :q) ORDER BY filename LIMIT 5""",
                 c=case_id, q=like)
     if not docs and not vids:
-        return _err(f"Ningún archivo del expediente coincide con '{query}'")
+        return _err(f"NingÃºn archivo del expediente coincide con '{query}'")
     return [_file_item("document", d, case_id) for d in docs] + [_file_item("media", v, case_id) for v in vids]
 
 
 @register("list_case_files",
           "Lista los archivos del expediente (PDFs y videos/audios) con su id, nombre y tipo. "
-          "Útil para resolver referencias como '@001' o 'el cuaderno principal'.",
+          "Ãštil para resolver referencias como '@001' o 'el cuaderno principal'.",
           {"kind": {"type": "string", "enum": ["document", "media"], "description": "Opcional: solo PDFs o solo videos"},
            "query": {"type": "string", "description": "Opcional: filtrar por nombre"},
            "limit": {"type": "integer", "default": 50}})
@@ -1224,7 +1232,7 @@ def graph_query(conn: Connection, case_id: str, ctx: ToolContext, start_node_id:
                 edge_type: str | None = None) -> list[dict[str, Any]]:
     nid = _uuid(start_node_id)
     if not nid:
-        return _err("start_node_id inválido")
+        return _err("start_node_id invÃ¡lido")
     result = graph.traverse(conn, case_id, nid, depth=min(int(depth), 3),
                             edge_types=[edge_type] if edge_type else None)
     return [evidence_item("G", "graph_node", f"{n['node_type']}: {n['label']}",
@@ -1234,7 +1242,7 @@ def graph_query(conn: Connection, case_id: str, ctx: ToolContext, start_node_id:
 
 
 @register("graph_neighbors",
-          "Vecinos directos de un nodo del grafo con el tipo de relación (A -[SUPPORTS]-> B).",
+          "Vecinos directos de un nodo del grafo con el tipo de relaciÃ³n (A -[SUPPORTS]-> B).",
           {"node_id": {"type": "string", "format": "uuid"},
            "edge_type": {"type": "string", "description": "Opcional: filtrar por tipo de arista"},
            "limit": {"type": "integer", "default": 20}})
@@ -1242,7 +1250,7 @@ def graph_neighbors(conn: Connection, case_id: str, ctx: ToolContext, node_id: s
                     edge_type: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
     nid = _uuid(node_id)
     if not nid:
-        return _err("node_id inválido")
+        return _err("node_id invÃ¡lido")
     params: dict[str, Any] = {"c": case_id, "n": nid, "lim": limit}
     type_filter = ""
     if edge_type:
@@ -1269,7 +1277,7 @@ def graph_neighbors(conn: Connection, case_id: str, ctx: ToolContext, node_id: s
 
 
 @register("find_person",
-          "'¿Quién es X?': busca personas en el grafo del caso y trae sus afirmaciones (claims), "
+          "'Â¿QuiÃ©n es X?': busca personas en el grafo del caso y trae sus afirmaciones (claims), "
           "participaciones en eventos y testimonios relacionados.",
           {"name": {"type": "string", "description": "Nombre o parte del nombre de la persona"},
            "k": {"type": "integer", "default": 5}})
@@ -1301,7 +1309,7 @@ def find_person(conn: Connection, case_id: str, ctx: ToolContext, name: str, k: 
                                      related_node_type=r["node_type"], related_label=r["label"],
                                      source_table=r.get("source_table"), source_id=str(r.get("source_id"))))
     # Fuentes CITABLES donde aparece el nombre (documentos y transcripciones), aunque
-    # no exista una ficha de persona en el grafo. Así "¿quién es X?" nunca se queda sin respuesta.
+    # no exista una ficha de persona en el grafo. AsÃ­ "Â¿quiÃ©n es X?" nunca se queda sin respuesta.
     mentions: list[dict[str, Any]] = []
     try:
         mentions = answering.retrieve(conn, case_id, term,
@@ -1314,16 +1322,16 @@ def find_person(conn: Connection, case_id: str, ctx: ToolContext, name: str, k: 
                                  "pero estas fuentes del expediente lo mencionan."))
     out.extend(mentions)
     if not out:
-        return _err(f"No se encontró '{term}' ni en el grafo ni en documentos ni en transcripciones del expediente")
+        return _err(f"No se encontrÃ³ '{term}' ni en el grafo ni en documentos ni en transcripciones del expediente")
     return out
 
 
 # ---------------------------------------------------------------------------
-# Claims, hechos, evidencia y línea de tiempo
+# Claims, hechos, evidencia y lÃ­nea de tiempo
 # ---------------------------------------------------------------------------
 
 @register("search_claims",
-          "Busca claims/alegaciones extraídas de documentos o testimonios.",
+          "Busca claims/alegaciones extraÃ­das de documentos o testimonios.",
           {"query": {"type": "string"}, "k": {"type": "integer", "default": 5}})
 def search_claims(conn: Connection, case_id: str, ctx: ToolContext, query: str, k: int = 5) -> list[dict[str, Any]]:
     where, params = _ilike_terms(query)
@@ -1344,7 +1352,7 @@ def search_claims(conn: Connection, case_id: str, ctx: ToolContext, query: str, 
 
 
 @register("search_facts",
-          "Busca hechos (facts) ya extraídos y verificados.",
+          "Busca hechos (facts) ya extraÃ­dos y verificados.",
           {"query": {"type": "string"}, "k": {"type": "integer", "default": 5}})
 def search_facts(conn: Connection, case_id: str, ctx: ToolContext, query: str, k: int = 5) -> list[dict[str, Any]]:
     where, params = _ilike_terms(query, column="proposition")
@@ -1361,7 +1369,7 @@ def search_facts(conn: Connection, case_id: str, ctx: ToolContext, query: str, k
 
 
 @register("search_evidence",
-          "Busca ítems de evidencia documental/testimonial.",
+          "Busca Ã­tems de evidencia documental/testimonial.",
           {"query": {"type": "string"}, "k": {"type": "integer", "default": 5}})
 def search_evidence(conn: Connection, case_id: str, ctx: ToolContext, query: str, k: int = 5) -> list[dict[str, Any]]:
     where, params = _ilike_terms(query, column="description")
@@ -1400,7 +1408,7 @@ def _timeline(conn: Connection, case_id: str, query: str | None, start_date: str
 
 
 @register("search_timeline",
-          "Busca eventos en la línea de tiempo del caso.",
+          "Busca eventos en la lÃ­nea de tiempo del caso.",
           {"query": {"type": "string"},
            "start_date": {"type": "string", "description": "YYYY-MM-DD opcional"},
            "end_date": {"type": "string", "description": "YYYY-MM-DD opcional"}})
@@ -1410,7 +1418,7 @@ def search_timeline(conn: Connection, case_id: str, ctx: ToolContext, query: str
 
 
 @register("get_timeline",
-          "Línea de tiempo del proceso: eventos ordenados por fecha (opcionalmente filtrados por tema o rango).",
+          "LÃ­nea de tiempo del proceso: eventos ordenados por fecha (opcionalmente filtrados por tema o rango).",
           {"query": {"type": "string", "description": "Opcional: tema a filtrar"},
            "start_date": {"type": "string", "description": "YYYY-MM-DD opcional"},
            "end_date": {"type": "string", "description": "YYYY-MM-DD opcional"},
@@ -1418,3 +1426,4 @@ def search_timeline(conn: Connection, case_id: str, ctx: ToolContext, query: str
 def get_timeline(conn: Connection, case_id: str, ctx: ToolContext, query: str | None = None,
                  start_date: str | None = None, end_date: str | None = None, k: int = 15) -> list[dict[str, Any]]:
     return _timeline(conn, case_id, query, start_date, end_date, k)
+

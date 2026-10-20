@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   MessageSquare, X, Send, Loader2, Bot, FileText, Video, Cpu, Plus,
-  Download, Eye, Archive, AlertTriangle,
+  Download, Eye, Archive, AlertTriangle, Square, Copy, RotateCcw, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +33,13 @@ interface Citation {
   citation_id: string; source_type: string; filename?: string; folio?: string;
   document_id?: string; page?: number; media_id?: string; start_ms?: number; end_ms?: number; speaker?: string;
   ocr_mode?: string | null; asr_mode?: string | null;
-}interface FileCard {
+  /** Número visible de la cita (`[n]`); si falta se usa el orden de la lista. */
+  marker?: number | string;
+  /** Clave de agrupación para ocurrencias; si falta se usa el archivo. */
+  group?: string;
+}
+type AnswerKind = "direct" | "partial" | "insufficient" | "navigational" | "correction";
+interface FileCard {
   kind: string; name: string; document_id?: string | null; media_id?: string | null;
   mime_type?: string; size_bytes?: number; page_count?: number | null; duration_ms?: number | null;
   download_path: string; view_path: string;
@@ -46,6 +52,16 @@ interface ChatMessage {
   occurrences?: Citation[];
   file_cards?: FileCard[];
   uncertainties?: string[];
+  answer_kind?: AnswerKind;
+  degraded?: boolean;
+  occurrences_note?: string;
+  occurrences_term?: string;
+  /** Marca el mensaje que todavía se está escribiendo por streaming. */
+  streaming?: boolean;
+  /** El usuario detuvo la generación antes del `done`. */
+  stopped?: boolean;
+  /** Mensaje de error del turno (no es una respuesta del asistente). */
+  error?: boolean;
 }
 interface HistoryMessage {
   role: "user" | "assistant";
@@ -53,6 +69,11 @@ interface HistoryMessage {
   attachments?: unknown[] | null;
   citations?: Citation[] | null;
   occurrences?: Citation[] | null;
+  uncertainties?: string[] | null;
+  answer_kind?: AnswerKind | null;
+  degraded?: boolean | null;
+  occurrences_note?: string | null;
+  occurrences_term?: string | null;
 }
 type RecognitionMode = "todos" | "basico" | "document_ai";
 
@@ -63,9 +84,23 @@ interface Session {
 }
 interface SendResponse {
   answer: string; citations?: Citation[]; occurrences?: Citation[]; file_cards?: FileCard[]; uncertainties?: string[];
+  answer_kind?: AnswerKind; intent?: string; degraded?: boolean;
+  occurrences_term?: string; occurrences_note?: string;
   pending_correction?: { tool: string; summary: string; requires_confirmation?: boolean } | null;
   user_message: { id: string }; assistant_message: { id: string };
 }
+
+/** Etapas del SSE. El backend puede mandar `label` ya localizado; si no, se usa
+ * esta traducción. Sin porcentajes: no hay progreso medible que mostrar. */
+const STAGE_LABELS: Record<string, string> = {
+  accepted: "Preparando la consulta…",
+  routing: "Analizando la pregunta…",
+  retrieving: "Buscando evidencia…",
+  reranking: "Ordenando la evidencia…",
+  synthesizing: "Redactando…",
+  validating: "Verificando citas…",
+};
+const STAGE_FALLBACK = "Analizando la pregunta…";
 
 function mmss(ms: number) {
   const s = Math.floor(ms / 1000);
@@ -88,6 +123,159 @@ function modeBadge(c: Citation) {
   const label = mode === "basico" ? "básico" : "Document AI";
   const kind = c.source_type === "document_page" ? "OCR" : "ASR";
   return <span className="ml-1 rounded bg-muted px-1 text-[10px] text-muted-foreground">{kind} {label}</span>;
+}
+
+/** Texto visible de una cita: archivo + página o archivo + minuto + hablante. */
+function citationLabel(c: Citation) {
+  if (c.source_type === "document_page") {
+    return `${c.filename || "Documento"} · p. ${c.page ?? 1}${c.folio ? ` (folio ${c.folio})` : ""}`;
+  }
+  const at = c.start_ms != null ? mmss(c.start_ms) : "";
+  return `${c.filename || "Audio"}${at ? ` · ${at}` : ""}${c.speaker ? ` · ${c.speaker}` : ""}`;
+}
+
+/** Describe la acción del chip para lectores de pantalla y tooltip. */
+function citationAction(c: Citation) {
+  return c.source_type === "document_page"
+    ? `Abrir ${c.filename || "el documento"} en la página ${c.page ?? 1}`
+    : `Abrir ${c.filename || "el audio"} en ${c.start_ms != null ? mmss(c.start_ms) : "el inicio"}`;
+}
+
+function occurrenceLabel(c: Citation) {
+  if (c.source_type === "document_page") {
+    return `p. ${c.page ?? 1}${c.folio ? ` (folio ${c.folio})` : ""}`;
+  }
+  return `${c.start_ms != null ? mmss(c.start_ms) : "inicio"}${c.speaker ? ` · ${c.speaker}` : ""}`;
+}
+
+function CitationChip({ citation, marker, onOpen }: {
+  citation: Citation; marker: number | string; onOpen: (c: Citation) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(citation)}
+      title={citationAction(citation)}
+      aria-label={citationAction(citation)}
+      className="inline-flex max-w-full items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+    >
+      <span className="shrink-0 font-medium tabular-nums">[{marker}]</span>
+      {citation.source_type === "document_page"
+        ? <FileText className="h-3 w-3 shrink-0" aria-hidden="true" />
+        : <Video className="h-3 w-3 shrink-0" aria-hidden="true" />}
+      <span className="min-w-0 truncate">{citationLabel(citation)}</span>
+      {modeBadge(citation)}
+    </button>
+  );
+}
+
+/** Con 1 o 2 citas van inline; con más, se pliegan para no tapar la respuesta. */
+function CitationList({ citations, onOpen }: { citations: Citation[]; onOpen: (c: Citation) => void }) {
+  const chips = citations.map((c, i) => (
+    <CitationChip key={c.citation_id || `cite-${i}`} citation={c} marker={c.marker ?? i + 1} onOpen={onOpen} />
+  ));
+  if (citations.length <= 2) {
+    return <div className="mt-2 flex flex-wrap gap-1">{chips}</div>;
+  }
+  return (
+    <details className="mt-2">
+      <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background">
+        Fuentes ({citations.length})
+      </summary>
+      <div className="mt-1 flex flex-wrap gap-1">{chips}</div>
+    </details>
+  );
+}
+
+interface OccurrenceGroup { key: string; label: string; items: Citation[] }
+
+function groupOccurrences(items: Citation[]): OccurrenceGroup[] {
+  const groups = new Map<string, OccurrenceGroup>();
+  for (const c of items) {
+    const label = c.group || c.filename || "Archivo";
+    const key = c.group || c.filename || c.citation_id;
+    const current = groups.get(key);
+    if (current) current.items.push(c);
+    else groups.set(key, { key, label, items: [c] });
+  }
+  return Array.from(groups.values());
+}
+
+/** Ubicaciones agrupadas por archivo. No se usa para `insufficient`. */
+function Occurrences({ items, term, note, onOpen }: {
+  items: Citation[]; term?: string; note?: string; onOpen: (c: Citation) => void;
+}) {
+  const groups = groupOccurrences(items);
+  if (groups.length === 0) return null;
+  const total = items.length;
+  return (
+    <div className="mt-2 rounded-md border bg-background/40 p-2">
+      <p className="text-xs font-medium text-muted-foreground">
+        {term ? `Menciones de «${term}»` : "Menciones"}{" "}
+        <span className="font-normal">
+          ({total} {total === 1 ? "ubicación" : "ubicaciones"})
+        </span>
+      </p>
+      {note && <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>}
+      <ul className="mt-1 space-y-1.5">
+        {groups.map((g) => (
+          <li key={g.key} className="min-w-0">
+            <p className="truncate text-xs font-medium">
+              {g.label}{" "}
+              <span className="font-normal text-muted-foreground">
+                · {g.items.length} {g.items.length === 1 ? "mención" : "menciones"}
+              </span>
+            </p>
+            <div className="mt-0.5 flex flex-wrap gap-1">
+              {g.items.map((c, k) => (
+                <button key={`${c.citation_id}-${k}`} type="button" onClick={() => onOpen(c)}
+                  title={citationAction(c)} aria-label={citationAction(c)}
+                  className="rounded px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background">
+                  {occurrenceLabel(c)}
+                </button>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Evita repetir en la lista lo que el compositor ya escribió en el cuerpo. */
+function visibleUncertainties(m: ChatMessage): string[] {
+  if (!m.uncertainties || m.uncertainties.length === 0) return [];
+  const body = m.content.replace(/\s+/g, " ").trim().toLowerCase();
+  const seen = new Set<string>();
+  return m.uncertainties.filter((u) => {
+    const text = u.replace(/\s+/g, " ").trim();
+    const key = text.toLowerCase();
+    if (!key || seen.has(key) || body.includes(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function mapHistory(m: HistoryMessage): ChatMessage {
+  if (m.role === "assistant") {
+    return {
+      role: "assistant",
+      content: m.content,
+      citations: m.citations || undefined,
+      occurrences: m.occurrences || undefined,
+      uncertainties: m.uncertainties || undefined,
+      file_cards: (m.attachments as unknown as FileCard[]) || undefined,
+      answer_kind: m.answer_kind || undefined,
+      degraded: m.degraded || undefined,
+      occurrences_note: m.occurrences_note || undefined,
+      occurrences_term: m.occurrences_term || undefined,
+    };
+  }
+  return {
+    role: "user",
+    content: m.content,
+    attachments: (m.attachments as unknown as Attachment[]) || undefined,
+  };
 }
 
 /** El chat vive DENTRO de un proceso: sin expediente abierto no hay botón flotante.
@@ -122,9 +310,13 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
   const [docView, setDocView] = useState<{ id: string; page: number; name?: string } | null>(null);
   const [mediaView, setMediaView] = useState<{ id: string; ms: number; name?: string } | null>(null);
   const [pendingCorrection, setPendingCorrection] = useState<{ tool: string; summary: string } | null>(null);
+  const [stage, setStage] = useState<{ label: string; intent?: string } | null>(null);
+  const [streaming, setStreaming] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const stickToBottomRef = useRef(true);
 
   // Carga inicial: agentes y modelos (el expediente está fijado a la URL).
   useEffect(() => {
@@ -178,12 +370,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
         const r = await api.get<{ messages: HistoryMessage[] }>(
           `/cases/${caseId}/chats/${sessionId}/messages`, { limit: "100" });
         if (cancelled) return;
-        setMessages(r.messages.map((m) => m.role === "assistant"
-          ? { role: "assistant" as const, content: m.content, citations: m.citations || undefined,
-              occurrences: m.occurrences || undefined,
-              file_cards: (m.attachments as unknown as FileCard[]) || undefined }
-          : { role: "user" as const, content: m.content,
-              attachments: (m.attachments as unknown as Attachment[]) || undefined }));
+        setMessages(r.messages.map(mapHistory));
       } catch { if (!cancelled) setMessages([]); }
     })();
     return () => { cancelled = true; };
@@ -193,10 +380,24 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
   const ocrMode = modeOverride?.ocr ?? activeSession?.ocr_mode ?? "todos";
   const asrMode = modeOverride?.asr ?? activeSession?.asr_mode ?? "todos";
 
-  // Auto-scroll al último mensaje.
+  // Auto-scroll al último mensaje, solo si el usuario sigue cerca del fondo.
+  // Durante el streaming se salta sin animación (evita saltos en cada token);
+  // al terminar (`loading` false) el desplazamiento es suave.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    if (!stickToBottomRef.current) return;
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: loading ? "auto" : "smooth",
+    });
   }, [messages, loading]);
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const agentOptions = useMemo(() => {
     const f = (menu?.type === "agent" ? menu.filter : "").toLowerCase();
@@ -239,16 +440,32 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
     inputRef.current?.focus();
   }
 
-  async function loadMessages(sid: string) {
+  /** Recarga el historial persistido. `meta` conserva los campos del turno
+   * recién respondido que el listado histórico todavía no devuelve. */
+  async function loadMessages(sid: string, meta?: SendResponse) {
     try {
       const r = await api.get<{ messages: HistoryMessage[] }>(
         `/cases/${caseId}/chats/${sid}/messages`, { limit: "100" });
-      setMessages(r.messages.map((m) => m.role === "assistant"
-        ? { role: "assistant" as const, content: m.content, citations: m.citations || undefined,
-            occurrences: m.occurrences || undefined,
-            file_cards: (m.attachments as unknown as FileCard[]) || undefined }
-        : { role: "user" as const, content: m.content,
-            attachments: (m.attachments as unknown as Attachment[]) || undefined }));
+      const mapped = r.messages.map(mapHistory);
+      if (meta) {
+        for (let i = mapped.length - 1; i >= 0; i--) {
+          if (mapped[i].role !== "assistant") continue;
+          mapped[i] = {
+            ...mapped[i],
+            content: mapped[i].content || meta.answer || "",
+            citations: meta.citations ?? mapped[i].citations,
+            occurrences: meta.occurrences ?? mapped[i].occurrences,
+            file_cards: meta.file_cards ?? mapped[i].file_cards,
+            uncertainties: meta.uncertainties ?? mapped[i].uncertainties,
+            answer_kind: meta.answer_kind,
+            degraded: meta.degraded,
+            occurrences_note: meta.occurrences_note,
+            occurrences_term: meta.occurrences_term,
+          };
+          break;
+        }
+      }
+      setMessages(mapped);
     } catch { /* se conserva lo que haya en pantalla */ }
   }
 
@@ -259,14 +476,38 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
     await sendText(q, attachments);
   }
 
-  async function sendText(q: string, atts: Attachment[] = []) {
+  function stopGeneration() {
+    abortRef.current?.abort();
+  }
+
+  function appendStreamToken(text: string) {
+    setMessages((m) => {
+      const copy = [...m];
+      for (let i = copy.length - 1; i >= 0; i--) {
+        if (copy[i].role === "assistant" && copy[i].streaming) {
+          copy[i] = { ...copy[i], content: copy[i].content + text };
+          return copy;
+        }
+      }
+      copy.push({ role: "assistant", content: text, streaming: true });
+      return copy;
+    });
+  }
+
+  async function sendText(q: string, atts: Attachment[] = [], opts: { appendUser?: boolean } = {}) {
     if (loading || !caseId) return;
     sendingRef.current = true;
     setAttachments([]);
     setMenu(null);
     setPendingCorrection(null);
-    setMessages((m) => [...m, { role: "user", content: q, attachments: atts }]);
+    if (opts.appendUser !== false) {
+      setMessages((m) => [...m, { role: "user", content: q, attachments: atts }]);
+    }
     setLoading(true);
+    setStage({ label: STAGE_LABELS.routing });
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       let sid = sessionId;
       if (!sid) {
@@ -281,39 +522,121 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
         setSessions((ss) => [{ ...created, message_count: created.message_count ?? 0,
                                updated_at: created.updated_at ?? new Date().toISOString() }, ...ss]);
       }
-      const res = await api.post<SendResponse>(`/cases/${caseId}/chats/${sid}/messages`, {
+
+      // `auto` deja que el router del backend elija la tubería; agente y modelo
+      // viajan en CADA mensaje porque el backend los aplica sobre la sesión.
+      const payload = {
         content: q,
         attachments: atts,
-        strategy: "agent",
+        strategy: "auto" as const,
+        agent_id: selectedAgent?.id ?? null,
+        model_id: selectedModel?.id ?? null,
         ocr_mode: ocrMode,
         asr_mode: asrMode,
-      });
-      // El servidor es la fuente de verdad: recarga el historial (ambos mensajes)
-      // en vez de añadirlos a mano (evita que la carga del historial los pise).
-      await loadMessages(sid);
-      if (res.occurrences && res.occurrences.length > 0) {
-        const occ = res.occurrences;
-        setMessages((m) => {
-          const copy = [...m];
-          for (let i = copy.length - 1; i >= 0; i--) {
-            if (copy[i].role === "assistant") { copy[i] = { ...copy[i], occurrences: occ }; break; }
-          }
-          return copy;
-        });
+      };
+
+      let res: SendResponse | null = null;
+      let streamError: string | null = null;
+      let serverError: string | null = null;
+
+      setStreaming(true);
+      try {
+        res = await api.postStream<SendResponse>(
+          `/cases/${caseId}/chats/${sid}/messages/stream`,
+          payload,
+          (event, data) => {
+            const d = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+            if (event === "stage") {
+              const stageName = typeof d.stage === "string" ? d.stage : "";
+              // `stage: done` es el cierre interno del pipeline; el evento `done`
+              // con la respuesta completa llega justo después.
+              if (stageName === "done") return;
+              const label = typeof d.label === "string" && d.label
+                ? d.label
+                : STAGE_LABELS[stageName] || STAGE_FALLBACK;
+              setStage({ label, intent: typeof d.intent === "string" ? d.intent : undefined });
+            } else if (event === "token") {
+              if (typeof d.text === "string" && d.text) appendStreamToken(d.text);
+            } else if (event === "error") {
+              serverError = typeof d.message === "string" && d.message
+                ? d.message
+                : "No se pudo completar la respuesta.";
+              streamError = serverError;
+              controller.abort();
+            }
+          },
+          controller.signal,
+        );
+      } catch (e) {
+        if (controller.signal.aborted && !streamError) {
+          // Cancelado por el usuario: se conserva el texto recibido y se marca.
+          setMessages((m) => m.some((x) => x.streaming)
+            ? m.map((x) => (x.streaming ? { ...x, streaming: false, stopped: true } : x))
+            : [...m, { role: "assistant", content: "", stopped: true }]);
+          return;
+        }
+        // Stream no disponible, incompleto o con error: se descarta el parcial.
+        setMessages((m) => m.filter((x) => !x.streaming));
+        if (!streamError) streamError = e instanceof Error ? e.message : "No se pudo abrir el stream.";
+        res = null;
       }
-      if (res.pending_correction) {
-        setPendingCorrection({ tool: res.pending_correction.tool, summary: res.pending_correction.summary });
+      setStreaming(false);
+
+      if (!res) {
+        // Fallback único al POST normal. El mensaje del usuario no se vuelve a
+        // añadir en pantalla: el historial recargado es la fuente de verdad.
+        setStage({ label: STAGE_FALLBACK });
+        if (serverError) toast.error(serverError);
+        res = await api.post<SendResponse>(`/cases/${caseId}/chats/${sid}/messages`, payload);
+      }
+
+      // Reemplaza el parcial por la respuesta final y después recarga el
+      // historial una sola vez (nunca en cada token).
+      const final = res;
+      setMessages((m) => {
+        const copy = [...m];
+        for (let i = copy.length - 1; i >= 0; i--) {
+          if (copy[i].role === "assistant" && copy[i].streaming) {
+            copy[i] = { role: "assistant", content: final.answer || copy[i].content };
+            break;
+          }
+        }
+        return copy;
+      });
+      await loadMessages(sid, final);
+      if (final.pending_correction) {
+        setPendingCorrection({ tool: final.pending_correction.tool, summary: final.pending_correction.summary });
       }
       setSessions((ss) => ss.map((s) => s.id === sid
         ? { ...s, title: s.title || q.slice(0, 80), message_count: s.message_count + 2 } : s));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error al procesar la pregunta.";
-      setMessages((m) => [...m, { role: "assistant", content: `⚠️ ${msg}` }]);
+      setMessages((m) => [...m.filter((x) => !x.streaming), { role: "assistant", content: msg, error: true }]);
       toast.error(msg);
     } finally {
+      abortRef.current = null;
       sendingRef.current = false;
+      setStreaming(false);
       setLoading(false);
+      setStage(null);
     }
+  }
+
+  async function copyMessage(content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      toast.success("Respuesta copiada");
+    } catch {
+      toast.error("No se pudo copiar");
+    }
+  }
+
+  function regenerate(index: number) {
+    if (loading) return;
+    const previousUser = [...messages.slice(0, index)].reverse().find((m) => m.role === "user");
+    if (!previousUser) return;
+    setMessages((m) => m.slice(0, index));
+    void sendText(previousUser.content, previousUser.attachments || [], { appendUser: false });
   }
 
   function openCitation(c: Citation) {
@@ -368,10 +691,13 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
           <div className="flex items-center justify-between border-b px-4 py-3">
             <h3 className="font-semibold">Chat IA</h3>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" title="Nueva conversación" onClick={() => { setSession(null); setMessages([]); setModeOverride(null); }}>
+              <Button variant="ghost" size="icon" title="Nueva conversación" aria-label="Nueva conversación"
+                onClick={() => { setSession(null); setMessages([]); setModeOverride(null); }}>
                 <Plus className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => setOpen(false)}><X className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" aria-label="Cerrar chat" onClick={() => setOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 
@@ -403,7 +729,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
               )}
               {sessionId && (
                 <Button variant="ghost" size="icon" className="h-8 w-8" title="Archivar conversación"
-                  onClick={() => archiveSession(sessionId)}>
+                  aria-label="Archivar conversación" onClick={() => archiveSession(sessionId)}>
                   <Archive className="h-3.5 w-3.5" />
                 </Button>
               )}
@@ -452,7 +778,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
             </div>
           </div>
 
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (
               <p className="mt-8 text-center text-sm text-muted-foreground">
                 Pregunta sobre el expediente. Escribe <b>/</b> para elegir un agente y <b>@</b> para adjuntar un archivo.
@@ -470,46 +796,37 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                     ))}
                   </div>
                 )}
-                {m.role === "assistant" ? <Markdown text={m.content} /> : <p>{m.content}</p>}
-                {m.uncertainties && m.uncertainties.length > 0 && (
+                {m.role === "assistant" ? (
+                  m.error ? (
+                    <p className="flex items-start gap-1.5 text-destructive">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>{m.content}</span>
+                    </p>
+                  ) : <Markdown text={m.content} />
+                ) : <p>{m.content}</p>}
+                {m.stopped && (
+                  <p className="mt-1 text-xs text-muted-foreground">Generación detenida.</p>
+                )}
+                {m.degraded && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Respuesta parcial: se agotó el tiempo de análisis.
+                  </p>
+                )}
+                {visibleUncertainties(m).length > 0 && (
                   <div className="mt-2 space-y-0.5">
-                    {m.uncertainties.map((u, j) => (
-                      <p key={j} className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                        <AlertTriangle className="h-3 w-3" />{u}
+                    {visibleUncertainties(m).map((u, j) => (
+                      <p key={j} className="flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />{u}
                       </p>
                     ))}
                   </div>
                 )}
                 {m.citations && m.citations.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {m.citations.map((c) => (
-                      <button key={c.citation_id} onClick={() => openCitation(c)}
-                        title={c.source_type === "document_page" ? "Ver página (y corregir OCR)" : "Ver minuto (y corregir transcripción)"}
-                        className="inline-flex max-w-full items-center gap-1 rounded border bg-background/60 px-1.5 py-0.5 text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
-                        {c.source_type === "document_page"
-                          ? <><FileText className="h-3 w-3 shrink-0" /><span className="min-w-0 truncate">{c.filename} p.{c.page}</span>{modeBadge(c)}</>
-                          : <><Video className="h-3 w-3 shrink-0" /><span className="min-w-0 truncate">{c.filename} {c.start_ms != null ? mmss(c.start_ms) : ""}{c.speaker ? ` · ${c.speaker}` : ""}</span>{modeBadge(c)}</>}
-                      </button>
-                    ))}
-                  </div>
+                  <CitationList citations={m.citations} onOpen={openCitation} />
                 )}
-                {m.occurrences && m.occurrences.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Aparece en {m.occurrences.length} ubicacion{m.occurrences.length === 1 ? "" : "es"}:
-                    </p>
-                    <div className="mt-1 max-h-40 space-y-0.5 overflow-y-auto pr-1">
-                      {m.occurrences.map((c, k) => (
-                        <button key={`${c.citation_id}-${k}`} onClick={() => openCitation(c)}
-                          className="block w-full truncate rounded px-1 text-left text-xs text-muted-foreground underline decoration-dotted hover:text-foreground">
-                          {c.source_type === "document_page"
-                            ? `${c.filename} · página ${c.page}${c.folio ? ` (folio ${c.folio})` : ""}`
-                            : `${c.filename} · ${c.start_ms != null ? mmss(c.start_ms) : ""}${c.speaker ? ` · ${c.speaker}` : ""}`}
-                          {modeBadge(c)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                {m.answer_kind !== "insufficient" && m.occurrences && m.occurrences.length > 0 && (
+                  <Occurrences items={m.occurrences} term={m.occurrences_term}
+                    note={m.occurrences_note} onOpen={openCitation} />
                 )}
                 {m.file_cards && m.file_cards.length > 0 && (
                   <div className="mt-2 space-y-1.5">
@@ -522,21 +839,46 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                             {card.page_count ? `${card.page_count} págs · ` : ""}{card.duration_ms ? `${mmss(card.duration_ms)} · ` : ""}{formatSize(card.size_bytes)}
                           </p>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver" onClick={() => viewCard(card)}>
-                          <Eye className="h-3.5 w-3.5" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver"
+                          aria-label={`Ver ${card.name}`} onClick={() => viewCard(card)}>
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Descargar" onClick={() => download(card)}>
-                          <Download className="h-3.5 w-3.5" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Descargar"
+                          aria-label={`Descargar ${card.name}`} onClick={() => download(card)}>
+                          <Download className="h-3.5 w-3.5" aria-hidden="true" />
                         </Button>
                       </div>
                     ))}
+                  </div>
+                )}
+                {m.role === "assistant" && !m.streaming && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1 border-t pt-1.5">
+                    {!!m.content && (
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                        title="Copiar respuesta" aria-label="Copiar respuesta" onClick={() => copyMessage(m.content)}>
+                        <Copy className="mr-1 h-3 w-3" aria-hidden="true" /> Copiar
+                      </Button>
+                    )}
+                    {!m.error && (
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                        title="Regenerar respuesta" aria-label="Regenerar respuesta" onClick={() => regenerate(i)}>
+                        <RotateCcw className="mr-1 h-3 w-3" aria-hidden="true" /> Regenerar
+                      </Button>
+                    )}
+                    {m.error && (
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                        title="Reintentar" aria-label="Reintentar" onClick={() => regenerate(i)}>
+                        <RefreshCw className="mr-1 h-3 w-3" aria-hidden="true" /> Reintentar
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
             ))}
             {loading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />Buscando en el expediente…
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+                <span aria-live="polite">{stage?.label || STAGE_FALLBACK}</span>
               </div>
             )}
           </div>
@@ -563,16 +905,23 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
               <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 {selectedAgent && (
                   <span className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-1 text-xs">
-                    <Bot className="h-3.5 w-3.5" />{selectedAgent.name}
-                    <button onClick={() => setSelectedAgent(null)} className="ml-1 text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
+                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />{selectedAgent.name}
+                    <button type="button" onClick={() => setSelectedAgent(null)}
+                      aria-label={`Quitar agente ${selectedAgent.name}`}
+                      className="ml-1 rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background">
+                      <X className="h-3 w-3" aria-hidden="true" />
+                    </button>
                   </span>
                 )}
                 {attachments.map((a) => (
                   <span key={a.id} className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-1 text-xs">
                     {a.kind === "document" ? <FileText className="h-3.5 w-3.5" /> : <Video className="h-3.5 w-3.5" />}
                     <span className="max-w-40 truncate">{a.name}</span>
-                    <button onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
-                      className="ml-1 text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
+                    <button type="button" aria-label={`Quitar ${a.name}`}
+                      onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
+                      className="ml-1 rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background">
+                      <X className="h-3 w-3" aria-hidden="true" />
+                    </button>
                   </span>
                 ))}
               </div>
@@ -602,7 +951,20 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                 placeholder="Escribe tu pregunta… (/ agentes, @ archivos)"
                 className="flex-1"
               />
-              <Button type="submit" size="icon" disabled={loading}><Send className="h-4 w-4" /></Button>
+              <Button
+                type={streaming ? "button" : "submit"}
+                size="icon"
+                aria-label={streaming ? "Detener la respuesta" : loading ? "Procesando la respuesta" : "Enviar pregunta"}
+                title={streaming ? "Detener la respuesta" : loading ? "Procesando la respuesta" : "Enviar pregunta"}
+                disabled={loading ? !streaming : (!input.trim() && attachments.length === 0)}
+                onClick={streaming ? stopGeneration : undefined}
+              >
+                {streaming
+                  ? <Square className="h-4 w-4" aria-hidden="true" />
+                  : loading
+                    ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    : <Send className="h-4 w-4" aria-hidden="true" />}
+              </Button>
             </form>
             <p className="mt-2 text-xs text-muted-foreground">/ para agentes · @ para archivos (PDFs y videos) · las citas y archivos son clicables</p>
           </div>

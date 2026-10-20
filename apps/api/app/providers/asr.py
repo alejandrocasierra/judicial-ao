@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import Any
 
 import soundfile as sf
-from faster_whisper import WhisperModel
 
 from app.core.config import get_settings
 
@@ -121,7 +120,8 @@ def _mem_limit_bytes() -> int:
             v = Path(p).read_text().strip()
             if v and v != "max":
                 return int(v)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            log.debug("no se pudo leer el límite de memoria en %s: %s", p, exc)
             continue
     return 0
 
@@ -147,7 +147,8 @@ class _WhisperChild:
         for line in stream:
             try:
                 q.put(json.loads(line))
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                log.debug("línea JSON inválida del hijo ASR: %s", exc)
                 continue
         q.put(None)  # EOF: el hijo cerró stdout (murió o salió)
 
@@ -176,7 +177,7 @@ class _WhisperChild:
                 msg = self._q.get(timeout=5)
             except queue.Empty:
                 if self._proc.poll() is not None:
-                    raise _ChildDied(f"el hijo murió cargando el modelo (exit {self._proc.returncode})")
+                    raise _ChildDied(f"el hijo murió cargando el modelo (exit {self._proc.returncode})") from None
                 continue
             if msg is None:
                 raise _ChildDied("el hijo cerró stdout cargando el modelo")
@@ -196,9 +197,9 @@ class _WhisperChild:
             except queue.Empty:
                 silent += 5
                 if self._proc is not None and self._proc.poll() is not None:
-                    raise _ChildDied(f"el hijo salió con código {self._proc.returncode} (OOM/SIGKILL)")
+                    raise _ChildDied(f"el hijo salió con código {self._proc.returncode} (OOM/SIGKILL)") from None
                 if silent > self.STALL_SECONDS:
-                    raise _ChildDied("el hijo dejó de responder (stall)")
+                    raise _ChildDied("el hijo dejó de responder (stall)") from None
                 continue
             if msg is None:
                 raise _ChildDied("EOF: el hijo cerró stdout (murió)")
@@ -215,8 +216,8 @@ class _WhisperChild:
         try:
             if self._proc is not None and self._proc.poll() is None:
                 self._send({"type": "stop"})
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            log.debug("no se pudo enviar stop al hijo ASR: %s", exc)
         if self._proc is not None:
             try:
                 self._proc.wait(timeout=10)
@@ -324,22 +325,23 @@ class WhisperASR:
                     offset_ms = int(round(start_s * 1000))
                     segs: list[dict[str, Any]] = []
 
-                    def on_segment(d: dict, frac: float, _off=offset_ms, _ds=dur_s) -> None:
+                    def on_segment(d: dict, frac: float, _off=offset_ms, _ds=dur_s,
+                                   _segs=segs, _done=done_s) -> None:
                         if _off:
                             d["start_ms"] += _off
                             d["end_ms"] += _off
                             for w in d.get("words", []):
                                 w["start_ms"] += _off
                                 w["end_ms"] += _off
-                        segs.append(d)
+                        _segs.append(d)
                         if log_live:
                             log.info("ASR [%s–%s] (conf %.2f) %s", _fmt_ms(d["start_ms"]),
                                      _fmt_ms(d["end_ms"]), d["confidence"], d["text"])
                         if progress_cb and total_s:
                             try:
-                                progress_cb(min(0.999, (done_s + frac * _ds) / total_s))
-                            except Exception:  # noqa: BLE001
-                                pass
+                                progress_cb(min(0.999, (_done + frac * _ds) / total_s))
+                            except Exception as exc:  # noqa: BLE001
+                                log.debug("progress_cb del ASR falló: %s", exc)
 
                     try:
                         child.transcribe_chunk(wav_path, int(start_s * sr), int(dur_s * sr),
@@ -380,8 +382,8 @@ class WhisperASR:
                 if progress_cb:
                     try:
                         progress_cb(1.0)
-                    except Exception:  # noqa: BLE001
-                        pass
+                    except Exception as exc:  # noqa: BLE001
+                        log.debug("progress_cb final del ASR falló: %s", exc)
                 return out
             finally:
                 child.close()

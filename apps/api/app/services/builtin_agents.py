@@ -15,7 +15,7 @@ BUILTIN_AGENT_NAME = "Agente jurídico (anti-alucinación)"
 
 # Versión por defecto del system prompt del agente jurídico. Al cambiarla, la nueva versión se
 # siembra en organizaciones que aún no tienen agentes; las existentes conservan su prompt editable.
-DEFAULT_AGENT_VERSION = 7
+DEFAULT_AGENT_VERSION = 8
 
 
 def default_agent_prompt(locale: str = "es") -> str:
@@ -144,7 +144,7 @@ def ensure_asr_context_agent(conn: Connection, org_id: str, user_id: str | None)
         return
     conn.execute(
         text("""INSERT INTO agents (organization_id, name, system_prompt, skills, created_by, is_system, kind)
-                VALUES (:o, :n, :sp, '[]', :u, true, 'system')"""),
+                VALUES (:o, :n, :sp, '{}', :u, true, 'system')"""),
         {"o": org_id, "n": ASR_CONTEXT_AGENT_NAME, "sp": ASR_CONTEXT_DEFAULT_PROMPT, "u": user_id},
     )
 

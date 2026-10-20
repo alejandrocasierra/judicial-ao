@@ -22,15 +22,14 @@ import os
 import pathlib
 import sys
 import time
-from uuid import UUID
 
 # Cargar .env
 if not os.environ.get("JUDICIAL_ADMIN_PASSWORD"):
     try:
         from dotenv import load_dotenv
         load_dotenv(pathlib.Path(__file__).resolve().parents[1] / ".env")
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        print(f"[warn] no se pudo cargar .env: {exc}")
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "apps" / "api"))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))

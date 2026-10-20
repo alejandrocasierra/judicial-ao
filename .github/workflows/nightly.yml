@@ -1,0 +1,55 @@
+name: nightly-chat-quality
+on:
+  schedule:
+    - cron: "0 3 * * *"   # 03:00 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-and-judge:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements/dev.txt}
+      - run: pip install -r requirements/dev.txt
+      - run: python3 scripts/gen_env.py --out .env.test --set APP_ENV=test
+             --set POSTGRES_DB=judicial_test --set POSTGRES_SUPERUSER_PASSWORD=ci-only-superuser
+             --set STORAGE_LOCAL_ROOT=var/test-storage --set RATE_LIMIT_BACKEND=memory
+             --set CELERY_TASK_ALWAYS_EAGER=true
+      - name: Capa A (determinista, sin DB)
+        run: python3 scripts/eval_offline.py
+      - name: Calibración de grounding y κ del juez
+        run: |
+          python3 scripts/calibrate_grounding.py
+          python3 scripts/judge_agreement.py --min-kappa 0.6
+      - name: Matriz offline (cassettes / FakeLLM)
+        run: python3 scripts/eval_matrix.py --models fake:offline --offline --golden evals/golden --out var/matrix-offline.json
+      - name: Unitarias
+        run: SKIP_DB_RESET=1 python3 -m pytest -m unit -q
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-quality
+          path: var/*.json
+  real-matrix:
+    # Solo corre si el repositorio tiene el secreto; si no, el job se omite sin fallar.
+    if: ${{ secrets.GEMINI_API_KEY != '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements/dev.txt}
+      - run: pip install -r requirements/dev.txt
+      - run: python3 scripts/gen_env.py --out .env.test --set APP_ENV=test
+             --set POSTGRES_DB=judicial_test --set POSTGRES_SUPERUSER_PASSWORD=ci-only-superuser
+             --set STORAGE_LOCAL_ROOT=var/test-storage --set RATE_LIMIT_BACKEND=memory
+             --set CELERY_TASK_ALWAYS_EAGER=true
+      - name: Matriz real Gemini (si hay expediente configurado en EVAL_CASE_ID)
+        if: ${{ vars.EVAL_CASE_ID != '' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EVAL_CASE_ID: ${{ vars.EVAL_CASE_ID }}
+        run: |
+          python3 scripts/eval_matrix.py --models gemini:gemini-flash-lite-latest \
+            --golden evals/golden --case-id "$EVAL_CASE_ID" --out var/matrix-real.json

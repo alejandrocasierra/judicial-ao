@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Un turno del Chat IA, paso a paso",
+    "subtitle": "Del mensaje del abogado a la respuesta citada (y por qué las «ubicaciones» van por otro canal)",
+    "output": ".archify/architecture-chat-ia-20261019-141921/chat-ia-turno.html",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [1080, 650],
+    "repository": {
+      "url": "https://github.com/alejandrocasierra/judicial-ao",
+      "provider": "github",
+      "revision": "86183341d2f9c86420eb75e569d370579ed17c73"
+    }
+  },
+  "participants": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "Abogado/a",
+      "sublabel": "pregunta",
+      "icon": "person",
+      "sources": [
+        { "path": "apps/web/src/components/chat-widget.tsx", "line": 255, "end_line": 260, "label": "send" }
+      ]
+    },
+    {
+      "id": "chat",
+      "type": "frontend",
+      "label": "Chat IA",
+      "sublabel": "sesión · render",
+      "sources": [
+        { "path": "apps/web/src/components/chat-widget.tsx", "line": 262, "end_line": 317, "label": "sendText" }
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "API /chats",
+      "sublabel": "persiste y orquesta",
+      "sources": [
+        { "path": "apps/api/app/routers/chats.py", "line": 195, "end_line": 307, "label": "send_message" }
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "backend",
+      "label": "Agente ReAct",
+      "sublabel": "case_tools + síntesis",
+      "sources": [
+        { "path": "apps/api/app/services/agent.py", "line": 106, "end_line": 234, "label": "run_agent_query" }
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "chunks · pgvector · grafo",
+      "sources": [
+        { "path": "apps/api/db/sql/010_schema.sql", "line": 470, "end_line": 505, "label": "chunks y grafo" }
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "LLM",
+      "sublabel": "modelo de la sesión",
+      "sources": [
+        { "path": "apps/api/app/providers/llm.py", "line": 126, "end_line": 152, "label": "get_llm_for_model" }
+      ]
+    }
+  ],
+  "segments": [
+    { "from": 150, "to": 236, "label": "1 · Contexto" },
+    { "from": 240, "to": 406, "label": "2 · Recuperar y razonar" },
+    { "from": 410, "to": 545, "label": "3 · Verificar y responder" }
+  ],
+  "messages": [
+    { "id": "pregunta", "from": "user", "to": "chat", "y": 160, "label": "¿Qué evidencia hay sobre «pagos»?", "variant": "emphasis" },
+    { "id": "post-mensaje", "from": "chat", "to": "api", "y": 188, "label": "POST /messages" },
+    { "id": "carga-sesion", "from": "api", "to": "db", "y": 216, "label": "sesión + historial" },
+    { "id": "invoca-agente", "from": "api", "to": "agent", "y": 244, "label": "pregunta + hints + @" },
+    { "id": "prompt-agente", "from": "agent", "to": "llm", "y": 272, "label": "system + tools", "variant": "emphasis" },
+    { "id": "tool-call", "from": "llm", "to": "agent", "y": 300, "label": "tool_call (JSON)", "variant": "return" },
+    { "id": "ejecuta-tool", "from": "agent", "to": "db", "y": 328, "label": "search_case / graph_query" },
+    { "id": "consulta-bd", "from": "db", "to": "agent", "y": 356, "label": "E1…Ek con página o minuto", "variant": "return" },
+    { "id": "sintesis", "from": "agent", "to": "llm", "y": 384, "label": "síntesis answer_question", "variant": "emphasis" },
+    { "id": "claims", "from": "llm", "to": "agent", "y": 412, "label": "claims + citas", "variant": "return" },
+    { "id": "valida", "from": "agent", "to": "api", "y": 440, "label": "claims válidos", "variant": "return" },
+    { "id": "locate", "from": "api", "to": "db", "y": 468, "label": "locate(k=300) → 6 filas", "variant": "dashed" },
+    { "id": "respuesta", "from": "api", "to": "chat", "y": 496, "label": "answer + citations + occurrences", "variant": "return" },
+    { "id": "render", "from": "chat", "to": "user", "y": 524, "label": "render (sin streaming)", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "chat", "from": 160, "to": 532, "type": "frontend" },
+    { "participant": "api", "from": 188, "to": 504, "type": "backend" },
+    { "participant": "agent", "from": 244, "to": 448, "type": "backend" },
+    { "participant": "db", "from": 206, "to": 230, "type": "database" },
+    { "participant": "db", "from": 328, "to": 365, "type": "database" },
+    { "participant": "db", "from": 468, "to": 480, "type": "database" },
+    { "participant": "llm", "from": 272, "to": 308, "type": "external" },
+    { "participant": "llm", "from": 384, "to": 420, "type": "external" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "La regla que manda",
+      "items": [
+        "Sin evidencia recuperada no se llama al modelo.",
+        "Un claim sin cita válida, o con una cifra que no aparece en la evidencia, se descarta.",
+        "El juez semántico (otra llamada al LLM) mueve lo dudoso a revisión humana.",
+        "Si no quedan claims, la respuesta es «No se encontró evidencia»."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "La captura de «pagos»",
+      "items": [
+        "El término que se ubica no es la pregunta: locate() usa «evidencia pagos».",
+        "En documentos las palabras se combinan con AND; en transcripciones, con OR.",
+        "Por eso 6 segmentos del mismo audio cuentan como 6 ubicaciones.",
+        "answer y occurrences son dos canales: uno puede decir «sin evidencia» y el otro listar 6."
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Dónde entran las mejoras",
+      "items": [
+        "Antes del agente: reescritura de consulta con el historial.",
+        "Entre recuperar y sintetizar: re-ranking y multi-query.",
+        "Después de validar: compositor en prosa que no añade hechos.",
+        "En paralelo: stream de etapas y claims para que la espera sea legible."
+      ]
+    }
+  ]
+}

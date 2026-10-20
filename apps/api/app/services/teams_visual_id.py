@@ -272,8 +272,8 @@ def extract_active_speaker_timeline(
                 if progress_cb:
                     try:
                         progress_cb(i + 1, total)
-                    except Exception:  # noqa: BLE001 — el callback no debe tumbar el pipeline
-                        pass
+                    except Exception as exc:  # noqa: BLE001 — el callback no debe tumbar el pipeline
+                        log.debug("progress_cb de identificación visual falló: %s", exc)
             log.info("Identificación visual: %d OCR realizados de %d frames (%d muestras de hablante)",
                      ocr_calls, len(frames), len(results))
         return results

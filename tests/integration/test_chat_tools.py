@@ -1,5 +1,5 @@
-"""IT-CT — chat IA: adjuntos "@" reales, tools de lectura y correcciones OCR/ASR
-desde la capa case_tools contra PostgreSQL real (BD → reviews → pgvector → grafo)."""
+"""IT-CT â€” chat IA: adjuntos "@" reales, tools de lectura y correcciones OCR/ASR
+desde la capa case_tools contra PostgreSQL real (BD â†’ reviews â†’ pgvector â†’ grafo)."""
 from __future__ import annotations
 
 import uuid
@@ -62,7 +62,7 @@ def test_it_ct_03_search_transcript_by_time_range(client, auth, ids, org_ids):
 
 
 # ---------------------------------------------------------------------------
-# Corrección OCR desde el chat (preview → confirm → propagación)
+# Corrección OCR desde el chat (preview â†’ confirm â†’ propagación)
 # ---------------------------------------------------------------------------
 
 def test_it_ct_04_correct_ocr_page_via_tool_propagates(client, auth, ids, org_ids, owner_db):
@@ -74,7 +74,7 @@ def test_it_ct_04_correct_ocr_page_via_tool_propagates(client, auth, ids, org_id
                            "WHERE document_id = %s AND page_number = %s", (doc_id, n))[0]
     chunks_before = fetch(owner_db, "SELECT count(*) FROM chunks WHERE document_id = %s", (doc_id,))[0][0]
     new_text = f"Texto corregido desde el chat {uuid.uuid4().hex[:8]}."
-    ctx = case_tools.ToolContext(org_id=org_ids["alfa"], actor_id=actor)
+    ctx = case_tools.ToolContext(org_id=org_ids["alfa"], actor_id=actor, allow_write=True)
     try:
         # 1) Sin confirmar: solo vista previa, la BD no cambia.
         with tx(org_ids["alfa"], actor) as conn:
@@ -123,7 +123,7 @@ def test_it_ct_05_correct_transcript_segment_via_tool(client, auth, ids, org_ids
     snap = fetch(owner_db, "SELECT text, confidence, needs_review FROM transcript_segments WHERE id = %s",
                  (seg["id"],))[0]
     new_text = f"Intervención corregida desde el chat {uuid.uuid4().hex[:8]}."
-    ctx = case_tools.ToolContext(org_id=org_ids["alfa"], actor_id=actor)
+    ctx = case_tools.ToolContext(org_id=org_ids["alfa"], actor_id=actor, allow_write=True)
     try:
         with tx(org_ids["alfa"], actor) as conn:
             preview = case_tools.execute(conn, ids["pago"], "correct_transcript_segment",
@@ -223,7 +223,7 @@ def test_it_ct_10_document_tools_accept_filename(client, auth, ids, org_ids):
 
 
 def test_it_ct_11_rename_speaker_via_tool_propagates(client, auth, ids, org_ids, owner_db):
-    """El chat puede renombrar a un hablante: preview → confirm → BD + reviews + pgvector."""
+    """El chat puede renombrar a un hablante: preview â†’ confirm â†’ BD + reviews + pgvector."""
     h = auth("abogada.alfa")
     actor = client.get("/v1/auth/me", headers=h).json()["id"]
     spk = ids["speakers"]["SPK-02"]
@@ -231,7 +231,7 @@ def test_it_ct_11_rename_speaker_via_tool_propagates(client, auth, ids, org_ids,
     snap = fetch(owner_db, "SELECT display_name, version FROM speakers WHERE id = %s", (spk["id"],))[0]
     chunks_before = fetch(owner_db, "SELECT count(*) FROM chunks WHERE media_id = %s", (mid,))[0][0]
     new_name = f"Hablante Test {uuid.uuid4().hex[:6]}"
-    ctx = case_tools.ToolContext(org_id=org_ids["alfa"], actor_id=actor)
+    ctx = case_tools.ToolContext(org_id=org_ids["alfa"], actor_id=actor, allow_write=True)
     try:
         # 1) Sin confirmar: preview y la BD no cambia.
         with tx(org_ids["alfa"], actor) as conn:
@@ -314,10 +314,11 @@ def test_it_ct_14_list_people_by_role_prefers_confirmed_roles(client, auth, ids,
     try:
         with tx(org_ids["alfa"], actor) as conn:
             items = case_tools.execute(conn, ids["pago"], "list_people_by_role", {"role": "juez"},
-                                       ctx=case_tools.ToolContext(org_id=org_ids["alfa"], actor_id=actor))
+                                       ctx=case_tools.ToolContext(org_id=org_ids["alfa"], actor_id=actor, allow_write=True))
         assert items and all(it.get("confirmed") for it in items)
         assert any(it.get("speaker_id") == sid and it.get("speaker_role") == "juez" for it in items)
     finally:
         with owner_db.cursor() as cur:
             cur.execute("DELETE FROM speakers WHERE id = %s", (sid,))
         owner_db.commit()
+

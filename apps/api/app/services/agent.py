@@ -12,38 +12,74 @@ from sqlalchemy.engine import Connection
 from app.core.config import get_settings
 from app.core.i18n import t
 from app.providers.llm import get_llm
-from app.services import agent_tools, answering, case_tools, verification
+from app.services import agent_tools, answering, case_tools, skills, verification
 
 log = logging.getLogger(__name__)
 MAX_STEPS = 5
 
 
-def _system_prompt(agent_prompt: str | None = None) -> str:
+def _read_prompt(versioned: str, fallback: str) -> str:
+    """Carga `versioned` si existe; si no, la versión anterior (contrato §1.13)."""
     s = get_settings()
-    raw = (s.path(s.PROMPTS_DIR) / "agent_system.v7.md").read_text(encoding="utf-8")
-    base = raw.split("---", 2)[2].strip()
+    path = s.path(s.PROMPTS_DIR)
+    raw_path = path / versioned
+    if not raw_path.exists():
+        raw_path = path / fallback
+    return raw_path.read_text(encoding="utf-8").split("---", 2)[2].strip()
+
+
+def _history_text(turns: list[dict[str, Any]]) -> str:
+    """Historial con presupuesto de caracteres, conservando los turnos más recientes."""
+    max_chars = get_settings().CHAT_HISTORY_MAX_CHARS
+    lines: list[str] = []
+    used = 0
+    for turn in reversed(turns):
+        content = str(turn.get("content", ""))
+        # Un turno nunca puede comerse todo el presupuesto.
+        content = content[: max(200, max_chars // 3)]
+        role = "USER" if turn.get("role") == "user" else "ASSISTANT"
+        line = f"{role}: {content}"
+        if lines and used + len(line) + 1 > max_chars:
+            break
+        lines.append(line)
+        used += len(line) + 1
+    return "\n".join(reversed(lines))
+
+
+def _system_prompt(agent_prompt: str | None = None,
+                   parameters: dict[str, Any] | None = None) -> str:
+    base = _read_prompt("agent_system.v8.md", "agent_system.v7.md")
     # El system prompt del agente configurado (+ sus skills) se antepone al contrato de tools/formato.
-    return f"{agent_prompt.strip()}\n\n{base}" if agent_prompt else base
+    parts = [agent_prompt.strip()] if agent_prompt else []
+    if parameters:
+        lines = "\n".join(f"- {key}: {value}" for key, value in parameters.items())
+        parts.append(f"<skill_parameters>\n{html.escape(lines, quote=False)}\n</skill_parameters>")
+    parts.append(base)
+    return "\n\n".join(parts)
+
+
+def _emit(emit, event: str, data: dict | None = None) -> None:
+    """Un emisor defectuoso jamás debe romper el turno."""
+    if emit is None:
+        return
+    try:
+        emit(event, data or {})
+    except Exception:  # noqa: BLE001
+        log.debug("emit %s failed", event, exc_info=True)
 
 
 def load_agent_prompt(conn: Connection, agent_id: str) -> str | None:
     """System prompt efectivo del agente: el suyo + el de cada skill enlazada.
 
-    Antes las skills eran data muerta (se guardaban ids pero nunca se leían);
-    aquí se fusionan al prompt en el orden en que fueron enlazadas."""
-    from app.core.db import one, rows
-    a = one(conn, "SELECT system_prompt, skills FROM agents WHERE id = :i", i=agent_id)
-    if not a:
-        return None
-    parts = [a["system_prompt"].strip()] if a["system_prompt"] and a["system_prompt"].strip() else []
-    skill_ids = a.get("skills") or []
-    if skill_ids:
-        marks = ",".join(f":s{i}" for i in range(len(skill_ids)))
-        params = {f"s{i}": sid for i, sid in enumerate(skill_ids)}
-        prompts = rows(conn, "SELECT name, system_prompt FROM skills WHERE id IN (/*MARKS*/)".replace("/*MARKS*/", marks), **params)
-        parts += [f"[Skill: {p['name']}]\n{p['system_prompt'].strip()}"
-                  for p in prompts if p["system_prompt"] and p["system_prompt"].strip()]
-    return "\n\n".join(parts) or None
+    Se mantiene por compatibilidad; el orden y los allowlists viven en
+    `skills.load_config`."""
+    return skills.load_config(conn, agent_id)["prompt"]
+
+
+def load_agent_config(conn: Connection, agent_id: str | None) -> dict[str, Any]:
+    """Config efectiva (prompt, allowed_tools, parameters) del agente."""
+    return skills.load_config(conn, agent_id)
+
 
 
 def _parse_turn(raw: str) -> dict[str, Any]:
@@ -58,16 +94,25 @@ def _parse_turn(raw: str) -> dict[str, Any]:
 
 
 def _format_tool_result(tool: str, result: list[dict[str, Any]]) -> str:
-    lines = [f"RESULT of {tool}:"]
+    """Resultado de tool delimitado y escapado (anti prompt-injection).
+
+    El texto del expediente es datos, no instrucciones: cualquier `<tool_result>`
+    o etiqueta de control que venga en el OCR/ASR se escapa y queda dentro de
+    un único bloque delimitado."""
+    lines = [f"RESULT of {html.escape(str(tool), quote=False)}:"]
     for it in result:
-        lines.append(f'- {it["handle"]} ({it.get("source_type")}): {_evidence_hint(it)}')
-    return "\n".join(lines)
+        handle = html.escape(str(it.get("handle", "")), quote=False)
+        source = html.escape(str(it.get("source_type", "")), quote=False)
+        hint = html.escape(_evidence_hint(it), quote=False)
+        lines.append(f"- {handle} ({source}): {hint}")
+    return "<tool_result>\n" + "\n".join(lines) + "\n</tool_result>"
 
 
 def _evidence_hint(it: dict[str, Any]) -> str:
     """Describe una evidencia de forma que el modelo vea minuto/hablante/página/filename.
     Sin esto, el modelo no sabía en qué minuto ni quién lo dijo aunque la cita sí lo mostraba."""
-    text = str(it.get("text", ""))[:400]
+    max_chars = get_settings().AGENT_TOOL_RESULT_MAX_CHARS
+    text = str(it.get("text", ""))[:max_chars]
     person = ""
     if it.get("person_name"):
         person = f" · {it.get('role') or 'rol'}: {it['person_name']} ({it.get('mentions')} menciones)"
@@ -110,8 +155,11 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                     history_turns: list[dict[str, Any]] | None = None,
                     hints: list[str] | None = None,
                     seed_evidence: list[dict[str, Any]] | None = None,
-                    ocr_mode: str | None = None, asr_mode: str | None = None) -> dict[str, Any]:
-    """Ejecuta el agente: tool loop → síntesis → verificación semántica.
+                    ocr_mode: str | None = None, asr_mode: str | None = None,
+                    emit=None, allowed_tools: set[str] | None = None,
+                    verify: bool = True, max_steps: int = MAX_STEPS,
+                    parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Ejecuta el agente: tool loop → síntesis → (opcional) verificación semántica.
 
     `agent_prompt` permite que un agente configurado en el panel dirija la consulta
     (su system prompt + skills se anteponen al contrato de herramientas y formato).
@@ -122,24 +170,28 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
     (correcciones con reviews + auditoría).
     `history_turns` (chat multi-turn): últimos K turnos [{role, content}] que dan
     contexto a follow-ups ("¿y quién más estaba?").
+    `emit` recibe eventos de etapa/tool sin poder romper el turno.
+    `allowed_tools` es el allowlist efectivo de las skills (None = sin restricción).
+    `max_steps` acota el bucle ReAct (ANALYSIS usa 3 desde el chat).
     """
     agent_tools.reset_handles()
     ctx = case_tools.ToolContext(org_id=org_id, actor_id=actor_id, locale=locale,
                                  attachments=attachments or [],
                                  ocr_mode=ocr_mode, asr_mode=asr_mode)
     case_tools.set_context(ctx)
+    tool_calls: list[dict[str, Any]] = []
+    degraded = False
     # NOTA: las tools de escritura difieren la propagación (pgvector/grafo/jobs) en
     # ctx.post_commit; se devuelve en el resultado ("post_commit") y el llamador la
     # ejecuta con case_tools.drain_actions() DESPUÉS de confirmar su transacción.
     try:
-        system = _system_prompt(agent_prompt)
+        system = _system_prompt(agent_prompt, parameters)
         history = ""
         if hints:
             block = "\n".join(f"- {h}" for h in hints)
             history += f"<context_hints>\n{html.escape(block, quote=False)}\n</context_hints>\n"
         if history_turns:
-            convo = "\n".join(f"{'USER' if t.get('role') == 'user' else 'ASSISTANT'}: "
-                              f"{str(t.get('content', ''))[:800]}" for t in history_turns)
+            convo = _history_text(history_turns)
             history += (f"<conversation_history>\n{html.escape(convo, quote=False)}\n"
                         "</conversation_history>\nThe conversation above is context; "
                         "answer the NEW question below.\n")
@@ -154,23 +206,41 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
         corrections_done: list[dict[str, Any]] = []
         llm = llm or get_llm()
 
-        for step in range(MAX_STEPS):
+        steps = max(1, int(max_steps or MAX_STEPS))
+        for step in range(steps):
             user = history + "\nWhat do you do next?"
-            result = llm.complete(system, user)
+            try:
+                result = llm.complete(system, user)
+            except Exception as exc:  # noqa: BLE001 — proveedor caído: degradar
+                log.warning("agent llm failed: %s", exc)
+                degraded = True
+                break
             turn = _parse_turn(result.text)
             log.debug("agent step %s turn=%s", step, turn)
             if not turn:
+                degraded = True
                 break
             if turn.get("done"):
                 break
             tool = turn.get("tool")
             args = turn.get("arguments") or {}
             if not tool or not isinstance(args, dict):
+                degraded = True
                 break
-            try:
-                result_items = agent_tools.execute(conn, case_id, tool, args)
-            except Exception as exc:
-                result_items = [{"handle": "ERR", "source_type": "error", "text": f"Error ejecutando {tool}: {exc}"}]
+            allowed, reason = skills.validate_tool(str(tool), allowed_tools)
+            if not allowed:
+                result_items = [{"handle": "ERR", "source_type": "error", "text": reason or "tool not allowed"}]
+                degraded = True
+                tool_calls.append({"name": str(tool), "arguments": args, "allowed": False})
+            else:
+                tool_calls.append({"name": str(tool), "arguments": args, "allowed": True})
+                _emit(emit, "tool", {"name": str(tool), "step": step + 1})
+                try:
+                    result_items = agent_tools.execute(conn, case_id, tool, args)
+                except Exception as exc:  # noqa: BLE001
+                    result_items = [{"handle": "ERR", "source_type": "error",
+                                     "text": f"Error ejecutando {tool}: {exc}"}]
+                    degraded = True
             # Correcciones: guardamos tool+argumentos exactos para que el servidor
             # pueda aplicarlas de forma determinista cuando el usuario confirme.
             for it in result_items:
@@ -183,6 +253,9 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
             evidence.extend(result_items)
             history += f"\nACTION: {tool}({json.dumps(args, ensure_ascii=False)})\n"
             history += _format_tool_result(tool, result_items) + "\n"
+        else:
+            # Se agotaron los pasos sin un turno `done`: el resultado es parcial.
+            degraded = True
 
         evidence = _dedupe_evidence(evidence)
         # Tarjetas de archivo (get_file/list_case_files): no son evidencia citable;
@@ -193,7 +266,8 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
         if not primary_evidence:
             return {"answer": t("messages.insufficient_evidence", locale), "claims": [], "citations": [],
                     "unsupported_claims": [], "uncertainties": [t("messages.insufficient_evidence", locale)],
-                    "tool_calls": [], "file_cards": file_cards, "post_commit": list(ctx.post_commit),
+                    "tool_calls": tool_calls, "degraded": degraded,
+                    "file_cards": file_cards, "post_commit": list(ctx.post_commit),
                     "corrections_pending": corrections_pending, "corrections_done": corrections_done,
                     "evidence_count": 0}
         evidence = primary_evidence
@@ -201,19 +275,37 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
         # Síntesis final con el prompt de respuesta RAG existente
         system, prompt_id, prompt_version = answering.system_prompt(locale)
         user = answering.build_user_prompt(question, evidence)
-        result = llm.complete(system, user)
+        try:
+            result = llm.complete(system, user)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("agent synthesis failed: %s", exc)
+            return {"answer": t("messages.insufficient_evidence", locale), "claims": [], "citations": [],
+                    "unsupported_claims": [], "uncertainties": [], "schema_valid": False,
+                    "raw_text": "", "prompt_id": "", "prompt_version": "",
+                    "provider": getattr(llm, "name", ""), "model": getattr(llm, "model", ""),
+                    "tokens_in": 0, "tokens_out": 0, "evidence": evidence, "file_cards": file_cards,
+                    "post_commit": list(ctx.post_commit), "corrections_pending": corrections_pending,
+                    "corrections_done": corrections_done, "tool_calls": tool_calls,
+                    "degraded": True, "evidence_count": len(evidence)}
         validated = answering.parse_and_validate(result.text, evidence, get_settings().ANSWER_MIN_GROUNDING_OVERLAP)
 
-        # Verificación semántica LLM-juez sobre claims con citación válida
-        semantic = verification.verify(validated["claims"], evidence)
+        # Verificación semántica LLM-juez sobre claims con citación válida.
+        # El router puede desactivarla para aplicarla él mismo (sync/async/off).
+        semantic: list[dict[str, Any]] = []
+        if verify:
+            try:
+                semantic = verification.verify(validated["claims"], evidence)
+            except Exception as exc:  # noqa: BLE001 — nunca romper el turno
+                log.warning("semantic verification failed: %s", exc)
+                semantic = []
         unsupported = list(validated["unsupported_claims"])
         for v in semantic:
-            if v["status"] in ("not_supported", "contradicted"):
+            if v.get("status") in ("not_supported", "contradicted"):
                 # Mover a unsupported
-                unsupported.append({"text": v["claim"], "citations": v.get("citations", []),
-                                    "reason": v["status"], "semantic_reason": v.get("reason", "")})
-            elif v["status"] == "needs_review":
-                validated["uncertainties"].append(f"Revisión humana sugerida: {v['claim']} ({v.get('reason', '')})")
+                unsupported.append({"text": v.get("claim", ""), "citations": v.get("citations", []),
+                                    "reason": v.get("status"), "semantic_reason": v.get("reason", "")})
+            elif v.get("status") == "needs_review":
+                validated["uncertainties"].append(f"Revisión humana sugerida: {v.get('claim', '')} ({v.get('reason', '')})")
 
         return {
             "claims": validated["claims"],
@@ -230,6 +322,8 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
             "evidence": evidence,
             "file_cards": file_cards,
             "post_commit": list(ctx.post_commit),
+            "tool_calls": tool_calls,
+            "degraded": degraded,
             "evidence_count": len(evidence),
         }
     finally:

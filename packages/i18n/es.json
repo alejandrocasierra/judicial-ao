@@ -39,6 +39,8 @@
     "FOLDER_NAME_INVALID": "El nombre de la carpeta no es válido.",
     "FILE_NOT_FOUND": "Archivo no encontrado.",
     "DOCUMENT_IMMUTABLE": "Los originales son inmutables y no pueden modificarse ni eliminarse.",
+    "MEDIA_IMMUTABLE": "Los originales de audio/video son inmutables; usa la solicitud de borrado auditada.",
+    "MODEL_NOT_FOUND": "El modelo seleccionado ya no existe o no pertenece a la organización.",
     "LEGAL_HOLD_ACTIVE": "El expediente está bajo retención legal; la operación está bloqueada.",
     "JUDICIAL_DETERMINATION_REQUIRES_DECISION": "Un hecho sólo puede marcarse como determinado judicialmente citando una decisión del expediente.",
     "SPEAKER_CONFIRMATION_REQUIRES_PARTY": "Para confirmar un hablante debe indicarse la parte identificada.",
@@ -51,7 +53,8 @@
     "INTERNAL_ERROR": "Error interno. Use el request_id para soporte.",
     "METHOD_NOT_ALLOWED": "El método HTTP no está permitido para este recurso.",
     "CHAT_NOT_FOUND": "Conversación no encontrada",
-    "AGENT_NOT_FOUND": "Agente no encontrado"
+    "AGENT_NOT_FOUND": "Agente no encontrado",
+    "UNKNOWN_TOOL": "Herramienta no reconocida para este agente."
   },
   "messages": {
     "insufficient_evidence": "No se encontró evidencia en el expediente para responder esta pregunta.",
@@ -64,7 +67,20 @@
     "correction_none": "No hay ninguna corrección pendiente que confirmar. Dime qué parte del expediente quieres revisar o corregir.",
     "evidence_fallback": "Encontré estas fuentes en el expediente (no pude construir una síntesis verificable; revisa la cita):",
     "locate_intro": "Aparece en las siguientes ubicaciones del expediente sobre «{term}»:",
-    "locate_none": "No encontré «{term}» en los documentos ni en las audiencias del expediente."
+    "locate_none": "No encontré «{term}» en los documentos ni en las audiencias del expediente.",
+    "compose_evidence": "Evidencia",
+    "compose_limits": "Límites",
+    "compose_sources": "Fuentes",
+    "compose_audio": "Lo que dice el audio",
+    "compose_partial_header": "Encontré material relacionado, pero no responde directamente a la pregunta.",
+    "compose_navigational": "Esta pregunta pide ubicaciones: revisa las menciones agrupadas por archivo.",
+    "compose_correction": "Corrección pendiente de confirmación.",
+    "compose_unnamed_source": "fuente sin nombre",
+    "compose_unverified_number": "No pude verificar en la fuente citada este dato: «{text}».",
+    "occurrences_note": "Menciones del término «{term}». No son la respuesta.",
+    "occurrences_group": "**{filename}** — {count} menciones",
+    "occurrences_page": "p. {page}",
+    "occurrences_none": "No encontré «{term}» en los documentos ni en las audiencias del expediente."
   },
   "enums": {
     "case_status": {

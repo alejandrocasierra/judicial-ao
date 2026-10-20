@@ -2,7 +2,7 @@
 (p.ej. enviar organization_id, status o legal_hold en el cuerpo)."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 import re
@@ -229,11 +229,15 @@ class ChatSessionIn(Strict):
 
 
 class ChatMessageIn(Strict):
-    """Enviar un mensaje en una sesión: corre el agente con historial y adjuntos.
-    min_length=2 para admitir respuestas cortas de confirmación ("sí", "no")."""
+    """Enviar un mensaje en una sesión: corre el pipeline con historial y adjuntos.
+    min_length=2 para admitir respuestas cortas de confirmación ("sí", "no").
+    `strategy="auto"` deja que el router de intención elija la tubería; "agent"
+    y "rag" fuerzan el camino histórico."""
     content: str = Field(min_length=2, max_length=8000)
     attachments: list[QueryAttachment] = Field(default_factory=list, max_length=10)
-    strategy: Literal["agent", "rag"] = "agent"
+    strategy: Literal["auto", "agent", "rag"] = "auto"
+    agent_id: UUID | None = None
+    model_id: UUID | None = None
     ocr_mode: Literal["todos", "basico", "document_ai"] | None = None
     asr_mode: Literal["todos", "basico", "document_ai"] | None = None
 
@@ -309,6 +313,9 @@ class AgentPatch(Strict):
 class SkillIn(Strict):
     name: str = Field(min_length=1, max_length=150)
     system_prompt: str = Field(default="", max_length=20000)
+    tools: list[str] = Field(default_factory=list, max_length=50)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    position: int | None = Field(default=None, ge=0, le=1000)
 
     _n = field_validator("name")(_no_control)
 
@@ -316,6 +323,9 @@ class SkillIn(Strict):
 class SkillPatch(Strict):
     name: str | None = Field(default=None, min_length=1, max_length=150)
     system_prompt: str | None = Field(default=None, max_length=20000)
+    tools: list[str] | None = Field(default=None, max_length=50)
+    parameters: dict[str, Any] | None = None
+    position: int | None = Field(default=None, ge=0, le=1000)
 
     _n = field_validator("name")(_no_control)
 

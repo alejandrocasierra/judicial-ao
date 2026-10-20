@@ -163,9 +163,11 @@ def test_it_cor_05_chat_occurrences_are_persisted(client, auth, ids, owner_db):
     h = auth("abogada.alfa")
     sid = _session(client, h, ids["pago"])
     FakeLLM.script = lambda system, user: json.dumps({"thought": "listo", "done": True})
-    r = client.post(f"/v1/cases/{ids['pago']}/chats/{sid}/messages", headers=h, json={"content": "transferencia"})
+    r = client.post(f"/v1/cases/{ids['pago']}/chats/{sid}/messages", headers=h,
+                    json={"content": "¿Dónde se habla de transferencia?"})
     assert r.status_code == 201, r.text
     body = r.json()
+    assert body["answer_kind"] == "navigational"
     occ = body["occurrences"]
     assert occ, "el término existe en la semilla; debe haber apariciones"
     # Se guardaron en el mensaje del asistente...

@@ -63,6 +63,7 @@ def test_it_chat_02_send_message_persists_with_attachments_and_file_cards(client
     captured: list[str] = []
     FakeLLM.script = _agent_script(captured)
     body = _send(client, h, ids["pago"], s["id"], "¿Qué dice la demanda sobre el pago?",
+                 strategy="agent",
                  attachments=[{"kind": "document", "id": doc["id"], "name": doc["filename"]}])
     assert body["answer"], body
     assert body["user_message"]["id"] and body["assistant_message"]["id"]
@@ -84,10 +85,10 @@ def test_it_chat_03_followup_receives_conversation_history(client, auth, ids):
     s = _create_session(client, h, ids["pago"])
     captured: list[str] = []
     FakeLLM.script = _agent_script(captured)
-    _send(client, h, ids["pago"], s["id"], "¿Quién presentó la demanda de pago?")
+    _send(client, h, ids["pago"], s["id"], "¿Quién presentó la demanda de pago?", strategy="agent")
     before = len(captured)
     FakeLLM.script = _agent_script(captured)
-    _send(client, h, ids["pago"], s["id"], "¿y quién más estaba presente?")
+    _send(client, h, ids["pago"], s["id"], "¿y quién más estaba presente?", strategy="agent")
     first_turn_of_second_message = captured[before]
     assert "<conversation_history>" in first_turn_of_second_message
     assert "¿Quién presentó la demanda de pago?" in first_turn_of_second_message
@@ -145,12 +146,16 @@ def test_it_chat_07_locate_attaches_all_occurrences(client, auth, ids):
 
 
 def test_it_chat_08_response_includes_all_occurrences(client, auth, ids):
-    """La respuesta adjunta TODAS las apariciones del término (sin tope por archivo)."""
+    """Navegación: la respuesta trae las apariciones agrupadas y acotadas al tope."""
     h = auth("abogada.alfa")
     s = _create_session(client, h, ids["pago"])
     r = client.post(f"/v1/cases/{ids['pago']}/chats/{s['id']}/messages", headers=h,
-                    json={"content": "¿Qué dice la demanda sobre el pago?"})
+                    json={"content": "¿Dónde se habla del pago en el expediente?"})
     assert r.status_code == 201, r.text
-    occ = r.json().get("occurrences") or []
+    body = r.json()
+    assert body["answer_kind"] == "navigational"
+    occ = body.get("occurrences") or []
     assert len(occ) >= 2, occ
+    assert len(occ) <= 8
     assert all("filename" in c for c in occ)
+    assert body["answer"].startswith("Menciones del término")

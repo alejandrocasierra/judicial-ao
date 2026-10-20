@@ -18,7 +18,7 @@ FILE = pathlib.Path(r"C:\Users\ale13\OneDrive\Escritorio\judicial-ai\11001310302
 r = requests.post(f"{BASE}/auth/login",
                   json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}, timeout=30)
 r.raise_for_status()
-h = {"Authorization": f"Bearer " + r.json()["access_token"]}
+h = {"Authorization": "Bearer " + r.json()["access_token"]}
 print("[login] OK", flush=True)
 
 r = requests.delete(f"{BASE}/cases/{CASE}/media/{OLD_MEDIA_ID}", headers=h, timeout=120)

@@ -12,7 +12,7 @@ def test_party_roles_include_sides():
     codes = {c for c, _l, _o in pr.DEFAULT_ROLES}
     assert "attorney_claimant" in codes
     assert "attorney_defendant" in codes
-    labels = {c: l for c, l, _o in pr.DEFAULT_ROLES}
+    labels = {code: label for code, label, _order in pr.DEFAULT_ROLES}
     assert labels["attorney_claimant"] == "Apoderado parte demandante"
     assert labels["attorney_defendant"] == "Apoderado parte demandada"
 

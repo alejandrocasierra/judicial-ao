@@ -7,7 +7,8 @@ from typing import Callable
 import httpx
 
 from app.core.config import get_settings
-from app.providers.base import LLMResult
+from app.core import secrets as secret_store
+from app.providers.base import Capabilities, LLMResult
 
 
 class FakeLLM:
@@ -19,6 +20,9 @@ class FakeLLM:
 
     def __init__(self, model: str):
         self.model = model
+
+    def capabilities(self) -> Capabilities:
+        return Capabilities(streaming=True, json_mode=True, tool_calling=False)
 
     def complete(self, system: str, user: str) -> LLMResult:
         if FakeLLM.script:
@@ -64,6 +68,12 @@ class AnthropicLLM:
         self.max_tokens = s.LLM_MAX_TOKENS
 
     def complete(self, system: str, user: str) -> LLMResult:
+        from app.providers import circuit
+
+        return circuit.call(f"anthropic:{self.model}:{self.api_base_url}",
+                            lambda: self._complete(system, user))
+
+    def _complete(self, system: str, user: str) -> LLMResult:
         r = httpx.post(_messages_url(self.api_base_url), timeout=self.timeout,
                        headers={"x-api-key": self.api_key, "anthropic-version": self.api_version,
                                 "content-type": "application/json"},
@@ -74,6 +84,11 @@ class AnthropicLLM:
         text = "".join(b.get("text", "") for b in d.get("content", []) if b.get("type") == "text")
         u = d.get("usage", {})
         return LLMResult(text, self.name, d.get("model", self.model), u.get("input_tokens", 0), u.get("output_tokens", 0))
+
+    def capabilities(self) -> Capabilities:
+        # El contrato de respuesta se valida y repara en servidor: no exigimos
+        # JSON mode ni tool calling nativos. El SSE se emite por etapas.
+        return Capabilities(streaming=False, json_mode=False, tool_calling=False, max_context=None)
 
 
 class OpenAiLLM:
@@ -91,6 +106,12 @@ class OpenAiLLM:
         self.max_tokens = s.LLM_MAX_TOKENS
 
     def complete(self, system: str, user: str) -> LLMResult:
+        from app.providers import circuit
+
+        return circuit.call(f"openai:{self.model}:{self.api_base_url}",
+                            lambda: self._complete(system, user))
+
+    def _complete(self, system: str, user: str) -> LLMResult:
         url = _chat_completions_url(self.api_base_url)
         headers = {"authorization": f"Bearer {self.api_key}", "content-type": "application/json"}
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -105,6 +126,11 @@ class OpenAiLLM:
         text = d["choices"][0].get("message", {}).get("content", "") if d.get("choices") else ""
         u = d.get("usage", {})
         return LLMResult(text, self.name, d.get("model", self.model), u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
+
+    def capabilities(self) -> Capabilities:
+        # Compatible con OpenAI, Gemini, DeepSeek, Kimi y proxies: la capacidad
+        # de JSON mode/tool calling varía; el pipeline no depende de ella.
+        return Capabilities(streaming=False, json_mode=False, tool_calling=False, max_context=None)
 
 
 def get_llm():
@@ -135,12 +161,14 @@ def get_llm_for_model(model_id: str, org_id: str, user_id: str):
     with tx(org_id, user_id) as c:
         m = one(c, "SELECT provider, model_name, encrypted_api_key, api_base_url FROM ai_models WHERE id = :i", i=model_id)
     if not m:
-        return get_llm()
+        # Antes se caía al modelo global en silencio y el usuario creía que su
+        # selección se había aplicado. Fallar explícito permite corregir el selector.
+        raise LookupError(f"model_not_found:{model_id}")
 
     s = get_settings()
     provider = m["provider"]
     model = m["model_name"]
-    api_key = m["encrypted_api_key"] or s.LLM_API_KEY
+    api_key = secret_store.decrypt(m["encrypted_api_key"]) or s.LLM_API_KEY
     # URL base: override del modelo (proxy/VPS/región) o la del proveedor en el entorno.
     api_base_url = m.get("api_base_url") or _provider_base_url(s, provider)
     api_version = s.LLM_API_VERSION

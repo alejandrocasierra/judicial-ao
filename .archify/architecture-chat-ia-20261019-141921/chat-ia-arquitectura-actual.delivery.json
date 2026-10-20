@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "d033e960-50ac-4990-951c-294caf9b0393",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\architecture-chat-ia-20261019-141921\\chat-ia-arquitectura-actual.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\.archify\\architecture-chat-ia-20261019-141921\\chat-ia-arquitectura-actual.html",
+  "specification": {
+    "sha256": "eed7f1f128cd0658908441361116c9c62553ea1845a9e52ce7446b04c17e926f",
+    "bytes": 7764
+  },
+  "artifact": {
+    "sha256": "ed95df63be9717886abc1c1abc361533f691b9babb6d23224725500262be7fba",
+    "bytes": 775051
+  }
+}

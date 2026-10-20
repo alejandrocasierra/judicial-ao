@@ -22,6 +22,13 @@ jobs:
              --set POSTGRES_SUPERUSER_PASSWORD=ci-only-superuser --set STORAGE_LOCAL_ROOT=var/test-storage
              --set RATE_LIMIT_BACKEND=memory --set CELERY_TASK_ALWAYS_EAGER=true
       - run: ruff check apps tests scripts
+      - name: Capa A — invariantes del compositor (sin DB, sin secretos)
+        run: python3 scripts/eval_offline.py
+      - name: Tests unitarios y de comportamiento del chat
+        # Sin SKIP_DB_RESET: la sesión crea el esquema y siembra la base de test.
+        # `tests/behavior` completo incluye deuda previa (inmutabilidad de originales);
+        # el gate de este cambio cubre las invariantes del chat.
+        run: python3 -m pytest -m unit -q && python3 -m pytest tests/behavior/test_chat_pagos.py -q
       - run: bash scripts/run_tests.sh fast
       - run: bash scripts/run_tests.sh all -p no:cacheprovider --junitxml=var/junit.xml
       - uses: actions/upload-artifact@v4

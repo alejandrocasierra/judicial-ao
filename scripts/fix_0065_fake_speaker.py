@@ -4,6 +4,7 @@ como 'Sin identificar' + marcados para revisión. Usa el flujo oficial de la API
 import os
 
 import requests
+import psycopg
 
 BASE = "http://127.0.0.1:8000/v1"
 CASE = "38865959-8d5f-44e4-bbc8-1226bd345b00"
@@ -14,8 +15,6 @@ r = requests.post(f"{BASE}/auth/login",
                   json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}, timeout=30)
 r.raise_for_status()
 h = {"Authorization": "Bearer " + r.json()["access_token"]}
-
-import psycopg
 
 DSN = os.environ.get("JUDICIAL_TEST_DSN") or (
     f"host={os.environ.get('POSTGRES_HOST', '127.0.0.1')} "

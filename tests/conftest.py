@@ -49,12 +49,15 @@ def client(app):
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limits():
+    from app.providers import circuit
     from app.providers.llm import FakeLLM
     from app.services import ratelimit
     ratelimit.reset()
+    circuit.reset()
     FakeLLM.script = None
     yield
     FakeLLM.script = None
+    circuit.reset()
 
 
 @pytest.fixture(scope="session")

@@ -1,0 +1,341 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Chat IA — pipeline actual",
+    "subtitle": "Router de intención, retrieval híbrido, compositor determinista y SSE (implementación 2026-10-19)",
+    "output": ".archify/architecture-chat-ia-20261019-141921/chat-ia-arquitectura-actual.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "abogado",
+      "type": "external",
+      "label": "Abogado/a",
+      "sublabel": "pregunta en el chat",
+      "icon": "person",
+      "pos": [
+        20,
+        300
+      ],
+      "size": [
+        110,
+        60
+      ]
+    },
+    {
+      "id": "chat",
+      "type": "frontend",
+      "label": "Chat IA",
+      "sublabel": "@ archivos · / agentes · SSE",
+      "pos": [
+        220,
+        300
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "API del chat",
+      "sublabel": "POST /messages · /stream",
+      "tag": "JWT + RLS",
+      "pos": [
+        450,
+        300
+      ],
+      "size": [
+        190,
+        70
+      ]
+    },
+    {
+      "id": "router",
+      "type": "backend",
+      "label": "Router de intención",
+      "sublabel": "7 intenciones · reglas",
+      "pos": [
+        700,
+        190
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "retrieval",
+      "type": "backend",
+      "label": "Retrieval híbrido",
+      "sublabel": "FTS español + vector + RRF",
+      "tag": "candidate_k · MMR",
+      "pos": [
+        700,
+        330
+      ],
+      "size": [
+        170,
+        72
+      ]
+    },
+    {
+      "id": "composer",
+      "type": "backend",
+      "label": "Compositor",
+      "sublabel": "answer_kind · citas ≤ 4",
+      "tag": "determinista",
+      "pos": [
+        700,
+        470
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "Proveedor LLM",
+      "sublabel": "Gemini · OpenAI · Claude · Kimi",
+      "tag": "solo propone claims",
+      "pos": [
+        960,
+        190
+      ],
+      "size": [
+        190,
+        76
+      ]
+    },
+    {
+      "id": "tools",
+      "type": "backend",
+      "label": "case_tools",
+      "sublabel": "lectura · escritura confirmada",
+      "tag": "mapa tool→permiso",
+      "pos": [
+        960,
+        330
+      ],
+      "size": [
+        190,
+        72
+      ]
+    },
+    {
+      "id": "kb",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "chunks · search_tsv · pgvector · grafo",
+      "tag": "RLS por organización",
+      "pos": [
+        960,
+        500
+      ],
+      "size": [
+        190,
+        110
+      ]
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "Servidor MCP",
+      "sublabel": "Claude Code · Cursor",
+      "tag": "mismas tools + JWT",
+      "pos": [
+        1240,
+        330
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "workers",
+      "type": "backend",
+      "label": "Workers OCR/ASR",
+      "sublabel": "Celery · PDF y video",
+      "pos": [
+        30,
+        70
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "indexer",
+      "type": "backend",
+      "label": "Indexación",
+      "sublabel": "chunking · embeddings · reindex job",
+      "pos": [
+        250,
+        70
+      ],
+      "size": [
+        220,
+        64
+      ]
+    },
+    {
+      "id": "eval",
+      "type": "backend",
+      "label": "Evaluación",
+      "sublabel": "set dorado · jueces · κ · nightly",
+      "tag": "A/B/C",
+      "pos": [
+        520,
+        70
+      ],
+      "size": [
+        200,
+        64
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "pregunta",
+      "from": "abogado",
+      "to": "chat",
+      "label": "pregunta",
+      "variant": "emphasis"
+    },
+    {
+      "id": "envia",
+      "from": "chat",
+      "to": "api",
+      "label": "SSE o POST"
+    },
+    {
+      "id": "routing",
+      "from": "api",
+      "to": "router",
+      "label": "clasifica"
+    },
+    {
+      "id": "retrieve",
+      "from": "router",
+      "to": "retrieval",
+      "label": "plan"
+    },
+    {
+      "id": "lee",
+      "from": "retrieval",
+      "to": "kb",
+      "label": "FTS + vector"
+    },
+    {
+      "id": "sintesis",
+      "from": "retrieval",
+      "to": "llm",
+      "label": "evidencia + prompt"
+    },
+    {
+      "id": "claims",
+      "from": "llm",
+      "to": "composer",
+      "label": "claims + citas",
+      "variant": "emphasis"
+    },
+    {
+      "id": "valida",
+      "from": "composer",
+      "to": "api",
+      "label": "Markdown validado"
+    },
+    {
+      "id": "tools",
+      "from": "api",
+      "to": "tools",
+      "label": "tool calls"
+    },
+    {
+      "id": "tools-kb",
+      "from": "tools",
+      "to": "kb",
+      "label": "lee / escribe"
+    },
+    {
+      "id": "mcp-tools",
+      "from": "mcp",
+      "to": "tools",
+      "label": "tools",
+      "variant": "dashed"
+    },
+    {
+      "id": "ingesta",
+      "from": "workers",
+      "to": "indexer",
+      "label": "OCR / ASR"
+    },
+    {
+      "id": "index-kb",
+      "from": "indexer",
+      "to": "kb",
+      "label": "chunks + embeddings"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Ingesta y evaluación: el conocimiento se construye y se mide antes de preguntar",
+      "wraps": [
+        "workers",
+        "indexer",
+        "eval"
+      ],
+      "pad": 26
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Un turno, en orden",
+      "items": [
+        "1. Router determinista elige navegar, dato, análisis, procedimental, agregación, lectura o corrección.",
+        "2. Retrieval híbrido: FTS español sin tildes + vector + RRF + MMR; cuotas por fuente.",
+        "3. El LLM solo propone claims con handles E1..En.",
+        "4. El compositor valida números, citas y coherencia; decide answer_kind.",
+        "5. SSE transmite etapas y el texto ya compuesto; el POST normal sigue disponible."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Garantías",
+      "items": [
+        "insufficient ⇒ claims=[], citas=[] y occurrences=[].",
+        "Máximo 4 citas visibles y 2 por archivo.",
+        "Cada número de la respuesta existe en la evidencia citada.",
+        "Las tools de escritura solo se aplican con confirmación del servidor, nunca desde el LLM.",
+        "Embeddings locales deterministas mientras el proveedor externo no tenga crédito; reindex job los sustituye."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Operación",
+      "items": [
+        "4.649 chunks originales → 13.787 chunks con solape y topes por testimonio.",
+        "search_tsv español + unaccent en document_pages, transcript_segments y chunks.",
+        "Migraciones 0047, 0048 y 0049 aplicadas en dev, quality y producción.",
+        "Nightly: capa A, calibración de grounding, κ del juez y matriz offline."
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Límites conocidos",
+      "items": [
+        "Los embeddings locales son un fallback léxico, no un modelo semántico profundo.",
+        "La matriz cross-model real requiere claves de OpenAI, Anthropic, DeepSeek y Kimi.",
+        "La búsqueda vectorial seguirá dependiendo del proveedor que se configure."
+      ]
+    }
+  ]
+}

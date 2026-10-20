@@ -65,6 +65,28 @@
     "evidence_count": {
       "type": "integer",
       "minimum": 0
+    },
+    "answer_kind": {
+      "enum": ["direct", "partial", "insufficient", "navigational", "correction"]
+    },
+    "intent": {
+      "enum": ["navegar", "dato", "analisis", "procedimental", "agregacion", "lectura", "correccion"]
+    },
+    "degraded": {
+      "type": "boolean"
+    },
+    "citations_used": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "occurrences_term": {
+      "type": ["string", "null"]
+    },
+    "occurrences_note": {
+      "type": ["string", "null"]
+    },
+    "occurrences": {
+      "type": "array"
     }
   },
   "required": [

@@ -1,17 +1,28 @@
-"""Chat multi-turn por expediente (Fase 3): sesiones persistentes, historial
-para el agente (~últimos K turnos), adjuntos "@" reales y file_cards.
+"""Chat multi-turn por expediente: router de intención, memoria y streaming.
 
-El pipeline de respuesta ES el de /query (mismo presupuesto de tokens, rate
-limits, grounding anti-alucinación y verificación semántica): aquí solo se
-añade la memoria de conversación y la persistencia de los mensajes.
+`strategy="auto"` decide la tubería según la intención:
+
+- `agregacion` → lista determinista (`role_answer`), 0 llamadas al LLM;
+- `navegar` → `locate` + `occurrences`, 0 llamadas;
+- `procedimental` → `process_path` como evidencia y una síntesis;
+- `analisis` → agente acotado (3 pasos) + síntesis;
+- `dato`/`lectura` → RAG con una sola síntesis.
+
+`strategy="agent"`/`"rag"` conservan el camino histórico. El formato final lo
+decide `compose.render`; aquí solo se orquesta y se persiste.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import queue
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 
 from app.core.config import get_settings
@@ -20,15 +31,24 @@ from app.core.errors import AppError
 from app.core.i18n import negotiate, t
 from app.schemas import ChatMessageIn, ChatSessionIn, QueryIn
 from app.security.deps import Principal, case_access, current_principal
-from app.services import audit, case_tools, correction, query_hints, ratelimit, role_answer
+from app.services import (audit, case_tools, correction, deadline as deadline_mod, intent as intent_service,
+                          memory, occurrences, query_hints, ratelimit, role_answer, text_terms)
 from app.services.case_tools import ToolContext
-from app.services.case_tools.read import _content_term
-from app.routers.query import _attachment_file_cards, _run_query
+from app.routers.query import _attachment_file_cards, _run_query, _safe_emit
 
 router = APIRouter(prefix="/cases/{case_id}/chats", tags=["chat"])
 
 _ADMIN_ROLES = {"ORG_ADMIN", "CASE_MANAGER"}
 log = logging.getLogger(__name__)
+
+
+def _is_fresh(value, seconds: int) -> bool:
+    """True si `value` (timestamptz de psycopg) está dentro de la ventana."""
+    if not isinstance(value, datetime):
+        return False
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - value).total_seconds() <= seconds
 
 
 def _load_pending(p: Principal, case_id: UUID, session_id: UUID) -> dict | None:
@@ -48,8 +68,8 @@ def _store_pending(p: Principal, case_id: UUID, session_id: UUID, pendings: list
             c.execute(text("""INSERT INTO chat_pending_corrections
                 (organization_id, session_id, tool, arguments, summary)
                 VALUES (:o, :s, :tool, CAST(:args AS jsonb), :summary)"""),
-                {"o": p.org_id, "s": str(session_id), "tool": item["tool"],
-                 "args": json.dumps(item.get("arguments", {})), "summary": item.get("summary", "")[:2000]})
+                      {"o": p.org_id, "s": str(session_id), "tool": item["tool"],
+                       "args": json.dumps(item.get("arguments", {})), "summary": item.get("summary", "")[:2000]})
 
 
 def _resolve_pending(p: Principal, pending_id: str, reason: str) -> None:
@@ -66,9 +86,12 @@ def _clear_pending(p: Principal, case_id: UUID, session_id: UUID) -> None:
 
 def _apply_pending(p: Principal, case_id: UUID, pending: dict) -> dict:
     """Ejecuta la corrección pendiente con confirm=true (determinista) y propaga."""
-    ctx = ToolContext(org_id=p.org_id, actor_id=p.user_id)
     args = dict(pending["arguments"] or {})
     args["confirm"] = True
+    needed = case_tools.required_permission(str(pending["tool"]), args)
+    case_access(p, case_id, needed)
+    ctx = ToolContext(org_id=p.org_id, actor_id=p.user_id, allow_write=True,
+                      permissions={needed})
     with tx(p.org_id, p.user_id) as c:
         items = case_tools.execute(c, str(case_id), pending["tool"], args, ctx=ctx)
     case_tools.drain_post_commit(ctx)
@@ -83,54 +106,28 @@ def _apply_pending(p: Principal, case_id: UUID, pending: dict) -> dict:
 
 def _finish_confirmation(s, p: Principal, case_id: UUID, session_id: UUID, user_msg: dict,
                          answer: str, request: Request, extra: dict | None = None,
-                         citations: list | None = None, file_cards: list | None = None) -> dict:
-    """Persiste el turno de una respuesta determinista (confirmación/cancelación/localización)."""
-    result = {"answer": answer, "claims": [], "citations": citations or [], "unsupported_claims": [],
-              "uncertainties": [], "file_cards": file_cards or [], "pending_correction": None, **(extra or {})}
+                         citations: list | None = None, file_cards: list | None = None,
+                         answer_kind: str = "correction", intent: str = "correccion",
+                         degraded: bool = False) -> dict:
+    """Persiste el turno de una respuesta determinista (confirmación/cancelación/corrección)."""
+    result = {"answer": answer, "answer_kind": answer_kind, "intent": intent, "degraded": degraded,
+              "claims": [], "citations": citations or [], "citations_used": [], "unsupported_claims": [],
+              "uncertainties": [], "file_cards": file_cards or [], "pending_correction": None,
+              "occurrences": [], "occurrences_term": None, "occurrences_note": None, **(extra or {})}
     with tx(p.org_id, p.user_id) as c:
-        assistant_msg = one(c, """INSERT INTO chat_messages (organization_id, session_id, role, content,
-                                     attachments, citations, model_run_id)
-            VALUES (:o, :s, 'assistant', :t, CAST(:fc AS jsonb), CAST(:ci AS jsonb), NULL) RETURNING id, created_at""",
+        assistant_msg = one(c, """INSERT INTO chat_messages
+                (organization_id, session_id, role, content, attachments, citations, occurrences,
+                 uncertainties, occurrences_term, occurrences_note, answer_kind, intent, degraded, model_run_id)
+            VALUES (:o, :s, 'assistant', :t, CAST(:fc AS jsonb), CAST(:ci AS jsonb), CAST(:oc AS jsonb),
+                    CAST(:unc AS jsonb), :ot, :on, :ak, :intent, :dg, NULL) RETURNING id, created_at""",
                             o=p.org_id, s=str(session_id), t=answer,
-                            fc=json.dumps(file_cards or []), ci=json.dumps(citations or []))
+                            fc=json.dumps(file_cards or []), ci=json.dumps(citations or []),
+                            oc=json.dumps(result.get("occurrences") or []),
+                            unc=json.dumps(result.get("uncertainties") or []),
+                            ot=result.get("occurrences_term"), on=result.get("occurrences_note"),
+                            ak=answer_kind, intent=intent, dg=degraded)
         c.execute(text("UPDATE chat_sessions SET updated_at = now() WHERE id = :s"), {"s": str(session_id)})
     return {"user_message": user_msg, "assistant_message": assistant_msg, **result}
-
-
-def _locate_locations(p: Principal, case_id: UUID, term: str) -> list[dict]:
-    ctx = ToolContext(org_id=p.org_id, actor_id=p.user_id)
-    with tx(p.org_id, p.user_id) as c:
-        return case_tools.execute(c, str(case_id), "locate", {"term": term, "k": 300}, ctx=ctx)
-
-
-def _format_locations(term: str, locs: list[dict], locale: str) -> tuple[str, list[dict]]:
-    """Enumera cada archivo+página (documentos) y archivo+minuto+hablante (audiencias)."""
-    from app.services.case_tools.read import mmss
-    if not locs:
-        return t("messages.locate_none", locale).format(term=term), []
-    lines: list[str] = []
-    cites: list[dict] = []
-    seen: set[str] = set()
-    for i, it in enumerate(locs):
-        if it.get("source_type") == "document_page":
-            folio = f" (folio {it['folio']})" if it.get("folio") else ""
-            line = f"- {it.get('filename')} · página {it.get('page_number')}{folio}"
-            cite = {"citation_id": f"loc{i}", "source_type": "document_page", "filename": it.get("filename"),
-                    "document_id": it.get("document_id"), "page": it.get("page_number"), "folio": it.get("folio"),
-                    "ocr_mode": it.get("ocr_mode"), "asr_mode": it.get("asr_mode")}
-        else:
-            spk = f" · {it['speaker']}" if it.get("speaker") else ""
-            line = f"- {it.get('filename')} · {mmss(it.get('start_ms'))}{spk}"
-            cite = {"citation_id": f"loc{i}", "source_type": "transcript_segment", "filename": it.get("filename"),
-                    "media_id": it.get("media_id"), "start_ms": it.get("start_ms"), "end_ms": it.get("end_ms"),
-                    "speaker": it.get("speaker"), "ocr_mode": it.get("ocr_mode"), "asr_mode": it.get("asr_mode")}
-        if line in seen:
-            continue
-        seen.add(line)
-        lines.append(line)
-        cites.append(cite)
-    answer = t("messages.locate_intro", locale).format(term=term) + "\n" + "\n".join(lines)
-    return answer, cites
 
 
 def _session(conn, case_id: UUID, session_id: UUID) -> dict:
@@ -141,12 +138,160 @@ def _session(conn, case_id: UUID, session_id: UUID) -> dict:
     return s
 
 
+def _locate_locations(p: Principal, case_id: UUID, term: str,
+                      ocr_mode: str | None = None, asr_mode: str | None = None) -> list[dict]:
+    ctx = ToolContext(org_id=p.org_id, actor_id=p.user_id, ocr_mode=ocr_mode, asr_mode=asr_mode)
+    with tx(p.org_id, p.user_id) as c:
+        return case_tools.execute(c, str(case_id), "locate", {"term": term, "k": 300}, ctx=ctx)
+
+
+def _process_path_seed(p: Principal, case_id: UUID, question: str,
+                       ocr_mode: str | None = None, asr_mode: str | None = None) -> list[dict]:
+    """Antecedentes procesales de la pregunta; [] si el grafo no la resuelve."""
+    ctx = ToolContext(org_id=p.org_id, actor_id=p.user_id, ocr_mode=ocr_mode, asr_mode=asr_mode)
+    try:
+        with tx(p.org_id, p.user_id) as c:
+            items = case_tools.execute(c, str(case_id), "process_path",
+                                       {"event": question, "direction": "to"}, ctx=ctx)
+    except Exception:  # noqa: BLE001 — sin grafo se cae al RAG normal
+        log.debug("process_path failed", exc_info=True)
+        return []
+    return [it for it in items or [] if it.get("source_type") != "error"]
+
+
+def _citation_from_item(item: dict, marker: int) -> dict | None:
+    if item.get("document_id") and item.get("page_number") is not None:
+        return {"citation_id": f"det{marker}", "marker": marker, "source_type": "document_page",
+                "document_id": str(item["document_id"]), "page": item.get("page_number"),
+                "folio": item.get("folio"), "filename": item.get("filename")}
+    if item.get("media_id") and item.get("segment_id") and item.get("start_ms") is not None:
+        return {"citation_id": f"det{marker}", "marker": marker, "source_type": "transcript_segment",
+                "media_id": str(item["media_id"]), "segment_id": str(item["segment_id"]),
+                "start_ms": item.get("start_ms"), "end_ms": item.get("end_ms"),
+                "speaker": item.get("speaker"), "filename": item.get("filename")}
+    return None
+
+
+def _persist_deterministic(p: Principal, case_id: UUID, items: list[dict], *, task: str,
+                           output: dict) -> tuple[str | None, list[dict]]:
+    """model_run + citations reales para respuestas sin LLM (rol/navegación)."""
+    with tx(p.org_id, p.user_id) as c:
+        run = one(c, """INSERT INTO model_runs (organization_id, case_id, task, provider, model, prompt_id,
+              prompt_version, pipeline_version, input_hash, output, validation, tokens_in, tokens_out, actor_id)
+            VALUES (:o,:c,:task,'deterministic','deterministic','deterministic','1',:plv,:ih,
+                    CAST(:out AS jsonb),'{}'::jsonb,0,0,:u) RETURNING id""",
+                  o=p.org_id, c=str(case_id), task=task, plv=get_settings().PIPELINE_VERSION,
+                  ih=hashlib.sha256(f"{task}:{case_id}:{output.get('items')}".encode()).hexdigest(),
+                  out=json.dumps(output, ensure_ascii=False, default=str),
+                  u=p.user_id)
+        citations: list[dict] = []
+        marker = 0
+        seen: set[tuple] = set()
+        for item in items:
+            locate_key = (str(item.get("document_id")), item.get("page_number")) \
+                if item.get("document_id") else (str(item.get("segment_id")),)
+            if locate_key in seen:
+                continue
+            cite = _citation_from_item(item, marker + 1)
+            if not cite:
+                continue
+            seen.add(locate_key)
+            if cite["source_type"] == "document_page":
+                cid = one(c, """INSERT INTO citations (organization_id, case_id, target_type, target_id,
+                        source_type, document_id, page_number, folio)
+                    VALUES (:o,:c,'answer',:r,'document_page',:d,:pg,:f) RETURNING id""",
+                          o=p.org_id, c=str(case_id), r=run["id"], d=cite["document_id"],
+                          pg=cite["page"], f=cite.get("folio"))["id"]
+            else:
+                cid = one(c, """INSERT INTO citations (organization_id, case_id, target_type, target_id,
+                        source_type, media_id, segment_id, start_ms, end_ms)
+                    VALUES (:o,:c,'answer',:r,'transcript_segment',:m,:sg,:s,:e) RETURNING id""",
+                          o=p.org_id, c=str(case_id), r=run["id"], m=cite["media_id"],
+                          sg=cite["segment_id"], s=cite["start_ms"], e=cite["end_ms"])["id"]
+            marker += 1
+            cite["citation_id"] = str(cid)
+            citations.append(cite)
+            if marker >= 10:
+                break
+    return str(run["id"]), citations
+
+
+def _aggregation_result(p: Principal, case_id: UUID, content: str, locale: str) -> dict | None:
+    role = query_hints.role_from_text(content)
+    if not role:
+        return None
+    items = role_answer.authoritative_evidence(str(p.org_id), str(p.user_id), str(case_id), content)
+    answer = role_answer.render(role, items)
+    if not answer:
+        return None
+    run_id, citations = _persist_deterministic(p, case_id, items, task="role_answer",
+                                               output={"answer_kind": "direct", "intent": "agregacion",
+                                                       "role": role, "items": len(items)})
+    return {"answer": answer, "answer_kind": "direct", "intent": "agregacion", "degraded": False,
+            "claims": [], "citations": citations, "citations_used": [c["citation_id"] for c in citations],
+            "unsupported_claims": [], "uncertainties": [], "file_cards": [],
+            "model_run_id": run_id, "evidence_count": len(items),
+            "occurrences": [], "occurrences_term": None, "occurrences_note": None}
+
+
+def _navigate_result(p: Principal, case_id: UUID, content: str, decision, locale: str,
+                     ocr_mode: str | None, asr_mode: str | None, s) -> dict:
+    term = getattr(decision, "nav_term", None) or text_terms.specific_term(content) \
+        or query_hints.locate_term(content)
+    if not term or not occurrences.is_informative(term):
+        answer = t("messages.locate_none", locale).format(term="")
+        return {"answer": answer, "answer_kind": "navigational", "intent": "navegar", "degraded": False,
+                "claims": [], "citations": [], "citations_used": [], "unsupported_claims": [],
+                "uncertainties": [], "file_cards": [], "evidence_count": 0,
+                "occurrences": [], "occurrences_term": None, "occurrences_note": None}
+    locs = _locate_locations(p, case_id, term, ocr_mode, asr_mode)
+    text, cites = occurrences.build(term, locs, locale, max_items=s.NAV_MAX_OCCURRENCES)
+    note = t("messages.occurrences_note", locale).format(term=term)
+    # La UI agrupa y pinta `occurrences`; no duplicamos la lista completa en el
+    # Markdown (evita el muro de timestamps del incidente original).
+    answer = note if cites else text
+    return {"answer": answer, "answer_kind": "navigational", "intent": "navegar", "degraded": False,
+            "claims": [], "citations": [], "citations_used": [], "unsupported_claims": [],
+            "uncertainties": [], "file_cards": [], "evidence_count": len(locs),
+            "occurrences": cites, "occurrences_term": term, "occurrences_note": note}
+
+
+def _update_summary(s, p: Principal, session_id: UUID, session: dict) -> None:
+    """Resume los turnos anteriores a los últimos K (memoria de la sesión)."""
+    turns = int(s.CHAT_HISTORY_TURNS)
+    with tx(p.org_id, p.user_id) as c:
+        total = c.execute(text("SELECT count(*) FROM chat_messages WHERE session_id = :s"),
+                          {"s": str(session_id)}).scalar() or 0
+        if total <= turns:
+            return
+        history = rows(c, """SELECT role, content FROM chat_messages WHERE session_id = :s
+            ORDER BY created_at ASC, id ASC LIMIT 200""", s=str(session_id))
+    older = history[:-turns] if len(history) > turns else []
+    if not older:
+        return
+    llm = memory.summary_llm() if len(older) > turns * 2 else None
+    fresh = memory.summarize(older, llm=llm)
+    merged = memory.merge_summary(session.get("summary"), fresh)
+    with tx(p.org_id, p.user_id) as c:
+        c.execute(text("UPDATE chat_sessions SET summary = :sum, summary_upto = now() WHERE id = :s"),
+                  {"sum": merged, "s": str(session_id)})
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+
+
+def _chunks(text: str, size: int = 24):
+    for start in range(0, len(text), size):
+        yield text[start:start + size]
+
+
 @router.get("")
 def list_sessions(case_id: UUID, p: Principal = Depends(current_principal)):
     case_access(p, case_id, "case.read")
     with tx(p.org_id, p.user_id) as c:
         return rows(c, """SELECT s.id, s.title, s.agent_id, s.model_id, s.created_by, s.created_at, s.updated_at,
-                s.ocr_mode, s.asr_mode,
+                s.ocr_mode, s.asr_mode, s.summary,
                 (SELECT count(*) FROM chat_messages m WHERE m.session_id = s.id) AS message_count
             FROM chat_sessions s WHERE s.case_id = :c AND s.archived_at IS NULL
             ORDER BY s.updated_at DESC""", c=str(case_id))
@@ -181,52 +326,81 @@ def create_session(case_id: UUID, body: ChatSessionIn, request: Request, p: Prin
 @router.get("/{session_id}/messages")
 def list_messages(case_id: UUID, session_id: UUID, limit: int = 50, offset: int = 0,
                   p: Principal = Depends(current_principal)):
+    """Paginación de los MÁS RECIENTES: offset=0 devuelve el final de la conversación."""
     case_access(p, case_id, "case.read")
     limit = min(max(1, limit), 200)
     offset = max(0, offset)
     with tx(p.org_id, p.user_id) as c:
         _session(c, case_id, session_id)
-        msgs = rows(c, """SELECT id, role, content, attachments, citations, occurrences, model_run_id, created_at
-            FROM chat_messages WHERE session_id = :s ORDER BY created_at, id LIMIT :l OFFSET :o""",
-                    s=str(session_id), l=limit, o=offset)
+        msgs = rows(c, """SELECT * FROM (
+                SELECT id, role, content, attachments, citations, occurrences, uncertainties,
+                       occurrences_term, occurrences_note, answer_kind, intent,
+                       degraded, model_run_id, created_at
+                FROM chat_messages WHERE session_id = :s
+                ORDER BY created_at DESC, id DESC LIMIT :l OFFSET :o
+            ) page ORDER BY created_at ASC, id ASC""",
+                   s=str(session_id), l=limit, o=offset)
     return {"messages": msgs, "limit": limit, "offset": offset}
 
 
-@router.post("/{session_id}/messages", status_code=201)
-def send_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Request,
-                 p: Principal = Depends(current_principal)):
+def _prepare_turn(case_id: UUID, session_id: UUID, body: ChatMessageIn, p: Principal):
+    """Carga sesión/historial, resuelve agente/modelo e inserta el mensaje del usuario."""
     s = get_settings()
-    case = case_access(p, case_id, "ai.query")
-    ratelimit.check("query", p.user_id)
-    ratelimit.check_org("query", p.org_id)
-    if case["spent_llm_tokens"] >= case["max_llm_tokens"]:
-        raise AppError("BUDGET_EXCEEDED", 409)
-    locale = negotiate(request.headers.get("accept-language"), p.locale)
-
     with tx(p.org_id, p.user_id) as c:
         session = _session(c, case_id, session_id)
         history = rows(c, """SELECT role, content FROM chat_messages WHERE session_id = :s
             ORDER BY created_at DESC, id DESC LIMIT :k""", s=str(session_id), k=s.CHAT_HISTORY_TURNS)
         history.reverse()
-        user_msg = one(c, """INSERT INTO chat_messages (organization_id, session_id, role, content, attachments)
-            VALUES (:o, :s, 'user', :t, CAST(:a AS jsonb)) RETURNING id, created_at""",
-                       o=p.org_id, s=str(session_id), t=body.content,
-                       a=json.dumps([{"kind": a.kind, "id": str(a.id), "name": a.name} for a in body.attachments]))
-        # Modos OCR/ASR efectivos: se toman del mensaje si vienen, si no de la sesión.
+        attachments_json = json.dumps([{"kind": a.kind, "id": str(a.id), "name": a.name}
+                                       for a in body.attachments])
+        # Idempotencia del fallback SSE: si el último mensaje es el MISMO usuario
+        # (misma sesión, mismo texto/adjuntos, sin respuesta aún y <2 min), se
+        # reutiliza en vez de duplicarlo. El stream puede insertarlo y fallar
+        # después; el POST de respaldo no debe crear un segundo turno.
+        last = one(c, """SELECT id, role, content, attachments, created_at
+            FROM chat_messages WHERE session_id = :s ORDER BY created_at DESC, id DESC LIMIT 1""",
+                   s=str(session_id))
+        reuse = (last and last.get("role") == "user" and last.get("content") == body.content
+                 and (last.get("attachments") or []) == json.loads(attachments_json)
+                 and _is_fresh(last.get("created_at"), seconds=120))
+        if reuse:
+            user_msg = {"id": last["id"], "created_at": last["created_at"]}
+        else:
+            user_msg = one(c, """INSERT INTO chat_messages (organization_id, session_id, role, content, attachments)
+                VALUES (:o, :s, 'user', :t, CAST(:a AS jsonb)) RETURNING id, created_at""",
+                           o=p.org_id, s=str(session_id), t=body.content, a=attachments_json)
         ocr_mode = body.ocr_mode if body.ocr_mode is not None else session.get("ocr_mode")
         asr_mode = body.asr_mode if body.asr_mode is not None else session.get("asr_mode")
-        # Persistir en la sesión cualquier cambio explícito.
-        if body.ocr_mode is not None or body.asr_mode is not None:
+        # El agente/modelo del mensaje tiene prioridad; si cambian, la sesión los recuerda.
+        agent_id = body.agent_id if body.agent_id is not None else session.get("agent_id")
+        model_id = body.model_id if body.model_id is not None else session.get("model_id")
+        session_changed = (str(agent_id or "") != str(session.get("agent_id") or "")
+                           or str(model_id or "") != str(session.get("model_id") or ""))
+        if body.ocr_mode is not None or body.asr_mode is not None or session_changed:
             c.execute(text("""UPDATE chat_sessions
                               SET ocr_mode = coalesce(:ocr, ocr_mode),
                                   asr_mode = coalesce(:asr, asr_mode),
+                                  agent_id = :a, model_id = :m,
                                   updated_at = now()
                               WHERE id = :s"""),
-                      {"ocr": body.ocr_mode, "asr": body.asr_mode, "s": str(session_id)})
+                      {"ocr": body.ocr_mode, "asr": body.asr_mode,
+                       "a": str(agent_id) if agent_id else None,
+                       "m": str(model_id) if model_id else None, "s": str(session_id)})
+            session["agent_id"] = agent_id
+            session["model_id"] = model_id
+    return session, history, user_msg, ocr_mode, asr_mode, agent_id, model_id
+
+
+def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Request,
+               p: Principal, locale: str, case: dict, s, *, emit=None, deadline=None,
+               background: BackgroundTasks | None = None) -> dict:
+    """Un turno completo, compartido por el POST normal y el SSE."""
+    deadline = deadline or deadline_mod.Deadline(s.REQUEST_DEADLINE_MS)
+    session, history, user_msg, ocr_mode, asr_mode, agent_id, model_id = _prepare_turn(
+        case_id, session_id, body, p)
 
     # Flujo de corrección DETERMINISTA (Fase 6): si el usuario confirma o cancela y
-    # hay una corrección pendiente en esta sesión, se aplica/descarta aquí mismo,
-    # sin depender de que el LLM reconstruya la propuesta en este turno.
+    # hay una corrección pendiente en esta sesión, se aplica/descarta aquí mismo.
     if correction.is_confirmation(body.content) or correction.is_cancellation(body.content):
         pending = _load_pending(p, case_id, session_id)
         if pending:
@@ -234,53 +408,97 @@ def send_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: 
                 _resolve_pending(p, pending["id"], "cancelled")
                 return _finish_confirmation(s, p, case_id, session_id, user_msg,
                                             answer=t("messages.correction_cancelled", locale), request=request,
-                                            extra={"pending_correction": None})
+                                            extra={"pending_correction": None},
+                                            degraded=deadline.degraded)
             applied = _apply_pending(p, case_id, pending)
             return _finish_confirmation(s, p, case_id, session_id, user_msg, answer=applied["answer"],
                                         request=request,
                                         extra={"corrections_done": [{"tool": pending["tool"],
                                                                      "arguments": pending["arguments"]}],
-                                               "corrections_pending": [], "pending_correction": None})
+                                              "corrections_pending": [], "pending_correction": None},
+                                        degraded=deadline.degraded)
 
-    # Pista determinista al agente cuando el mensaje huele a corrección o a calidad OCR/ASR.
     if len(body.content.strip()) < 3:
-        # Respuesta corta ("sí", "ok") sin corrección pendiente: no hay nada que el agente
-        # pueda hacer con una pregunta tan corta; se responde con honestidad.
         return _finish_confirmation(s, p, case_id, session_id, user_msg,
-                                    answer=t("messages.correction_none", locale), request=request)
-    # Pista general (todas las fuentes) + corrección de OCR/ASR.
+                                    answer=t("messages.correction_none", locale), request=request,
+                                    answer_kind="partial", intent="dato", degraded=deadline.degraded)
+
     hints = query_hints.merge(correction.hint(body.content, bool(body.attachments)),
                               query_hints.hint(body.content),
                               role_answer.authoritative_hint(p.org_id, p.user_id, str(case_id), body.content))
-    query_body = QueryIn(question=body.content, strategy=body.strategy,
-                         agent_id=session["agent_id"], model_id=session["model_id"],
-                         attachments=body.attachments,
-                         ocr_mode=ocr_mode, asr_mode=asr_mode)
-    result = _run_query(case_id, query_body, request, p, locale, case, s, history=history, hints=hints,
-                        ocr_mode=ocr_mode, asr_mode=asr_mode)
+    if session.get("summary"):
+        hints = query_hints.merge(hints and "\n".join(hints) or None,
+                                  f"Resumen de la conversación previa:\n{session['summary']}")
+
+    decision = intent_service.classify(
+        body.content, has_attachments=bool(body.attachments),
+        is_correction=correction.is_correction(body.content),
+        history=history, hints=hints)
+    intent_value = str(getattr(decision.intent, "value", decision.intent))
+    _safe_emit(emit, "routing", {"intent": intent_value})
+
+    def _query(strategy: str, seed: list[dict] | None = None) -> dict:
+        query_body = QueryIn(question=body.content, strategy=strategy,
+                             agent_id=agent_id, model_id=model_id,
+                             attachments=body.attachments,
+                             ocr_mode=ocr_mode, asr_mode=asr_mode)
+        return _run_query(case_id, query_body, request, p, locale, case, s,
+                          history=history, hints=hints, ocr_mode=ocr_mode, asr_mode=asr_mode,
+                          intent_decision=decision, emit=emit, deadline=deadline,
+                          seed_items=seed, background=background)
+
+    if body.strategy == "agent":
+        result = _query("agent")
+    elif body.strategy == "rag":
+        result = _query("rag")
+    elif decision.intent is intent_service.Intent.AGGREGATION:
+        result = _aggregation_result(p, case_id, body.content, locale) or _query("rag")
+    elif decision.intent is intent_service.Intent.NAVIGATE:
+        _safe_emit(emit, "synthesizing", {"strategy": "locate"})
+        result = _navigate_result(p, case_id, body.content, decision, locale,
+                                  ocr_mode, asr_mode, s)
+    elif decision.intent is intent_service.Intent.PROCEDURAL:
+        seed = _process_path_seed(p, case_id, body.content, ocr_mode, asr_mode)
+        result = _query("rag", seed)
+    elif decision.intent is intent_service.Intent.ANALYSIS:
+        result = _query("agent")
+    elif decision.intent is intent_service.Intent.CORRECTION:
+        # Aplicar/confirmar correcciones ya se atendió arriba; si no había pendiente,
+        # el camino histórico es el agente con la pista de corrección.
+        result = _query("agent")
+    elif correction.is_reprocess_question(body.content):
+        # «¿Cómo mejoro el OCR/ASR?»: diagnosticar exige tools (suggest_reprocess).
+        result = _query("agent")
+    else:
+        result = _query("rag")
 
     # Los "@" siempre producen tarjeta ver/descargar, aunque el agente no llamara get_file.
     if body.attachments:
         with tx(p.org_id, p.user_id) as c:
-            attached_cards = _attachment_file_cards(c, case_id, query_body)
+            attached_cards = _attachment_file_cards(c, case_id, QueryIn(
+                question=body.content, strategy="rag", attachments=body.attachments,
+                ocr_mode=ocr_mode, asr_mode=asr_mode))
         known = {card.get("document_id") or card.get("media_id") for card in result.get("file_cards", [])}
         result["file_cards"] = result.get("file_cards", []) + [
             card for card in attached_cards if (card.get("document_id") or card.get("media_id")) not in known]
 
-    # "Aparece en": TODAS las ubicaciones del término (documentos en ambos modos de OCR y
-    # audiencias), sin límite arbitrario por archivo, para citar cada página/minuto.
-    term = _content_term(body.content)
-    if term:
-        try:
-            with tx(p.org_id, p.user_id) as c:
-                occ = case_tools.execute(c, str(case_id), "locate", {"term": term, "k": 300},
-                                         ctx=ToolContext(org_id=p.org_id, actor_id=p.user_id,
-                                                         ocr_mode=ocr_mode, asr_mode=asr_mode))
-            _, occ_cites = _format_locations(term, occ, locale)
-            if occ_cites:
-                result["occurrences"] = occ_cites
-        except Exception:  # noqa: BLE001
-            log.debug("no se pudieron calcular las apariciones del término", exc_info=True)
+    # `occurrences` es salida de navegación o de una petición explícita de ubicación.
+    if not (body.strategy == "auto" and decision.intent is intent_service.Intent.NAVIGATE):
+        if occurrences.should_locate(decision, result.get("answer_kind", ""), body.content):
+            term = text_terms.specific_term(body.content) or query_hints.locate_term(body.content)
+            if term and occurrences.is_informative(term):
+                try:
+                    locs = _locate_locations(p, case_id, term, ocr_mode, asr_mode)
+                    _, occ = occurrences.build(term, locs, locale, max_items=s.NAV_MAX_OCCURRENCES)
+                    result["occurrences"] = occ
+                    result["occurrences_term"] = term
+                    result["occurrences_note"] = t("messages.occurrences_note", locale).format(term=term)
+                except Exception:  # noqa: BLE001 — las ubicaciones nunca rompen el turno
+                    log.debug("occurrences failed", exc_info=True)
+        elif result.get("answer_kind") in ("insufficient", "correction"):
+            result["occurrences"] = []
+            result["occurrences_term"] = None
+            result["occurrences_note"] = None
 
     # El agente propuso correcciones: se guardan para la confirmación del usuario.
     pendings = result.get("corrections_pending") or []
@@ -290,21 +508,121 @@ def send_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: 
     elif result.get("corrections_done"):
         _clear_pending(p, case_id, session_id)
 
+    answer_kind = result.get("answer_kind") or "direct"
+    intent_out = result.get("intent") or intent_value
+    degraded = bool(result.get("degraded") or deadline.degraded)
+    result["answer_kind"], result["intent"], result["degraded"] = answer_kind, intent_out, degraded
+    result.setdefault("occurrences", [])
+    result.setdefault("occurrences_term", None)
+    result.setdefault("occurrences_note", None)
+
     with tx(p.org_id, p.user_id) as c:
         assistant_msg = one(c, """INSERT INTO chat_messages (organization_id, session_id, role, content,
-                                     attachments, citations, occurrences, model_run_id)
-            VALUES (:o, :s, 'assistant', :t, CAST(:fc AS jsonb), CAST(:ci AS jsonb), CAST(:oc AS jsonb), :mr)
-            RETURNING id, created_at""",
+                                     attachments, citations, occurrences, uncertainties, occurrences_term,
+                                     occurrences_note, answer_kind, intent, degraded, model_run_id)
+            VALUES (:o, :s, 'assistant', :t, CAST(:fc AS jsonb), CAST(:ci AS jsonb), CAST(:oc AS jsonb),
+                    CAST(:unc AS jsonb), :ot, :on, :ak, :intent, :dg, :mr)
+            RETURNING id, created_at, answer_kind, intent, degraded""",
                             o=p.org_id, s=str(session_id), t=result["answer"],
                             fc=json.dumps(result.get("file_cards", [])),
                             ci=json.dumps(result.get("citations", [])),
-                            oc=json.dumps(result.get("occurrences", [])),
+                            oc=json.dumps(result.get("occurrences") or []),
+                            unc=json.dumps(result.get("uncertainties") or []),
+                            ot=result.get("occurrences_term"), on=result.get("occurrences_note"),
+                            ak=answer_kind, intent=intent_out, dg=degraded,
                             mr=result.get("model_run_id"))
         # Título automático de la primera pregunta y actividad de la sesión.
         title = session["title"] or body.content[:80]
         c.execute(text("UPDATE chat_sessions SET title = :t, updated_at = now() WHERE id = :s"),
                   {"t": title, "s": str(session_id)})
+    _update_summary(s, p, session_id, session)
     return {"user_message": user_msg, "assistant_message": assistant_msg, **result}
+
+
+@router.post("/{session_id}/messages", status_code=201)
+def send_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Request,
+                 background: BackgroundTasks, p: Principal = Depends(current_principal)):
+    s = get_settings()
+    case = case_access(p, case_id, "ai.query")
+    ratelimit.check("query", p.user_id)
+    ratelimit.check_org("query", p.org_id)
+    if case["spent_llm_tokens"] >= case["max_llm_tokens"]:
+        raise AppError("BUDGET_EXCEEDED", 409)
+    locale = negotiate(request.headers.get("accept-language"), p.locale)
+    return _send_core(case_id, session_id, body, request, p, locale, case, s,
+                      deadline=deadline_mod.Deadline(s.REQUEST_DEADLINE_MS), background=background)
+
+
+@router.post("/{session_id}/messages/stream")
+def stream_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Request,
+                   background: BackgroundTasks, p: Principal = Depends(current_principal)):
+    """SSE: etapas, tokens del texto ya validado y JSON final. El POST sigue igual."""
+    s = get_settings()
+    case = case_access(p, case_id, "ai.query")
+    ratelimit.check("query", p.user_id)
+    ratelimit.check_org("query", p.org_id)
+    if case["spent_llm_tokens"] >= case["max_llm_tokens"]:
+        raise AppError("BUDGET_EXCEEDED", 409)
+    locale = negotiate(request.headers.get("accept-language"), p.locale)
+
+    def generator():
+        events: "queue.Queue[tuple[str, dict] | None]" = queue.Queue()
+
+        def emit(event: str, data: dict | None = None) -> None:
+            events.put((event, data or {}))
+
+        def worker() -> None:
+            try:
+                result = _send_core(case_id, session_id, body, request, p, locale, case, s,
+                                    emit=emit,
+                                    deadline=deadline_mod.Deadline(s.REQUEST_DEADLINE_MS),
+                                    background=background)
+                events.put(("finished", result))
+            except AppError as exc:
+                events.put(("error", {"code": exc.code, "status": exc.status,
+                                      "message": t(f"errors.{exc.code}", locale)}))
+            except Exception:  # noqa: BLE001 — el cliente recibe error, no un cuelgue
+                log.exception("stream chat failed")
+                events.put(("error", {"code": "INTERNAL_ERROR", "status": 500,
+                                      "message": t("errors.INTERNAL_ERROR", locale)}))
+            finally:
+                events.put(None)
+
+        executor = ThreadPoolExecutor(max_workers=1)
+        executor.submit(worker)
+        try:
+            yield _sse("stage", {"stage": "accepted"})
+            while True:
+                item = events.get()
+                if item is None:
+                    break
+                event, data = item
+                if event == "finished":
+                    answer = str(data.get("answer") or "")
+                    for chunk in _chunks(answer):
+                        yield _sse("token", {"text": chunk})
+                    yield _sse("done", data)
+                    break
+                if event == "done":
+                    # `_run_query` marca el fin de etapa; el `done` real lleva el JSON completo.
+                    yield _sse("stage", {"stage": "done"})
+                    continue
+                if event == "token":
+                    continue
+                if event == "error":
+                    yield _sse("error", data)
+                    continue
+                if event == "tool":
+                    yield _sse("stage", {"stage": "retrieving", "tool": data.get("name")})
+                    continue
+                # routing/retrieving/synthesizing/validating → SIEMPRE evento `stage`.
+                yield _sse("stage", {"stage": event, **data})
+        finally:
+            executor.shutdown(wait=False)
+
+    return StreamingResponse(generator(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+                                      "Connection": "keep-alive"})
 
 
 @router.delete("/{session_id}")

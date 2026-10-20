@@ -655,7 +655,7 @@ def process_media(
         if voice_names:
             label_names.update(voice_names)
         if label_names:
-            label_names = {l: _canonical_name(n, _known_names) or n for l, n in label_names.items()}
+            label_names = {label: _canonical_name(n, _known_names) or n for label, n in label_names.items()}
             for seg in joined:
                 seg["visual_name"] = label_names.get(seg["speaker_label"])
         log.info("Nombres resueltos: %s (voz: %s)", label_names, voice_names)
@@ -878,7 +878,7 @@ def apply_diarization(
                         if s["start_ms"] <= t_ms <= s["end_ms"]), None)
             if lbl:
                 intro_blocks_by_label.setdefault(lbl, []).append((t_ms, nm))
-        mixed_labels = {l for l, evs in intro_blocks_by_label.items()
+        mixed_labels = {label for label, evs in intro_blocks_by_label.items()
                         if len({_norm_name(nm) for _, nm in evs}) > 1}
         if mixed_labels:
             log.warning("Clusters MIXTOS (2+ personas juntas en un label): %s — se parten "
@@ -886,7 +886,7 @@ def apply_diarization(
                         sorted(mixed_labels))
 
         _ctx_prompt, known_names = _case_context(conn, case_id, org_id)
-        label_names = {l: _canonical_name(n, known_names) or n for l, n in label_names.items()}
+        label_names = {label: _canonical_name(n, known_names) or n for label, n in label_names.items()}
 
         # Nombre final por TURNO (un turno es un tramo contiguo de UNA voz; aunque el
         # cluster mezcle personas, el turno no). Sirve para partir segmentos que cruzan
@@ -913,7 +913,7 @@ def apply_diarization(
 
         # Asignación de hablante por segmento (en memoria, sin tocar la BD aún).
         assigned: list[dict[str, Any]] = []
-        for sg, pre in zip(segs, joined_pre):
+        for sg, pre in zip(segs, joined_pre, strict=False):
             label = pre["speaker_label"]
             labels_seen.add(label)
             ovs = _turns_overlapping(sg["start_ms"], sg["end_ms"])

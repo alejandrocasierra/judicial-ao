@@ -146,6 +146,15 @@ def test_it_cit_02_tampered_quote_hash_is_detected(client, auth, ids, owner_db):
 
 
 def test_it_query_01_grounded_answer_with_resolvable_citations(client, auth, ids):
+    from app.providers.llm import FakeLLM
+
+    def script(_system, _user):
+        return (
+            '{"claims":[{"text":"El demandado afirma haber realizado el pago de $80.000.000.",'
+            '"citations":["E1"]}],"uncertainties":[]}'
+        )
+
+    FakeLLM.script = script
     r = client.post(f"/v1/cases/{ids['pago']}/query", headers=auth("abogada.alfa"),
                     json={"question": "¿Qué pruebas hay sobre el pago de $80.000.000?", "mode": "evidence_lookup"})
     assert r.status_code == 200, r.text
@@ -203,4 +212,9 @@ def test_it_proc_01_process_is_idempotent(client, auth, ids):
     b = client.post(f"/v1/cases/{ids['pago']}/process", headers=auth("gestor.alfa"), json=body).json()["jobs"]
     assert [j["id"] for j in a] == [j["id"] for j in b] and all(j["reused"] for j in b)
     st = client.get(f"/v1/cases/{ids['pago']}/processing", headers=auth("gestor.alfa")).json()
-    assert len([j for j in st["jobs"] if j["job_type"] in body["job_types"]]) == 2
+    # La lista de procesamiento puede incluir jobs históricos del mismo tipo
+    # creados por otras pruebas; lo que este test debe garantizar es que los
+    # DOS jobs que acaba de crear aparezcan una sola vez (idempotencia).
+    created = {j["id"] for j in a}
+    assert len(created) == 2
+    assert len([j for j in st["jobs"] if j["id"] in created]) == 2

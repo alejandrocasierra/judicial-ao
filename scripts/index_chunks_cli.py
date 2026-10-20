@@ -10,6 +10,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from uuid import UUID
@@ -18,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "api"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 _env_path = Path(__file__).resolve().parents[1] / ".env"
-if _env_path.exists():
+if not os.environ.get("ENV_FILE") and _env_path.exists():
     import envload  # noqa: E402
 
     envload.load(str(_env_path))

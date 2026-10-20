@@ -30,6 +30,26 @@ export class ApiError extends Error {
   }
 }
 
+/** El endpoint respondió, pero no con `text/event-stream` (ruta ausente o
+ * versión del API sin streaming). El llamador debe usar el POST normal. */
+export class StreamUnsupportedError extends Error {
+  constructor(public status: number) {
+    super("El servidor no ofrece streaming para esta ruta");
+    this.name = "StreamUnsupportedError";
+  }
+}
+
+/** El stream cerró sin evento `done`: la respuesta quedó incompleta y el
+ * llamador debe reintentar por el POST normal. */
+export class StreamIncompleteError extends Error {
+  constructor() {
+    super("El stream terminó antes de completar la respuesta");
+    this.name = "StreamIncompleteError";
+  }
+}
+
+export type StreamEventListener = (event: string, data: unknown) => void;
+
 let refreshPromise: Promise<boolean> | null = null;
 
 /** Renueva el access token con el refresh token (una sola vez en paralelo). */
@@ -104,6 +124,114 @@ async function request<T>(
   return res.json();
 }
 
+/**
+ * POST que consume Server-Sent Events sobre `fetch` (el endpoint exige body, así
+ * que `EventSource` no sirve). Devuelve los datos del evento `done`.
+ *
+ * - Reintenta una vez tras refrescar el token si el primer intento da 401.
+ * - Lanza `StreamUnsupportedError` si el servidor no responde con SSE.
+ * - Lanza `StreamIncompleteError` si el cuerpo termina sin `done`.
+ * - `signal` permite cancelar la lectura (AbortSignal del llamador).
+ */
+async function requestStream<T>(
+  path: string,
+  body: unknown,
+  onEvent: StreamEventListener,
+  signal?: AbortSignal,
+  retried = false,
+): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const res = await fetch(apiUrl(path), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (res.status === 401 && !retried && !path.startsWith("/auth/")) {
+    const ok = await tryRefresh();
+    if (ok) return requestStream<T>(path, body, onEvent, signal, true);
+    hardLogout();
+  }
+
+  if (!res.ok) {
+    // La ruta de streaming no existe en esta versión del API: el llamador debe
+    // usar el POST normal en lugar de tratarlo como un error del turno.
+    if (res.status === 404 || res.status === 405 || res.status === 501) {
+      throw new StreamUnsupportedError(res.status);
+    }
+    const errBody = await res.json().catch(() => ({ error: { code: "INTERNAL_ERROR" } }));
+    const code = errBody?.error?.code || "INTERNAL_ERROR";
+    throw new ApiError(code, res.status, errBody?.error?.message || res.statusText);
+  }
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("text/event-stream") || !res.body) {
+    throw new StreamUnsupportedError(res.status);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let donePayload: T | null = null;
+  let finished = false;
+
+  const dispatch = (block: string) => {
+    let event = "message";
+    const dataLines: string[] = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (!line || line.startsWith(":")) continue;
+      const colon = line.indexOf(":");
+      const field = colon < 0 ? line : line.slice(0, colon);
+      let value = colon < 0 ? "" : line.slice(colon + 1);
+      if (value.startsWith(" ")) value = value.slice(1);
+      if (field === "event") event = value;
+      else if (field === "data") dataLines.push(value);
+    }
+    if (dataLines.length === 0) return;
+    const raw = dataLines.join("\n");
+    let data: unknown = raw;
+    try { data = JSON.parse(raw); } catch { /* evento de texto plano */ }
+    if (event === "done") {
+      donePayload = data as T;
+      finished = true;
+    }
+    onEvent(event, data);
+  };
+
+  try {
+    // `done` cierra el turno: no se espera a que el servidor cierre el socket.
+    outer: for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      let sep = buffer.search(/\r?\n\r?\n/);
+      while (sep >= 0) {
+        const block = buffer.slice(0, sep);
+        // El separador mide 4 bytes si es CRLF y 2 si es LF.
+        buffer = buffer.slice(sep + (buffer[sep] === "\r" ? 4 : 2));
+        dispatch(block);
+        if (finished) break outer;
+        sep = buffer.search(/\r?\n\r?\n/);
+      }
+    }
+    if (!finished) {
+      buffer += decoder.decode();
+      if (buffer.trim()) dispatch(buffer);
+    }
+  } finally {
+    if (finished) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+
+  if (donePayload === null) throw new StreamIncompleteError();
+  return donePayload;
+}
+
 /** URL directa con token para <video>/<img> (no pueden enviar cabeceras).
  * Permite streaming HTTP Range: el navegador reproduce y salta sin descargar todo. */
 export function streamUrl(path: string): string {
@@ -137,6 +265,10 @@ export const api = {  get: <T>(path: string, params?: Record<string, string>) =>
     request<T>(path, { method: "GET", params }),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: JSON.stringify(body) }),
+  /** POST con Server-Sent Events: `onEvent` recibe cada `event:`/`data:` y la
+   * promesa resuelve con el payload de `done`. */
+  postStream: <T>(path: string, body: unknown, onEvent: StreamEventListener, signal?: AbortSignal) =>
+    requestStream<T>(path, body, onEvent, signal),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: <T>(path: string) =>

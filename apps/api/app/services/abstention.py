@@ -8,8 +8,6 @@ evidencia, eventos, partes, speakers y nombres de archivo.
 """
 from __future__ import annotations
 
-import re
-
 from sqlalchemy.engine import Connection
 
 from app.core.config import get_settings
@@ -32,15 +30,17 @@ _STOPWORDS = {
 
 
 def _extract_terms(question: str) -> list[str]:
-    """Extrae términos significativos de la pregunta (sin stopwords)."""
-    tokens = re.findall(r"[a-záéíóúüñ0-9]+(?:[.,][0-9]+)*", question.lower())
-    seen: set[str] = set()
-    out = []
-    for t in tokens:
-        if len(t) >= 3 and t not in _STOPWORDS and t not in seen:
-            seen.add(t)
-            out.append(t)
-    return out
+    """Extrae términos significativos de la pregunta (sin stopwords).
+
+    Devuelve RAÍCES: "pagos" -> "pago", para que el ILIKE encuentre también
+    "pago" y no se abstenga por una diferencia morfológica.
+    """
+    from app.services import text_terms
+
+    # Los números no se usan para abstención: el mismo monto puede aparecer como
+    # "$80.000.000" o "80000000". El grounding del claim sí los exige después.
+    return [text_terms.stem(t) for t in text_terms.content_terms(question)
+            if not t[0].isdigit()]
 
 
 def term_coverage(conn: Connection, case_id: str, question: str) -> float:
@@ -50,33 +50,30 @@ def term_coverage(conn: Connection, case_id: str, question: str) -> float:
     present = rows(conn, """
         SELECT term FROM unnest(CAST(:terms AS text[])) AS term
         WHERE EXISTS (
-            SELECT 1 FROM (
-                SELECT text FROM chunks WHERE case_id = :c
-                UNION ALL
-                SELECT p.text FROM document_pages p
-                JOIN documents d ON d.id = p.document_id
-                WHERE d.case_id = :c
-                UNION ALL
-                SELECT s.text FROM transcript_segments s
-                JOIN media m ON m.id = s.media_id
-                WHERE m.case_id = :c
-                UNION ALL
-                SELECT text FROM claims WHERE case_id = :c
-                UNION ALL
-                SELECT proposition FROM facts WHERE case_id = :c
-                UNION ALL
-                SELECT description FROM evidence WHERE case_id = :c
-                UNION ALL
-                SELECT description FROM events WHERE case_id = :c
-                UNION ALL
-                SELECT name FROM parties WHERE case_id = :c
-                UNION ALL
-                SELECT label FROM speakers WHERE case_id = :c
-                UNION ALL
-                SELECT filename FROM documents WHERE case_id = :c
-            ) src
-            WHERE src.text ILIKE '%' || term || '%'
-            LIMIT 1
+            SELECT 1 FROM chunks
+            WHERE case_id = :c AND search_tsv @@ plainto_tsquery('spanish', term)
+        )
+        OR EXISTS (
+            SELECT 1 FROM document_pages p
+            JOIN documents d ON d.id = p.document_id
+            WHERE d.case_id = :c AND p.search_tsv @@ plainto_tsquery('spanish', term)
+        )
+        OR EXISTS (
+            SELECT 1 FROM transcript_segments s
+            JOIN media m ON m.id = s.media_id
+            WHERE m.case_id = :c AND s.search_tsv @@ plainto_tsquery('spanish', term)
+        )
+        OR EXISTS (
+            SELECT 1 FROM documents
+            WHERE case_id = :c AND filename ILIKE '%' || term || '%'
+        )
+        OR EXISTS (
+            SELECT 1 FROM parties
+            WHERE case_id = :c AND name ILIKE '%' || term || '%'
+        )
+        OR EXISTS (
+            SELECT 1 FROM speakers
+            WHERE case_id = :c AND (label ILIKE '%' || term || '%' OR display_name ILIKE '%' || term || '%')
         )
     """, terms=terms, c=case_id)
     return len(present) / len(terms)

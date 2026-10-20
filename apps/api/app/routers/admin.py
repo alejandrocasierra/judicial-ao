@@ -1,6 +1,7 @@
 """Panel de administración: usuarios, roles, SMTP, agentes, skills, modelos, backups."""
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 from uuid import UUID
@@ -12,14 +13,28 @@ from sqlalchemy.exc import IntegrityError
 from app.core.config import get_settings
 from app.core.db import one, rows, tx
 from app.core.errors import AppError
+from app.core import secrets as secret_store
 from app.schemas import (AdminUserCreate, AdminUserPatch, AgentIn, AgentPatch, AiModelIn, AiModelPatch,
                          ModelCatalogIn, RoleIn, RolePatch, SkillIn, SkillPatch, SmtpSettingsPatch)
 from app.security.deps import Principal, require_org
 from app.security.passwords import hash_password, password_policy_ok
-from app.services import alerts, audit, backup, builtin_agents, mailer, model_catalog, roles as roles_service
+from app.services import alerts, audit, backup, builtin_agents, case_tools, mailer, model_catalog, roles as roles_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 log = logging.getLogger(__name__)
+
+
+def _validate_skill_tools(tools: list[str] | None) -> list[str]:
+    """Una skill solo puede habilitar tools que existen en el registro.
+
+    El registro es la única fuente de verdad (lectura + escritura); así el panel
+    no puede inventar tools ni habilitar una tool eliminada.
+    """
+    values = list(tools or [])
+    unknown = sorted(set(values) - set(case_tools.tool_names()))
+    if unknown:
+        raise AppError("UNKNOWN_TOOL", 422, details={"tools": unknown})
+    return values
 
 
 def _validate_password(pw: str) -> None:
@@ -275,23 +290,29 @@ def list_skills(p: Principal = Depends(require_org("user.manage"))):
         # para que el panel muestre el catálogo completo con su uso real.
         builtin_agents.ensure_chat_builtins(c, p.org_id, p.user_id)
         return rows(c, """SELECT id, name, system_prompt, is_system, created_at, updated_at,
+                          tools, parameters, position,
                           (SELECT count(*) FROM agents a WHERE s.id::text = ANY(a.skills)) AS used_by
-                          FROM skills s ORDER BY is_system DESC, name""")
+                          FROM skills s ORDER BY is_system DESC, position NULLS LAST, name""")
 
 
 @router.post("/skills")
 def create_skill(body: SkillIn, request: Request, p: Principal = Depends(require_org("user.manage"))):
+    tools = _validate_skill_tools(body.tools)
     with tx(p.org_id, p.user_id) as c:
-        s = one(c, """INSERT INTO skills (organization_id, name, system_prompt, created_by)
-                      VALUES (:o, :n, :sp, :u) RETURNING id, name, system_prompt, created_at""",
-                o=p.org_id, n=body.name, sp=body.system_prompt, u=p.user_id)
+        s = one(c, """INSERT INTO skills (organization_id, name, system_prompt, tools, parameters, position, created_by)
+                      VALUES (:o, :n, :sp, :tools, CAST(:params AS jsonb), :pos, :u)
+                      RETURNING id, name, system_prompt, tools, parameters, position, created_at""",
+                o=p.org_id, n=body.name, sp=body.system_prompt, tools=tools,
+                params=json.dumps(body.parameters, ensure_ascii=False), pos=body.position, u=p.user_id)
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="admin.skill_created",
-                     entity_type="skill", entity_id=str(s["id"]), after={"name": body.name}, request=request)
+                     entity_type="skill", entity_id=str(s["id"]),
+                     after={"name": body.name, "tools": tools, "position": body.position}, request=request)
     return s
 
 
 @router.patch("/skills/{skill_id}")
 def update_skill(skill_id: UUID, body: SkillPatch, request: Request, p: Principal = Depends(require_org("user.manage"))):
+    tools = _validate_skill_tools(body.tools) if body.tools is not None else None
     with tx(p.org_id, p.user_id) as c:
         if not one(c, "SELECT id FROM skills WHERE id = :i", i=str(skill_id)):
             raise AppError("NOT_FOUND", 404)
@@ -302,9 +323,20 @@ def update_skill(skill_id: UUID, body: SkillPatch, request: Request, p: Principa
         if body.system_prompt is not None:
             sets.append("system_prompt = :sp")
             params["sp"] = body.system_prompt
-        s = one(c, f"UPDATE skills SET {', '.join(sets)} WHERE id = :i RETURNING id, name, system_prompt, created_at, updated_at", **params)
+        if tools is not None:
+            sets.append("tools = :tools")
+            params["tools"] = tools
+        if body.parameters is not None:
+            sets.append("parameters = CAST(:params AS jsonb)")
+            params["params"] = json.dumps(body.parameters, ensure_ascii=False)
+        if body.position is not None:
+            sets.append("position = :pos")
+            params["pos"] = body.position
+        s = one(c, f"UPDATE skills SET {', '.join(sets)} WHERE id = :i "
+                   "RETURNING id, name, system_prompt, tools, parameters, position, created_at, updated_at", **params)
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="admin.skill_updated",
-                     entity_type="skill", entity_id=str(skill_id), request=request)
+                     entity_type="skill", entity_id=str(skill_id),
+                     after={"name": body.name, "tools": tools, "position": body.position}, request=request)
     return s
 
 
@@ -343,7 +375,7 @@ def available_models(body: ModelCatalogIn, p: Principal = Depends(require_org("u
                 WHERE provider = :p AND encrypted_api_key IS NOT NULL AND encrypted_api_key <> ''
                 ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1""", p=provider)
         if row:
-            api_key = row["encrypted_api_key"]
+            api_key = secret_store.decrypt(row["encrypted_api_key"])
             api_base_url = api_base_url or row["api_base_url"]
     if api_key:
         try:
@@ -386,7 +418,7 @@ def create_model(body: AiModelIn, request: Request, p: Principal = Depends(requi
                       VALUES (:o, :pr, :mn, 'org', :key, :base, :d, :ocr, :asr, :u)
                       RETURNING id, provider, model_name, api_base_url, is_default, ocr_enabled, asr_enabled, created_at""",
                 o=p.org_id, pr=body.provider, mn=body.model_name,
-                key=body.api_key or None, base=(body.api_base_url or None),
+                key=secret_store.encrypt(body.api_key) or None, base=(body.api_base_url or None),
                 d=body.is_default, ocr=body.ocr_enabled, asr=body.asr_enabled, u=p.user_id)
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="admin.model_created",
                      entity_type="ai_model", entity_id=str(m["id"]),
@@ -413,7 +445,7 @@ def update_model(model_id: UUID, body: AiModelPatch, request: Request, p: Princi
             params["mn"] = body.model_name
         if body.api_key is not None:
             sets.append("encrypted_api_key = :key")
-            params["key"] = body.api_key or None
+            params["key"] = secret_store.encrypt(body.api_key) or None
         if body.api_base_url is not None:
             sets.append("api_base_url = :base")
             params["base"] = body.api_base_url or None

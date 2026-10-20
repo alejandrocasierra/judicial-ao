@@ -19,6 +19,13 @@ from app.services import markdown
 
 # Ventana para agrupar segmentos contiguos del mismo hablante (ms).
 _TESTIMONY_GAP_MS = 30_000
+# Techo de testimonio: un chunk de audio no debe superar ~350 palabras. Sin esto,
+# una intervención larga del mismo hablante se convertía en un bloque gigante que
+# desplazaba a las demás fuentes en el top-k.
+_TESTIMONY_MAX_WORDS = 350
+# Solape entre chunks de documento (~10 % del máximo) para no perder una frase
+# que cae justo en la frontera. Se aplica solo al texto, nunca a la cita.
+_CHUNK_OVERLAP_WORDS = 30
 
 # Tamaño objetivo de un chunk de documento (~200-500 palabras). Un chunk no corta a
 # mitad de un bloque: se agrupan secciones cortas y, si una sección es muy larga, se
@@ -29,25 +36,60 @@ _CHUNK_MAX_WORDS = 500
 _MIN_BODY_WORDS = 40
 
 
+_ENTITY_CACHE: dict[tuple[int, str], tuple[dict[tuple[str, int], list[str]], dict[str, list[str]]]] = {}
+_SPEAKER_CACHE: dict[tuple[int, str], dict[str, str | None]] = {}
+
+
+def _entity_maps(conn: Connection, case_id: str) -> tuple[dict[tuple[str, int], list[str]], dict[str, list[str]]]:
+    key = (id(conn), str(case_id))
+    if key in _ENTITY_CACHE:
+        return _ENTITY_CACHE[key]
+    try:
+        records = rows(conn, """
+            SELECT c.document_id, c.page_number, c.segment_id, e.id AS entity_id
+            FROM entities e
+            JOIN citations c ON c.target_type = 'entity' AND c.target_id = e.id
+            WHERE e.case_id = :c
+              AND c.source_type IN ('document_page', 'transcript_segment')
+        """, c=case_id)
+    except AttributeError:
+        return {}, {}
+    by_page: dict[tuple[str, int], list[str]] = {}
+    by_segment: dict[str, list[str]] = {}
+    for r in records:
+        eid = str(r["entity_id"])
+        if r.get("document_id") is not None and r.get("page_number") is not None:
+            by_page.setdefault((str(r["document_id"]), int(r["page_number"])), []).append(eid)
+        if r.get("segment_id") is not None:
+            by_segment.setdefault(str(r["segment_id"]), []).append(eid)
+    for values in list(by_page.values()) + list(by_segment.values()):
+        values[:] = sorted(set(values))
+    _ENTITY_CACHE[key] = (by_page, by_segment)
+    return by_page, by_segment
+
+
+def _speaker_map(conn: Connection, case_id: str) -> dict[str, str | None]:
+    key = (id(conn), str(case_id))
+    if key in _SPEAKER_CACHE:
+        return _SPEAKER_CACHE[key]
+    try:
+        records = rows(conn, "SELECT id, label, display_name FROM speakers WHERE case_id = :c", c=case_id)
+    except AttributeError:
+        return {}
+    mapping = {str(r["id"]): (r.get("display_name") or r.get("label")) for r in records}
+    _SPEAKER_CACHE[key] = mapping
+    return mapping
+
+
 def _entities_for_page(conn: Connection, case_id: str, document_id: str, page_number: int) -> list[str]:
     """Devuelve ids de entidades que citan esta página."""
-    return [str(r["entity_id"]) for r in rows(conn, """
-        SELECT DISTINCT e.id AS entity_id
-        FROM entities e
-        JOIN citations c ON c.target_type = 'entity' AND c.target_id = e.id
-        WHERE e.case_id = :c AND c.source_type = 'document_page'
-          AND c.document_id = :d AND c.page_number = :p
-    """, c=case_id, d=document_id, p=page_number)]
+    by_page, _ = _entity_maps(conn, case_id)
+    return by_page.get((str(document_id), int(page_number)), [])
 
 
 def _entities_for_segment(conn: Connection, case_id: str, segment_id: str) -> list[str]:
-    return [str(r["entity_id"]) for r in rows(conn, """
-        SELECT DISTINCT e.id AS entity_id
-        FROM entities e
-        JOIN citations c ON c.target_type = 'entity' AND c.target_id = e.id
-        WHERE e.case_id = :c AND c.source_type = 'transcript_segment'
-          AND c.segment_id = :s
-    """, c=case_id, s=segment_id)]
+    _, by_segment = _entity_maps(conn, case_id)
+    return by_segment.get(str(segment_id), [])
 
 
 def _speaker_label(conn: Connection, speaker_id: str | None) -> str | None:
@@ -58,10 +100,18 @@ def _speaker_label(conn: Connection, speaker_id: str | None) -> str | None:
     con el nombre correcto."""
     if not speaker_id:
         return None
-    row = rows(conn, "SELECT label, display_name FROM speakers WHERE id = :s", s=speaker_id)
-    if not row:
+    # El case_id se obtiene del propio speaker; la caché de mapas usa el case_id
+    # de la llamada, así que aquí se consulta una vez y se cachea por speaker.
+    key = (id(conn), str(speaker_id))
+    if key in _SPEAKER_CACHE:
+        return _SPEAKER_CACHE[key]
+    try:
+        row = rows(conn, "SELECT label, display_name, case_id FROM speakers WHERE id = :s", s=speaker_id)
+    except AttributeError:
         return None
-    return row[0].get("display_name") or row[0]["label"]
+    label = (row[0].get("display_name") or row[0]["label"]) if row else None
+    _SPEAKER_CACHE[key] = label
+    return label
 
 
 def _doc_chunk(org_id: str, case_id: str, document_id: str, page_number: int,
@@ -178,6 +228,17 @@ def chunk_page_text(text: str) -> list[str]:
         if not is_heading:
             cur_body_words += bw
     flush()
+
+    # Solape de frontera: el chunk siguiente repite la cola del anterior. No crea
+    # una cita nueva; es contexto para que una frase partida siga siendo recuperable.
+    if len(chunks) > 1:
+        with_overlap: list[str] = [chunks[0]]
+        for prev, current in zip(chunks, chunks[1:], strict=False):
+            tail = prev.split()[-_CHUNK_OVERLAP_WORDS:]
+            if tail and not current.startswith(" ".join(tail)):
+                current = " ".join(tail) + "\n\n" + current
+            with_overlap.append(current)
+        chunks = with_overlap
     return [c for c in chunks if c.strip()]
 
 
@@ -266,7 +327,8 @@ def chunk_media(conn: Connection, org_id: str, case_id: str, media_id: str) -> l
         speaker_label = _speaker_label(conn, s["speaker_id"])
         if (current is None
                 or speaker_label != current["metadata"].get("speaker")
-                or s["start_ms"] - current["end_ms"] > _TESTIMONY_GAP_MS):
+                or s["start_ms"] - current["end_ms"] > _TESTIMONY_GAP_MS
+                or _word_count(current["text"] + "\n" + text) > _TESTIMONY_MAX_WORDS):
             flush()
             current = {
                 "organization_id": org_id,
@@ -294,21 +356,73 @@ def chunk_media(conn: Connection, org_id: str, case_id: str, media_id: str) -> l
     return chunks
 
 
-def _structured_chunk(org_id: str, case_id: str, chunk_type: str, text: str, meta: dict[str, Any]) -> dict[str, Any] | None:
+_SOURCE_CACHE: dict[tuple[int, str], dict[tuple[str, str], dict[str, Any]]] = {}
+
+
+def _source_map(conn: Connection, case_id: str) -> dict[tuple[str, str], dict[str, Any]]:
+    """Todas las fuentes citables del caso, en una sola consulta (evita N+1)."""
+    key = (id(conn), str(case_id))
+    if key in _SOURCE_CACHE:
+        return _SOURCE_CACHE[key]
+    try:
+        records = rows(conn, """
+            SELECT c.target_type, c.target_id, c.document_id, c.page_number, c.media_id,
+                   c.segment_id, ts.start_ms, ts.end_ms,
+                   coalesce(d.filename, m.filename) AS filename, dp.folio
+            FROM citations c
+            LEFT JOIN documents d ON d.id = c.document_id
+            LEFT JOIN media m ON m.id = c.media_id
+            LEFT JOIN transcript_segments ts ON ts.id = c.segment_id
+            LEFT JOIN document_pages dp ON dp.document_id = c.document_id
+                                       AND dp.page_number = c.page_number
+            WHERE c.case_id = :case_id
+              AND (c.document_id IS NOT NULL OR c.media_id IS NOT NULL)
+            ORDER BY c.created_at DESC
+        """, case_id=case_id)
+    except AttributeError:  # stub de tests sin conexión real
+        return {}
+    mapping: dict[tuple[str, str], dict[str, Any]] = {}
+    try:
+        for rec in records:
+            mapping.setdefault((str(rec["target_type"]), str(rec["target_id"])), dict(rec))
+    except (KeyError, TypeError):  # stub de tests: filas sin columnas de citation
+        return {}
+    _SOURCE_CACHE[key] = mapping
+    return mapping
+
+
+def _source_for_target(conn: Connection, case_id: str, target_type: str,
+                       target_id: str) -> dict[str, Any] | None:
+    """Fuente primaria (documento+página o media+segmento) de un chunk estructurado.
+
+    Sin fuente no se puede citar; el chunk se marca `citable=False` y no debe
+    ocupar el top-k del chat. Así los claims/eventos dejan de desplazar a la
+    evidencia primaria sin poder resolver una cita."""
+    return _source_map(conn, case_id).get((str(target_type), str(target_id)))
+
+
+def _structured_chunk(org_id: str, case_id: str, chunk_type: str, text: str, meta: dict[str, Any],
+                      source: dict[str, Any] | None = None) -> dict[str, Any] | None:
     text = (text or "").strip()
     if not text:
         return None
+    source = source or {}
+    citable = bool(source.get("document_id") or source.get("media_id"))
+    metadata = {k: v for k, v in meta.items() if v is not None}
+    metadata["citable"] = citable
+    if source.get("filename"):
+        metadata["source_filename"] = source["filename"]
     return {
         "organization_id": org_id,
         "case_id": case_id,
         "chunk_type": chunk_type,
-        "document_id": None,
-        "page_number": None,
-        "media_id": None,
-        "start_ms": None,
-        "end_ms": None,
+        "document_id": source.get("document_id"),
+        "page_number": source.get("page_number"),
+        "media_id": source.get("media_id"),
+        "start_ms": source.get("start_ms"),
+        "end_ms": source.get("end_ms"),
         "text": text,
-        "metadata": {k: v for k, v in meta.items() if v is not None},
+        "metadata": metadata,
     }
 
 
@@ -316,8 +430,9 @@ def chunk_claims(conn: Connection, org_id: str, case_id: str) -> list[dict[str, 
     records = rows(conn, "SELECT id, text, claim_type, confidence FROM claims WHERE case_id = :c", c=case_id)
     out: list[dict[str, Any]] = []
     for r in records:
+        src = _source_for_target(conn, case_id, "claim", str(r["id"]))
         ch = _structured_chunk(org_id, case_id, "claim", r["text"],
-                               {"claim_type": r["claim_type"], "confidence": r["confidence"]})
+                               {"claim_type": r["claim_type"], "confidence": r["confidence"]}, src)
         if ch:
             out.append(ch)
     return out
@@ -329,9 +444,10 @@ def chunk_events(conn: Connection, org_id: str, case_id: str) -> list[dict[str, 
         FROM events WHERE case_id = :c""", c=case_id)
     out: list[dict[str, Any]] = []
     for r in records:
+        src = _source_for_target(conn, case_id, "event", str(r["id"]))
         ch = _structured_chunk(org_id, case_id, "timeline_event", r["description"],
                                {"event_type": r["event_type"], "event_date": str(r["event_date"]) if r["event_date"] else None,
-                                "date_precision": r["date_precision"], "timeline_confidence": r["timeline_confidence"]})
+                                "date_precision": r["date_precision"], "timeline_confidence": r["timeline_confidence"]}, src)
         if ch:
             out.append(ch)
     return out
@@ -341,7 +457,8 @@ def chunk_facts(conn: Connection, org_id: str, case_id: str) -> list[dict[str, A
     records = rows(conn, "SELECT id, proposition, status FROM facts WHERE case_id = :c", c=case_id)
     out: list[dict[str, Any]] = []
     for r in records:
-        ch = _structured_chunk(org_id, case_id, "paragraph", r["proposition"], {"status": r["status"]})
+        src = _source_for_target(conn, case_id, "fact", str(r["id"]))
+        ch = _structured_chunk(org_id, case_id, "paragraph", r["proposition"], {"status": r["status"]}, src)
         if ch:
             out.append(ch)
     return out
@@ -353,10 +470,11 @@ def chunk_decisions(conn: Connection, org_id: str, case_id: str) -> list[dict[st
         FROM decisions WHERE case_id = :c""", c=case_id)
     out: list[dict[str, Any]] = []
     for r in records:
+        src = _source_for_target(conn, case_id, "decision", str(r["id"]))
         ch = _structured_chunk(org_id, case_id, "decision_reasoning", r["reasoning"],
                                {"decision_type": r["decision_type"],
                                 "decision_date": str(r["decision_date"]) if r["decision_date"] else None,
-                                "outcome": r["outcome"]})
+                                "outcome": r["outcome"]}, src)
         if ch:
             out.append(ch)
     return out
@@ -368,10 +486,11 @@ def chunk_evidence(conn: Connection, org_id: str, case_id: str) -> list[dict[str
         FROM evidence WHERE case_id = :c""", c=case_id)
     out: list[dict[str, Any]] = []
     for r in records:
+        src = _source_for_target(conn, case_id, "evidence", str(r["id"]))
         ch = _structured_chunk(org_id, case_id, "evidence_description", r["description"],
                                {"evidence_type": r["evidence_type"],
                                 "source_document_id": str(r["source_document_id"]) if r["source_document_id"] else None,
-                                "source_media_id": str(r["source_media_id"]) if r["source_media_id"] else None})
+                                "source_media_id": str(r["source_media_id"]) if r["source_media_id"] else None}, src)
         if ch:
             out.append(ch)
     return out
@@ -383,8 +502,9 @@ def chunk_legal_rules(conn: Connection, org_id: str, case_id: str) -> list[dict[
         FROM legal_rules WHERE case_id = :c""", c=case_id)
     out: list[dict[str, Any]] = []
     for r in records:
+        src = _source_for_target(conn, case_id, "legal_rule", str(r["id"]))
         ch = _structured_chunk(org_id, case_id, "legal_rule", r["text"],
-                               {"jurisdiction": r["jurisdiction"], "source": r["source"], "identifier": r["identifier"]})
+                               {"jurisdiction": r["jurisdiction"], "source": r["source"], "identifier": r["identifier"]}, src)
         if ch:
             out.append(ch)
     return out

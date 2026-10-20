@@ -36,19 +36,12 @@ log = logging.getLogger(__name__)
 
 # Allowlist por rol: las tools de lectura exigen el mismo permiso que el chat;
 # las de escritura exigen el permiso del endpoint REST equivalente.
-READ_PERMISSION = "ai.query"
-WRITE_PERMISSION_BY_TOOL = {
-    "correct_ocr_page": "document.upload",
-    "correct_transcript_segment": "media.upload",
-}
+READ_PERMISSION = case_tools.READ_PERMISSION
+WRITE_PERMISSION_BY_TOOL = case_tools.WRITE_PERMISSION_BY_TOOL
 
 
 def _required_permission(tool: str, arguments: dict[str, Any]) -> str:
-    if tool in WRITE_PERMISSION_BY_TOOL:
-        return WRITE_PERMISSION_BY_TOOL[tool]
-    if tool == "suggest_reprocess":
-        return "media.upload" if arguments.get("media_id") else "document.upload"
-    return READ_PERMISSION
+    return case_tools.required_permission(tool, arguments)
 
 
 def _check_access(p: Principal, case_id: str, permission: str) -> None:
@@ -62,8 +55,10 @@ def _check_access(p: Principal, case_id: str, permission: str) -> None:
 def _run_tool(name: str, case_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """Ejecuta una case_tool con el Principal de la request: RBAC → tx(RLS) → post-commit."""
     p = current_principal()
-    _check_access(p, case_id, _required_permission(name, arguments))
-    ctx = ToolContext(org_id=p.org_id, actor_id=p.user_id, locale=p.locale)
+    perm = _required_permission(name, arguments)
+    _check_access(p, case_id, perm)
+    ctx = ToolContext(org_id=p.org_id, actor_id=p.user_id, locale=p.locale,
+                      allow_write=True, permissions={perm})
     with tx(p.org_id, p.user_id) as conn:
         items = case_tools.execute(conn, case_id, name, arguments, ctx=ctx)
     case_tools.drain_post_commit(ctx)

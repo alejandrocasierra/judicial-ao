@@ -15,10 +15,21 @@ class LLMResult:
     tokens_out: int
 
 
+@dataclass(frozen=True)
+class Capabilities:
+    """Capacidades reales de un proveedor. El pipeline NUNCA las exige: las usa
+    para degradar (p. ej. sin JSON mode se valida y repara el texto)."""
+    streaming: bool = False
+    json_mode: bool = False
+    tool_calling: bool = False
+    max_context: int | None = None
+
+
 class LLMProvider(Protocol):
     name: str
     model: str
     def complete(self, system: str, user: str) -> LLMResult: ...
+    def capabilities(self) -> Capabilities: ...
 
 
 class OCRProvider(Protocol):

@@ -39,6 +39,8 @@
     "FOLDER_NAME_INVALID": "The folder name is not valid.",
     "FILE_NOT_FOUND": "File not found.",
     "DOCUMENT_IMMUTABLE": "Originals are immutable and cannot be modified or deleted.",
+    "MEDIA_IMMUTABLE": "Audio/video originals are immutable; use the audited deletion request.",
+    "MODEL_NOT_FOUND": "The selected model no longer exists or does not belong to the organization.",
     "LEGAL_HOLD_ACTIVE": "The case is under legal hold; the operation is blocked.",
     "JUDICIAL_DETERMINATION_REQUIRES_DECISION": "A fact can only be marked as judicially determined by citing a decision in the case.",
     "SPEAKER_CONFIRMATION_REQUIRES_PARTY": "Confirming a speaker requires the identified party.",
@@ -51,7 +53,8 @@
     "INTERNAL_ERROR": "Internal error. Use the request_id for support.",
     "METHOD_NOT_ALLOWED": "The HTTP method is not allowed for this resource.",
     "CHAT_NOT_FOUND": "Conversation not found",
-    "AGENT_NOT_FOUND": "Agent not found"
+    "AGENT_NOT_FOUND": "Agent not found",
+    "UNKNOWN_TOOL": "Tool not recognized for this agent."
   },
   "messages": {
     "insufficient_evidence": "No evidence was found in the case to answer this question.",
@@ -64,7 +67,20 @@
     "correction_none": "There is no pending correction to confirm. Tell me which part of the case file you want to review or fix.",
     "evidence_fallback": "I found these sources in the case file (could not build a verifiable synthesis; check the citation):",
     "locate_intro": "It appears in the following locations of the case file about {term}:",
-    "locate_none": "I could not find {term} in the documents or hearings of the case file."
+    "locate_none": "I could not find {term} in the documents or hearings of the case file.",
+    "compose_evidence": "Evidence",
+    "compose_limits": "Limits",
+    "compose_sources": "Sources",
+    "compose_audio": "What the audio says",
+    "compose_partial_header": "I found related material, but it does not directly answer the question.",
+    "compose_navigational": "This question asks for locations: see the mentions grouped by file.",
+    "compose_correction": "Correction pending confirmation.",
+    "compose_unnamed_source": "unnamed source",
+    "compose_unverified_number": "I could not verify this figure in the cited source: \"{text}\".",
+    "occurrences_note": "Mentions of the term \"{term}\". They are not the answer.",
+    "occurrences_group": "**{filename}** — {count} mentions",
+    "occurrences_page": "p. {page}",
+    "occurrences_none": "I could not find \"{term}\" in the documents or hearings of the case file."
   },
   "enums": {
     "case_status": {

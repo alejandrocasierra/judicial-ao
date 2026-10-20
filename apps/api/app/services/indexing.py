@@ -25,6 +25,15 @@ def _batched(items: list[Any], n: int):
         yield items[i:i + n]
 
 
+def _invalidate_retrieval_cache(case_id: str) -> None:
+    """La caché de retrieval no puede sobrevivir a una reindexación."""
+    try:
+        from app.services import cache
+        cache.delete_prefix(f"retrieval:{case_id}")
+    except Exception as exc:  # noqa: BLE001 — la caché es opcional
+        log.debug("retrieval cache invalidation skipped: %s", exc)
+
+
 def _vector_literal(vec: list[float]) -> str:
     return "[" + ",".join(str(v) for v in vec) + "]"
 
@@ -41,16 +50,11 @@ def _delete_chunks(conn: Connection, case_id: str, **filters) -> None:
 
 def _insert_chunks(conn: Connection, chunks: list[dict[str, Any]], vectors: list[list[float]],
                    model: str, version: str) -> int:
-    inserted = 0
+    if not chunks:
+        return 0
+    params: list[dict[str, Any]] = []
     for ch, vec in zip(chunks, vectors, strict=False):
-        conn.execute(text("""
-            INSERT INTO chunks
-              (organization_id, case_id, chunk_type, document_id, page_number, media_id,
-               start_ms, end_ms, text, metadata, embedding, embedding_model, embedding_version)
-            VALUES
-              (:o, :c, :ct, :did, :pn, :mid, :sms, :ems, :text, CAST(:meta AS jsonb),
-               CAST(:emb AS vector), :model, :version)
-        """), {
+        params.append({
             "o": ch["organization_id"],
             "c": ch["case_id"],
             "ct": ch["chunk_type"],
@@ -60,13 +64,21 @@ def _insert_chunks(conn: Connection, chunks: list[dict[str, Any]], vectors: list
             "sms": ch.get("start_ms"),
             "ems": ch.get("end_ms"),
             "text": ch["text"],
-            "meta": json.dumps(ch["metadata"], ensure_ascii=False),
+            "meta": json.dumps(ch["metadata"], ensure_ascii=False, default=str),
             "emb": _vector_literal(vec),
             "model": model,
             "version": version,
         })
-        inserted += 1
-    return inserted
+    # executemany: 4.6k chunks en decenas deviajes, no 4.6k round-trips.
+    conn.execute(text("""
+        INSERT INTO chunks
+          (organization_id, case_id, chunk_type, document_id, page_number, media_id,
+           start_ms, end_ms, text, metadata, embedding, embedding_model, embedding_version)
+        VALUES
+          (:o, :c, :ct, :did, :pn, :mid, :sms, :ems, :text, CAST(:meta AS jsonb),
+           CAST(:emb AS vector), :model, :version)
+    """), params)
+    return len(params)
 
 
 def index_document(conn: Connection, org_id: str, case_id: str, document_id: str, actor_id: str | None = None) -> dict[str, Any]:
@@ -75,6 +87,7 @@ def index_document(conn: Connection, org_id: str, case_id: str, document_id: str
     _delete_chunks(conn, case_id, document_id=document_id)
     chunks = chunking.chunk_document(conn, org_id, case_id, document_id)
     count = _embed_and_insert(conn, chunks, provider)
+    _invalidate_retrieval_cache(case_id)
     log.info("indexed document=%s chunks=%s", document_id, count)
     return {"document_id": document_id, "chunks": count}
 
@@ -84,6 +97,7 @@ def index_media(conn: Connection, org_id: str, case_id: str, media_id: str, acto
     _delete_chunks(conn, case_id, media_id=media_id)
     chunks = chunking.chunk_media(conn, org_id, case_id, media_id)
     count = _embed_and_insert(conn, chunks, provider)
+    _invalidate_retrieval_cache(case_id)
     log.info("indexed media=%s chunks=%s", media_id, count)
     return {"media_id": media_id, "chunks": count}
 
@@ -93,6 +107,7 @@ def index_case(conn: Connection, org_id: str, case_id: str, actor_id: str | None
     _delete_chunks(conn, case_id)
     chunks = chunking.build_case_chunks(conn, org_id, case_id)
     count = _embed_and_insert(conn, chunks, provider)
+    _invalidate_retrieval_cache(case_id)
     log.info("indexed case=%s chunks=%s", case_id, count)
     return {"case_id": case_id, "chunks": count}
 
@@ -128,5 +143,6 @@ def index_structured(conn: Connection, org_id: str, case_id: str, actor_id: str 
     chunks.extend(chunking.chunk_decisions(conn, org_id, case_id))
     chunks.extend(chunking.chunk_evidence(conn, org_id, case_id))
     count = _embed_and_insert(conn, chunks, provider)
+    _invalidate_retrieval_cache(case_id)
     log.info("indexed structured case=%s chunks=%s", case_id, count)
     return {"case_id": case_id, "chunks": count}

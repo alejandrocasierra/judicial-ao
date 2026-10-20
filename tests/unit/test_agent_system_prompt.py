@@ -11,13 +11,13 @@ pytestmark = pytest.mark.unit
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_ut_asp_01_default_agent_version_is_v7():
-    """builtin_agents apunta explícitamente a la versión 7 del system prompt."""
-    assert builtin_agents.DEFAULT_AGENT_VERSION == 7
+def test_ut_asp_01_default_agent_version_is_v8():
+    """builtin_agents apunta explícitamente a la versión 8 del system prompt."""
+    assert builtin_agents.DEFAULT_AGENT_VERSION == 8
 
 
-def test_ut_asp_02_v7_prompt_contains_process_graph_instructions():
-    """El prompt v7 instruye al agente a usar process_path/event_relations primero y a citar EV-XXXX."""
+def test_ut_asp_02_v8_prompt_contains_process_graph_instructions():
+    """El prompt v8 instruye al agente a usar process_path/event_relations primero y a citar EV-XXXX."""
     path = ROOT / "packages" / "prompts" / f"agent_system.v{builtin_agents.DEFAULT_AGENT_VERSION}.md"
     assert path.exists()
     text = path.read_text(encoding="utf-8")

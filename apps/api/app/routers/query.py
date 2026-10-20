@@ -1,11 +1,18 @@
-"""POST /v1/cases/{id}/query — RAG o agente con herramientas y verificación."""
+"""POST /v1/cases/{id}/query — RAG o agente con herramientas y verificación.
+
+El formato final NO lo decide el modelo: `parse_and_validate` acepta claims con
+handles y `compose.render` decide tipo de respuesta, presupuesto de citas y
+Markdown. El router solo orquesta (routing → retrieval → síntesis → validación).
+"""
 from __future__ import annotations
 
 import json
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy import text
 
 from app.core.config import get_settings
@@ -15,18 +22,42 @@ from app.core.i18n import negotiate, t
 from app.providers.llm import get_llm
 from app.schemas import QueryIn
 from app.security.deps import Principal, case_access, current_principal
-from app.services import agent, answering, audit, case_tools, metrics, query_hints, ratelimit, role_answer
+from app.services import (agent, answering, audit, case_tools, compose, deadline as deadline_mod,
+                          intent as intent_service, metrics, query_hints, ratelimit, role_answer,
+                          skills, text_terms, verification)
+from app.services.compose import ComposeResult
 
 router = APIRouter(prefix="/cases/{case_id}", tags=["ai"])
+log = logging.getLogger(__name__)
 
 
-def _insufficient(case_id: UUID, body: QueryIn, request: Request, p: Principal, locale: str) -> dict:
+def _safe_emit(emit, event: str, data: dict | None = None) -> None:
+    """Un emisor defectuoso (SSE cerrado, cliente caído) nunca rompe el turno."""
+    if emit is None:
+        return
+    try:
+        emit(event, data or {})
+    except Exception:  # noqa: BLE001
+        log.debug("emit %s failed", event, exc_info=True)
+
+
+def _intent_value(decision) -> str:
+    return str(getattr(getattr(decision, "intent", None), "value", getattr(decision, "intent", "")) or "")
+
+
+def _insufficient(case_id: UUID, body: QueryIn, request: Request, p: Principal, locale: str,
+                  *, decision=None, degraded: bool = False, emit=None) -> dict:
     with tx(p.org_id, p.user_id) as c:
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="ai.query", entity_type="case",
                      entity_id=str(case_id), after={"mode": body.mode, "strategy": body.strategy, "evidence": 0}, request=request)
-    return {"answer": t("messages.insufficient_evidence", locale), "claims": [], "citations": [],
-            "unsupported_claims": [], "uncertainties": [t("messages.insufficient_evidence", locale)],
-            "related_contradictions": [], "knowledge_type": "case", "file_cards": [], "evidence_count": 0}
+    message = t("messages.insufficient_evidence", locale)
+    _safe_emit(emit, "done", {"answer_kind": "insufficient", "degraded": degraded,
+                              "intent": _intent_value(decision) or "dato", "citations": 0})
+    return {"answer": message, "answer_kind": "insufficient", "intent": _intent_value(decision) or "dato",
+            "degraded": degraded, "claims": [], "citations": [], "citations_used": [],
+            "unsupported_claims": [], "uncertainties": [],
+            "related_contradictions": [], "knowledge_type": "case", "file_cards": [], "evidence_count": 0,
+            "occurrences": [], "occurrences_term": None, "occurrences_note": None}
 
 
 def _attachment_dicts(body: QueryIn) -> list[dict]:
@@ -58,8 +89,83 @@ def _attachment_file_cards(conn, case_id: UUID, body: QueryIn) -> list[dict]:
     return cards
 
 
+def _answer_system_prompt(locale: str) -> tuple[str, str, str]:
+    """`answer_question.v2.md` si existe (contrato §1.13); si no, el v1 de answering."""
+    import re
+    s = get_settings()
+    path = s.path(s.PROMPTS_DIR) / "answer_question.v2.md"
+    if not path.exists():
+        return answering.system_prompt(locale)
+    try:
+        raw = path.read_text(encoding="utf-8")
+        meta, body = raw.split("---", 2)[1], raw.split("---", 2)[2]
+        prompt_id = re.search(r"prompt_id:\s*(\S+)", meta)
+        version = re.search(r"version:\s*(\S+)", meta)
+        return (body.strip().replace("{{LOCALE}}", locale),
+                prompt_id.group(1) if prompt_id else "answer_question",
+                version.group(1) if version else "2")
+    except Exception as exc:  # noqa: BLE001 — prompt nuevo mal formado: v1
+        log.warning("answer_question.v2.md unreadable: %s", exc)
+        return answering.system_prompt(locale)
+
+
+def _build_plan(question: str, decision, s, history: list[dict] | None):
+    try:
+        from app.services import retrieval_plan
+        return retrieval_plan.build(question, decision, settings=s, history=history)
+    except Exception as exc:  # noqa: BLE001 — plan opcional: se usa el retrieval histórico
+        log.debug("retrieval_plan unavailable: %s", exc)
+        return None
+
+
+def _retrieve(conn, case_id: str, question: str, *, plan, decision,
+              document_ids: list[str] | None = None, media_ids: list[str] | None = None,
+              ocr_mode: str | None = None, asr_mode: str | None = None,
+              diagnostics: dict | None = None) -> list[dict]:
+    kwargs = {"document_ids": document_ids, "media_ids": media_ids,
+              "ocr_mode": ocr_mode, "asr_mode": asr_mode}
+    try:
+        return answering.retrieve(conn, case_id, question, plan=plan,
+                                  intent=getattr(decision, "intent", None),
+                                  diagnostics=diagnostics, **kwargs)
+    except TypeError:  # retrieval histórico (sin plan/intent/diagnostics)
+        return answering.retrieve(conn, case_id, question, **kwargs)
+
+
+def _normalize_seed_items(items: list[dict] | None) -> list[dict]:
+    """Los ítems de rol/proceso se citan por su página o segmento de origen."""
+    out: list[dict] = []
+    for item in items or []:
+        candidate = dict(item)
+        source = str(candidate.get("source_type") or "")
+        if source not in ("document_page", "transcript_segment"):
+            if candidate.get("document_id") and candidate.get("page_number") is not None:
+                candidate["source_type"] = "document_page"
+            elif (candidate.get("media_id") and candidate.get("segment_id")
+                  and candidate.get("start_ms") is not None):
+                candidate["source_type"] = "transcript_segment"
+        out.append(candidate)
+    return out
+
+
+def _deadline_claims(items: list[dict]) -> list[dict]:
+    """Mejor respuesta disponible sin LLM cuando el presupuesto ya se agotó."""
+    claims: list[dict] = []
+    for item in items:
+        handle = item.get("handle")
+        if not handle or not compose._is_citable(item):
+            continue
+        text = " ".join(str(item.get("text") or "").split())[:320]
+        if text:
+            claims.append({"text": text, "citations": [str(handle)]})
+        if len(claims) >= 2:
+            break
+    return claims
+
+
 @router.post("/query")
-def query(case_id: UUID, body: QueryIn, request: Request, p: Principal = Depends(current_principal)):
+def query(case_id: UUID, body: QueryIn, request: Request, background: BackgroundTasks,
+          p: Principal = Depends(current_principal)):
     s = get_settings()
     if len(body.question) > s.QUESTION_MAX_CHARS:
         raise AppError("QUESTION_TOO_LONG", 422)
@@ -74,35 +180,62 @@ def query(case_id: UUID, body: QueryIn, request: Request, p: Principal = Depends
         hints = query_hints.merge(query_hints.hint(body.question),
                                   role_answer.authoritative_hint(p.org_id, p.user_id, str(case_id), body.question))
         return _run_query(case_id, body, request, p, locale, case, s, hints=hints,
-                          ocr_mode=body.ocr_mode, asr_mode=body.asr_mode)
+                          ocr_mode=body.ocr_mode, asr_mode=body.asr_mode, background=background)
 
 
 def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, locale: str, case: dict, s,
                history: list[dict] | None = None, hints: list[str] | None = None,
-               ocr_mode: str | None = None, asr_mode: str | None = None) -> dict:
+               ocr_mode: str | None = None, asr_mode: str | None = None,
+               intent_decision=None, emit=None, deadline=None, seed_items: list[dict] | None = None,
+               background=None, verify_mode: str | None = None) -> dict:
     from app.providers.llm import get_llm_for_model
 
-    llm = get_llm_for_model(str(body.model_id), p.org_id, p.user_id) if body.model_id else get_llm()
+    try:
+        llm = get_llm_for_model(str(body.model_id), p.org_id, p.user_id) if body.model_id else get_llm()
+    except LookupError:
+        raise AppError("MODEL_NOT_FOUND", 404, {
+            "detail": "El modelo seleccionado ya no existe o no pertenece a la organización."}) from None
     file_cards: list[dict] = []
     corrections_pending: list[dict] = []
     corrections_done: list[dict] = []
+    coverage: float | None = None
+    tool_calls: list[dict] = []
+
+    deadline = deadline or deadline_mod.Deadline(s.REQUEST_DEADLINE_MS)
+    decision = intent_decision
+    if decision is None:
+        decision = intent_service.classify(body.question, has_attachments=bool(body.attachments),
+                                           history=history, hints=hints)
+    intent_value = _intent_value(decision) or "dato"
+    _safe_emit(emit, "routing", {"intent": intent_value})
 
     if body.strategy == "agent":
         agent_prompt = None
+        allowed_tools = None
+        agent_parameters: dict = {}
         if body.agent_id:
             with tx(p.org_id, p.user_id) as c:
-                # System prompt del agente + system prompts de sus skills enlazadas.
-                agent_prompt = agent.load_agent_prompt(c, str(body.agent_id))
-        # Preguntas de rol/agregación: se inyectan los ítems del rol como evidencia
-        # (determinista) para que el agente no abstenga aunque no llame la tool.
-        seed = role_answer.authoritative_evidence(str(p.org_id), str(p.user_id), str(case_id), body.question)
-        with tx(p.org_id, p.user_id) as c:
-            agent_result = agent.run_agent_query(c, str(case_id), body.question, locale,
-                                                 agent_prompt=agent_prompt, llm=llm,
-                                                 attachments=_attachment_dicts(body),
-                                                 org_id=str(p.org_id), actor_id=str(p.user_id),
-                                                 history_turns=history, hints=hints, seed_evidence=seed,
-                                                 ocr_mode=ocr_mode, asr_mode=asr_mode)
+                config = skills.load_config(c, str(body.agent_id))
+                agent_prompt = config["prompt"]
+                allowed_tools = config["allowed_tools"]
+                agent_parameters = config.get("parameters") or {}
+        # Ítems deterministas de rol/proceso: evitan que el agente abstenga.
+        seed = _normalize_seed_items(seed_items) if seed_items is not None else \
+            role_answer.authoritative_evidence(str(p.org_id), str(p.user_id), str(case_id), body.question)
+        with deadline.stage("agent"):
+            _safe_emit(emit, "retrieving", {"strategy": "agent"})
+            _safe_emit(emit, "synthesizing", {"strategy": "agent"})
+            max_steps = 3 if intent_value == "analisis" else 5
+            with tx(p.org_id, p.user_id) as c:
+                agent_result = agent.run_agent_query(
+                    c, str(case_id), body.question, locale,
+                    agent_prompt=agent_prompt, llm=llm,
+                    attachments=_attachment_dicts(body),
+                    org_id=str(p.org_id), actor_id=str(p.user_id),
+                    history_turns=history, hints=hints, seed_evidence=seed,
+                    ocr_mode=ocr_mode, asr_mode=asr_mode,
+                    emit=emit, allowed_tools=allowed_tools, verify=False, max_steps=max_steps,
+                    parameters=agent_parameters)
         # Propagación diferida por las tools de escritura (reindex pgvector, rebuild del
         # grafo, encolado de jobs): solo DESPUÉS de confirmar la transacción del loop.
         case_tools.drain_actions(agent_result.pop("post_commit", []))
@@ -110,9 +243,13 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         file_cards = agent_result.get("file_cards", [])
         corrections_pending = agent_result.get("corrections_pending", [])
         corrections_done = agent_result.get("corrections_done", [])
+        tool_calls = agent_result.get("tool_calls", [])
+        if agent_result.get("degraded"):
+            deadline.degraded = True
         if not items:
             if not file_cards and not corrections_pending:
-                return _insufficient(case_id, body, request, p, locale)
+                return _insufficient(case_id, body, request, p, locale, decision=decision,
+                                     degraded=deadline.degraded, emit=emit)
             # Respuesta sin claims citables: tarjetas de archivo y/o propuesta de corrección.
             answer = ""
             if corrections_pending:
@@ -123,12 +260,16 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                              entity_id=str(case_id), after={"mode": body.mode, "strategy": body.strategy,
                                                             "evidence": 0, "file_cards": len(file_cards),
                                                             "corrections_pending": len(corrections_pending)}, request=request)
-            return {"answer": answer, "claims": [], "citations": [], "unsupported_claims": [],
-                    "uncertainties": [], "related_contradictions": [], "knowledge_type": "case",
-                    "file_cards": file_cards, "corrections_pending": corrections_pending,
-                    "corrections_done": corrections_done,
+            _safe_emit(emit, "done", {"answer_kind": "partial", "degraded": deadline.degraded,
+                                      "intent": intent_value, "citations": 0})
+            return {"answer": answer, "answer_kind": "partial", "intent": intent_value,
+                    "degraded": deadline.degraded, "claims": [], "citations": [], "citations_used": [],
+                    "unsupported_claims": [], "uncertainties": [], "related_contradictions": [],
+                    "knowledge_type": "case", "file_cards": file_cards,
+                    "corrections_pending": corrections_pending, "corrections_done": corrections_done,
                     "pending_correction": corrections_pending[0] if corrections_pending else None,
-                    "evidence_count": 0}
+                    "evidence_count": 0, "occurrences": [], "occurrences_term": None,
+                    "occurrences_note": None}
         validated = {
             "claims": agent_result["claims"],
             "unsupported_claims": agent_result["unsupported_claims"],
@@ -143,64 +284,178 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         task = "agent_query"
         raw_text = agent_result.get("raw_text", "")
     else:
-        with tx(p.org_id, p.user_id) as c:
-            items = answering.retrieve(c, str(case_id), body.question,
-                                       ocr_mode=ocr_mode, asr_mode=asr_mode)
-            if body.attachments:
-                # Los "@" acotan una primera pasada y se fusionan (primero lo adjunto, luego lo global).
-                doc_ids = [str(a.id) for a in body.attachments if a.kind == "document"]
-                media_ids = [str(a.id) for a in body.attachments if a.kind == "media"]
-                scoped = answering.retrieve(c, str(case_id), body.question,
-                                            document_ids=doc_ids or None, media_ids=media_ids or None,
-                                            ocr_mode=ocr_mode, asr_mode=asr_mode)
-                items = answering.merge_items(scoped, items)
-                file_cards = _attachment_file_cards(c, case_id, body)
+        plan = _build_plan(body.question, decision, s, history)
+        diagnostics: dict = {}
+        with deadline.stage("retrieving"):
+            _safe_emit(emit, "retrieving", {"strategy": "rag"})
+            doc_ids = [str(a.id) for a in body.attachments if a.kind == "document"]
+            media_ids = [str(a.id) for a in body.attachments if a.kind == "media"]
+            scoped_future = None
+            executor = None
+            if doc_ids or media_ids:
+                # Los "@" se recuperan en paralelo con la búsqueda global, cada
+                # uno con su propia conexión/transacción (RLS incluido).
+                def _scoped() -> list[dict]:
+                    with tx(p.org_id, p.user_id) as sc:
+                        return _retrieve(sc, str(case_id), body.question, plan=plan, decision=decision,
+                                         document_ids=doc_ids or None, media_ids=media_ids or None,
+                                         ocr_mode=ocr_mode, asr_mode=asr_mode)
+                executor = ThreadPoolExecutor(max_workers=1)
+                scoped_future = executor.submit(_scoped)
+            try:
+                with tx(p.org_id, p.user_id) as c:
+                    items = _retrieve(c, str(case_id), body.question, plan=plan, decision=decision,
+                                      ocr_mode=ocr_mode, asr_mode=asr_mode, diagnostics=diagnostics)
+                    if body.attachments:
+                        file_cards = _attachment_file_cards(c, case_id, body)
+                if scoped_future is not None:
+                    try:
+                        scoped = scoped_future.result()
+                    except Exception:  # noqa: BLE001 — el alcance "@" no rompe la global
+                        log.debug("scoped retrieval failed", exc_info=True)
+                        scoped = []
+                    if scoped:
+                        items = answering.merge_items(scoped, items)
+            finally:
+                if executor is not None:
+                    executor.shutdown(wait=False)
+            coverage = diagnostics.get("coverage")
+        if seed_items:
+            # Cadena procesal / lista de rol: entra como evidencia de primera clase.
+            try:
+                items = answering.merge_items(_normalize_seed_items(seed_items), items)
+            except Exception:  # noqa: BLE001
+                items = _normalize_seed_items(seed_items) + list(items or [])
         if not items:
-            return _insufficient(case_id, body, request, p, locale)
-        system, prompt_id, prompt_version = answering.system_prompt(locale)
-        result = llm.complete(system, answering.build_user_prompt(body.question, items))
-        validated = answering.parse_and_validate(result.text, items, s.ANSWER_MIN_GROUNDING_OVERLAP)
+            return _insufficient(case_id, body, request, p, locale, decision=decision,
+                                 degraded=deadline.degraded, emit=emit)
+        system, prompt_id, prompt_version = _answer_system_prompt(locale)
         task = "answer_question"
-        raw_text = result.text
+        _safe_emit(emit, "synthesizing", {"evidence": len(items)})
+        synthesis_failed = False
+        if deadline.can("synthesizing", 50):
+            with deadline.stage("synthesizing"):
+                try:
+                    result = llm.complete(system, answering.build_user_prompt(body.question, items))
+                    raw_text = result.text
+                except Exception as exc:  # noqa: BLE001 — proveedor caído: compositor con evidencia
+                    log.warning("synthesis failed: %s", exc)
+                    deadline.degraded = True
+                    synthesis_failed = True
+                    result = SimpleNamespace(provider=getattr(llm, "name", ""), model=getattr(llm, "model", ""),
+                                             tokens_in=0, tokens_out=0)
+                    raw_text = ""
+        else:
+            deadline.degraded = True
+            synthesis_failed = True
+            result = SimpleNamespace(provider=getattr(llm, "name", ""), model=getattr(llm, "model", ""),
+                                     tokens_in=0, tokens_out=0)
+            raw_text = ""
+        if raw_text:
+            validated = answering.parse_and_validate(raw_text, items, s.ANSWER_MIN_GROUNDING_OVERLAP)
+        elif synthesis_failed:
+            # Solo se usa la mejor evidencia disponible si el LLM no respondió por
+            # fallo/deadline. Un JSON malformado o vacío NO autoriza a inventar claims.
+            validated = {"claims": _deadline_claims(items), "unsupported_claims": [],
+                         "uncertainties": [], "schema_valid": False}
+        else:
+            validated = {"claims": [], "unsupported_claims": [], "uncertainties": [],
+                         "schema_valid": False}
 
-    by_handle = {it["handle"]: it for it in items}
+    mode = verify_mode or s.VERIFY_MODE
+    semantic_verdicts: list[dict] = []
+    if mode == "sync" and validated["claims"] and not deadline.expired:
+        try:
+            semantic_verdicts = verification.verify(validated["claims"], items)
+            verification.apply_verdicts(validated, semantic_verdicts)
+        except Exception as exc:  # noqa: BLE001 — el juez no bloquea la respuesta
+            log.warning("sync verification failed: %s", exc)
+
+    _safe_emit(emit, "validating", {"claims": len(validated["claims"])})
+    with deadline.stage("compose"):
+        composed: ComposeResult = compose.render(
+            body.question, intent=getattr(decision, "intent", None), claims=validated["claims"],
+            evidence=items, uncertainties=validated["uncertainties"], locale=locale,
+            max_citations=s.MAX_VISIBLE_CITATIONS, max_per_file=s.MAX_CITATIONS_PER_FILE,
+            coverage=coverage)
+
+    # Preguntas de rol sin claims del modelo: lista determinista como respuesta.
+    if composed.answer_kind == compose.INSUFFICIENT:
+        role = query_hints.role_from_text(body.question)
+        deterministic = role_answer.render(role, items) if role else ""
+        if deterministic:
+            used = [str(it["handle"]) for it in items if it.get("handle") and compose._is_citable(it)][:10]
+            composed = ComposeResult(answer_kind=compose.DIRECT, answer=deterministic,
+                                     used_handles=used,
+                                     sections={"direct": [deterministic], "evidence": [], "limits": [],
+                                               "sources": []},
+                                     uncertainties=composed.uncertainties)
+
+    by_handle = {str(it["handle"]): it for it in items if it.get("handle")}
+    degraded = bool(deadline.degraded or deadline.expired)
+    output_payload = {"raw_text": (raw_text or "")[:20000], "claims": validated["claims"],
+                      "unsupported_claims": validated["unsupported_claims"],
+                      "uncertainties": composed.uncertainties, "answer_kind": composed.answer_kind,
+                      "intent": intent_value, "degraded": degraded, "tool_calls": tool_calls}
+    validation_payload = {"schema_valid": validated.get("schema_valid", True),
+                          "unsupported": len(validated["unsupported_claims"]),
+                          "answer_kind": composed.answer_kind}
+    if semantic_verdicts:
+        validation_payload["semantic_verdicts"] = semantic_verdicts
 
     with tx(p.org_id, p.user_id) as c:
         run = one(c, """INSERT INTO model_runs (organization_id, case_id, task, provider, model, prompt_id, prompt_version,
               pipeline_version, input_hash, output, validation, tokens_in, tokens_out, actor_id)
             VALUES (:o,:c,:task,:pr,:m,:pid,:pv,:plv,:ih,CAST(:out AS jsonb),CAST(:val AS jsonb),:ti,:to,:u) RETURNING id""",
                   o=p.org_id, c=str(case_id), task=task, pr=result.provider, m=result.model, pid=prompt_id, pv=prompt_version,
-                  plv=s.PIPELINE_VERSION, ih=answering.input_hash(body.question, items), out=json.dumps({"raw_len": len(raw_text)}),
-                  val=json.dumps({"schema_valid": validated["schema_valid"], "unsupported": len(validated["unsupported_claims"])}),
+                  plv=s.PIPELINE_VERSION, ih=answering.input_hash(body.question, items),
+                  out=json.dumps(output_payload, ensure_ascii=False, default=str),
+                  val=json.dumps(validation_payload, ensure_ascii=False, default=str),
                   ti=result.tokens_in, to=result.tokens_out, u=p.user_id)
         c.execute(text("UPDATE cases SET spent_llm_tokens = spent_llm_tokens + :n WHERE id = :c"),
                   {"n": result.tokens_in + result.tokens_out, "c": str(case_id)})
         handle_to_cit: dict[str, str] = {}
-        for h in sorted({h for cl in validated["claims"] for h in cl["citations"]}):
-            it = by_handle[h]
-            if it["source_type"] == "document_page" and it.get("document_id"):
+        # Solo las citas que el compositor usó, en SU orden (marker 1..N).
+        for handle in composed.used_handles:
+            it = by_handle.get(handle)
+            if not it or not compose._is_citable(it):
+                continue
+            if it.get("document_id"):
                 cid = one(c, """INSERT INTO citations (organization_id, case_id, target_type, target_id, source_type, document_id, page_number, folio)
                     VALUES (:o,:c,'answer',:r,'document_page',:d,:pg,:f) RETURNING id""",
                           o=p.org_id, c=str(case_id), r=run["id"], d=str(it["document_id"]),
                           pg=it.get("page_number"), f=it.get("folio"))["id"]
-            elif it["source_type"] == "transcript_segment" and it.get("media_id") and it.get("segment_id"):
+            elif it.get("media_id") and it.get("segment_id"):
                 cid = one(c, """INSERT INTO citations (organization_id, case_id, target_type, target_id, source_type, media_id, segment_id, start_ms, end_ms)
                     VALUES (:o,:c,'answer',:r,'transcript_segment',:m,:sg,:s,:e) RETURNING id""",
                           o=p.org_id, c=str(case_id), r=run["id"], m=str(it["media_id"]), sg=str(it["segment_id"]),
                           s=it.get("start_ms"), e=it.get("end_ms"))["id"]
             else:
                 continue
-            handle_to_cit[h] = str(cid)
-        pages = [(str(i["document_id"]), i["page_number"]) for i in items if i["source_type"] == "document_page"]
-        segs = [str(i["segment_id"]) for i in items if i["source_type"] == "transcript_segment"]
+            handle_to_cit[handle] = str(cid)
+        pages = [(str(i["document_id"]), i["page_number"]) for i in items
+                 if i.get("source_type") == "document_page" and i.get("document_id")]
+        segs = [str(i["segment_id"]) for i in items
+                if i.get("source_type") == "transcript_segment" and i.get("segment_id")]
         related = rows(c, """SELECT DISTINCT co.id, co.contradiction_type, co.description, co.severity FROM contradictions co
             JOIN citations ci ON ci.target_type='claim' AND ci.target_id IN (co.claim_a_id, co.claim_b_id)
             WHERE co.case_id = :c AND (ci.segment_id = ANY(CAST(:segs AS uuid[]))
                OR (ci.document_id::text || ':' || ci.page_number) = ANY(CAST(:pages AS text[])))""",
-                       c=str(case_id), segs="{" + ",".join(segs) + "}", pages="{" + ",".join(f'"{d}:{n}"' for d, n in pages) + "}")
+                       c=str(case_id), segs="{" + ",".join(segs) + "}",
+                       pages="{" + ",".join(f'"{d}:{n}"' for d, n in pages) + "}")
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="ai.query", entity_type="case", entity_id=str(case_id),
-                     after={"mode": body.mode, "strategy": body.strategy, "model_run_id": str(run["id"]), "evidence": len(items),
+                     after={"mode": body.mode, "strategy": body.strategy, "model_run_id": str(run["id"]),
+                            "evidence": len(items), "answer_kind": composed.answer_kind,
                             "unsupported": len(validated["unsupported_claims"])}, request=request)
+
+    # Verificación semántica fuera de la ruta crítica.
+    if mode == "async" and validated["claims"]:
+        if background is not None:
+            try:
+                background.add_task(verification.verify_and_store, str(p.org_id), str(p.user_id),
+                                    str(run["id"]), validated["claims"], items)
+            except Exception:  # noqa: BLE001
+                log.debug("could not enqueue verification", exc_info=True)
 
     # Métricas de observabilidad (SSD §28)
     metrics.track_llm_usage(p.org_id, result.provider, result.model, task, result.tokens_in, result.tokens_out, 0.0)
@@ -209,63 +464,70 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         metrics.update_citation_accuracy(p.org_id, str(case_id), cited / len(validated["claims"]))
     metrics.update_retrieval_hit_rate(p.org_id, str(case_id), len(handle_to_cit) / len(items) if items else 0.0)
 
-    claims = [{"text": cl["text"], "citations": [handle_to_cit[h] for h in cl["citations"] if h in handle_to_cit]} for cl in validated["claims"]]
-    uncertainties = list(validated["uncertainties"])
+    claims = []
+    for cl in validated["claims"]:
+        ids = [handle_to_cit[h] for h in cl["citations"] if h in handle_to_cit]
+        if ids:
+            claims.append({"text": cl["text"], "citations": ids})
+    uncertainties: list[str] = []
+    if composed.answer_kind != compose.INSUFFICIENT:
+        for value in composed.uncertainties:
+            if value and value not in uncertainties:
+                uncertainties.append(value)
+    else:
+        # La respuesta ya dice que no hay evidencia: no repetimos el mismo aviso
+        # como advertencia aparte. Solo se conservan límites con información nueva.
+        for value in composed.uncertainties:
+            low = (value or "").lower()
+            if value and value not in uncertainties and "evidencia" not in low and "evidence" not in low:
+                uncertainties.append(value)
     if validated["unsupported_claims"]:
-        uncertainties.append(t("messages.unsupported_claims_removed", locale))
+        note = t("messages.unsupported_claims_removed", locale)
+        if note not in uncertainties:
+            uncertainties.append(note)
     if related:
-        uncertainties.append(t("messages.contradiction_requires_review", locale))
+        note = t("messages.contradiction_requires_review", locale)
+        if note not in uncertainties:
+            uncertainties.append(note)
+
     citations = []
-    for h, cid in handle_to_cit.items():
-        it = by_handle[h]
+    for marker, handle in enumerate(composed.used_handles, start=1):
+        cid = handle_to_cit.get(handle)
+        if not cid:
+            continue
+        it = by_handle[handle]
         item_meta = it.get("metadata") or {}
-        mode_meta = {"ocr_mode": item_meta.get("ocr_mode"), "asr_mode": item_meta.get("asr_mode")}
-        meta = ({"document_id": str(it["document_id"]) if it.get("document_id") else None,
-                 "page": it.get("page_number"), "folio": it.get("folio"), "filename": it.get("filename")}
-                if it["source_type"] == "document_page" else
-                {"media_id": str(it["media_id"]) if it.get("media_id") else None,
-                 "start_ms": it.get("start_ms"), "end_ms": it.get("end_ms"),
-                 "speaker": it.get("speaker"), "filename": it.get("filename")})
-        citations.append({"citation_id": cid, "source_type": it["source_type"], **meta, **mode_meta})
-    answer = " ".join(cl["text"] for cl in claims)
-    if not answer and items:
-        # Preguntas de rol/agregación: respuesta DETERMINISTA con la lista calculada
-        # (la síntesis del modelo no encaja en el contrato de citas verificables).
-        role = query_hints.role_from_text(body.question)
-        if role:
-            answer = role_answer.render(role, items)
-            if answer:
-                # Citas de la respuesta determinista (documento+página de cada autoridad).
-                with tx(p.org_id, p.user_id) as c:
-                    for it in items[:10]:
-                        if it.get("source_type") == "document_page" and it.get("document_id"):
-                            cid = one(c, """INSERT INTO citations (organization_id, case_id, target_type, target_id, source_type, document_id, page_number, folio)
-                                VALUES (:o,:c,'answer',:r,'document_page',:d,:pg,:f) RETURNING id""",
-                                      o=p.org_id, c=str(case_id), r=run["id"], d=str(it["document_id"]),
-                                      pg=it.get("page_number"), f=it.get("folio"))["id"]
-                            item_meta = it.get("metadata") or {}
-                            citations.append({"citation_id": str(cid), "source_type": "document_page",
-                                              "document_id": str(it["document_id"]), "page": it.get("page_number"),
-                                              "folio": it.get("folio"), "filename": it.get("filename"),
-                                              "ocr_mode": item_meta.get("ocr_mode"),
-                                              "asr_mode": item_meta.get("asr_mode")})
-        if not answer:
-            # Hay evidencia, pero la síntesis no produjo frases verificables (o el modelo
-            # varió su estrategia). En vez de decir «sin evidencia», se muestran las fuentes
-            # ENCONTRADAS con su cita (documento+página o video+minuto+hablante).
-            snips = []
-            for it in items[:3]:
-                if it.get("source_type") == "document_page":
-                    src = f"{it.get('filename')} · página {it.get('page_number')}"
-                else:
-                    src = f"{it.get('filename')} · {it.get('start_mmss') or it.get('start_ms')} · {it.get('speaker') or ''}".strip()
-                snips.append(f"- «{(it.get('text') or '').strip()[:280]}» — {src}")
-            answer = t("messages.evidence_fallback", locale) + "\n" + "\n".join(snips)
-    if not answer:
-        answer = t("messages.insufficient_evidence", locale)
-    return {"answer": answer, "claims": claims, "citations": citations,
-            "unsupported_claims": [u["text"] for u in validated["unsupported_claims"]], "uncertainties": uncertainties,
+        mode_meta = {"ocr_mode": it.get("ocr_mode") or item_meta.get("ocr_mode"),
+                     "asr_mode": it.get("asr_mode") or item_meta.get("asr_mode")}
+        if it.get("document_id"):
+            meta = {"document_id": str(it["document_id"]), "page": it.get("page_number"),
+                    "folio": it.get("folio"), "filename": it.get("filename")}
+            source_type = "document_page"
+        else:
+            meta = {"media_id": str(it.get("media_id")) if it.get("media_id") else None,
+                    "start_ms": it.get("start_ms"), "end_ms": it.get("end_ms"),
+                    "speaker": it.get("speaker"), "filename": it.get("filename")}
+            source_type = "transcript_segment"
+        citations.append({"citation_id": cid, "source_type": source_type, "marker": marker, **meta, **mode_meta})
+
+    locate = composed.answer_kind != compose.INSUFFICIENT and _should_locate(decision, composed.answer_kind, body.question)
+    term = (getattr(decision, "nav_term", None) or text_terms.specific_term(body.question)) if locate else None
+    note = t("messages.occurrences_note", locale).format(term=term) if term else None
+
+    _safe_emit(emit, "done", {"answer_kind": composed.answer_kind, "degraded": degraded,
+                              "intent": intent_value, "citations": len(citations)})
+    return {"answer": composed.answer, "answer_kind": composed.answer_kind, "intent": intent_value,
+            "degraded": degraded, "claims": claims, "citations": citations,
+            "citations_used": [c["citation_id"] for c in citations],
+            "unsupported_claims": [u["text"] for u in validated["unsupported_claims"]],
+            "uncertainties": uncertainties,
             "related_contradictions": related, "knowledge_type": "case", "file_cards": file_cards,
             "corrections_pending": corrections_pending, "corrections_done": corrections_done,
             "pending_correction": corrections_pending[0] if corrections_pending else None,
-            "model_run_id": str(run["id"]), "evidence_count": len(items)}
+            "model_run_id": str(run["id"]), "evidence_count": len(items),
+            "occurrences": [], "occurrences_term": term, "occurrences_note": note}
+
+
+def _should_locate(decision, answer_kind: str, question: str) -> bool:
+    from app.services import occurrences
+    return occurrences.should_locate(decision, answer_kind, question)
