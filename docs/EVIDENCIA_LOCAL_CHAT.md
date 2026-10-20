@@ -39,8 +39,8 @@ Estado de claves y modelos:
 | Proveedor | Estado | Modelos |
 |---|---|---|
 | DeepSeek | **200 OK** | `deepseek-flash`, `deepseek-v4-pro` |
-| Kimi | **200 OK** al listar; luego **429 Too Many Requests** | `kimi-for-coding`, `kimi-for-coding-highspeed`, `k3`, `k3-256k` |
-| OpenAI | **401 Unauthorized** con la clave entregada | — |
+| Kimi | **200 OK** al listar; chat **429 weekly (7-day) usage limit** | `kimi-for-coding`, `kimi-for-coding-highspeed`, `k3`, `k3-256k` |
+| OpenAI | **200 OK** al listar; chat **429 no credits remaining** | `gpt-4o-mini`, `gpt-5-mini`, `gpt-4o-2024-11-20`, … |
 | Gemini | sin clave local; el proveedor remoto devolvió 402 | — |
 
 Matriz real ejecutada con DeepSeek (10 casos, juez DeepSeek):
@@ -54,7 +54,9 @@ Matriz real ejecutada con DeepSeek (10 casos, juez DeepSeek):
 - `abstention = 0.800`
 - `judge_errors = 0`
 
-La matriz Kimi se intentó con 10 casos; los casos `navegar` respondieron, los `dato` quedaron vacíos y el proveedor terminó devolviendo **429**. OpenAI no autenticó. No se inventaron resultados.
+Con las claves nuevas, Kimi y OpenAI **autentican y listan modelos**, pero ninguna permite completar la matriz: Kimi devuelve `429` por límite semanal de 7 días y OpenAI devuelve `429` por saldo/crédito agotado. La matriz Kimi anterior solo alcanzó a responder casos `navegar`; los `dato` quedaron vacíos antes de agotar la cuota. No se inventaron resultados.
+
+Evidencia cruda: `var/providers_health_new.json` y `var/providers_chat_models_new.json`.
 
 ## 4. Formato y coherencia observados
 
