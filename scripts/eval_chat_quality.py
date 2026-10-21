@@ -81,6 +81,9 @@ def _db_questions(case_number: str, per_type: int) -> list[dict]:
         contradictions = rows(c, """SELECT description FROM contradictions
                                      WHERE case_id = :c
                                      ORDER BY random() LIMIT :n""", c=case_id, n=per_type)
+        claims = rows(c, """SELECT text FROM claims
+                             WHERE case_id = :c AND length(text) BETWEEN 40 AND 600
+                             ORDER BY random() LIMIT :n""", c=case_id, n=per_type)
     for item in entities:
         out.append({"type": "entity", "question": f"¿Qué se dice en el expediente sobre {item['name']}?"})
     for item in documents:
@@ -90,6 +93,10 @@ def _db_questions(case_number: str, per_type: int) -> list[dict]:
         desc = " ".join(str(item["description"]).split())[:800]
         out.append({"type": "contradiction", "question":
                     f"Explique esta contradicción del expediente y las dos versiones que la sustentan: {desc}"})
+    for item in claims:
+        text = " ".join(str(item["text"]).split())[:220]
+        out.append({"type": "claim", "question":
+                    f"¿Qué dice el expediente sobre este hecho y qué fuente lo respalda? {text}"})
     for topic in TOPICS:
         out.append({"type": "topic", "question": f"¿Qué dice el expediente sobre {topic}?"})
     out.append({"type": "exhaustive", "question":
@@ -132,17 +139,31 @@ def _run_one(api: str, headers: dict, case_id: str, model_id: str | None,
              question: str, timeout: int = 240) -> dict:
     import requests
 
+    def _post(url: str, **kwargs):
+        """Reintenta 429/5xx con backoff: el banco no debe morir por un burst."""
+        for attempt in range(4):
+            response = requests.post(url, **kwargs)
+            if response.status_code != 429 and response.status_code < 500:
+                return response
+            wait = response.headers.get("Retry-After")
+            try:
+                delay = float(wait) if wait else min(30.0, 2 ** attempt * 3.0)
+            except ValueError:
+                delay = min(30.0, 2 ** attempt * 3.0)
+            time.sleep(delay)
+        return response
+
     payload: dict = {"content": question}
     if model_id:
         payload["model_id"] = model_id
-    r = requests.post(f"{api}/cases/{case_id}/chats", headers=headers,
-                      json={"model_id": model_id, "title": question[:80]}, timeout=30)
+    r = _post(f"{api}/cases/{case_id}/chats", headers=headers,
+              json={"model_id": model_id, "title": question[:80]}, timeout=30)
     if not r.ok:
         return {"error": f"create_session:{r.status_code}", "question": question}
     session = r.json()["id"]
     started = time.monotonic()
-    r = requests.post(f"{api}/cases/{case_id}/chats/{session}/messages",
-                      headers=headers, json=payload, timeout=timeout)
+    r = _post(f"{api}/cases/{case_id}/chats/{session}/messages",
+              headers=headers, json=payload, timeout=timeout)
     elapsed = time.monotonic() - started
     if not r.ok:
         return {"error": f"send:{r.status_code}", "question": question, "elapsed": elapsed}

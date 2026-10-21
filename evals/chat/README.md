@@ -18,12 +18,16 @@ ejecuta contra la API. No usa un juez LLM: mide señales duras y reproducibles.
 
 - **entidades** (`person`, `organization`, `contract`): «¿Qué se dice sobre X?»
 - **documentos**: «¿Qué contiene y qué afirma el documento X?»
-- **contradicciones**: «Explique esta contradicción y las dos versiones».
+- **contradicciones**: «Explique esta contradicción y las dos versiones» (descripción completa).
+- **claims**: «¿Qué dice el expediente sobre este hecho y qué fuente lo respalda?».
 - **temas**: pago de intereses, pagaré, interrogatorio, audiencia, contrato…
 - **exhaustiva**: la pregunta original de la incidencia.
 
-Con `--per-type 100` el banco pasa de mil preguntas. El límite es el coste y la
-latencia del proveedor, no el generador.
+Con `--per-type 400` el banco pasa de mil preguntas (claims + entidades +
+documentos + contradicciones). El límite es el coste y la latencia del
+proveedor, no el generador. El runner reintenta 429/5xx con backoff y admite
+`--concurrency 2-3`; el límite por usuario del API es
+`RATE_LIMIT_QUERIES_PER_MINUTE` (30 por defecto, súbelo solo en dev).
 
 ## Uso
 
@@ -35,9 +39,9 @@ latencia del proveedor, no el generador.
 .\.venv\Scripts\python.exe scripts\eval_chat_quality.py --api http://127.0.0.1:8000/v1 `
   --types contradiction --limit 20 --model-id <uuid>
 
-# Banco grande (ej. 1.000) con el modelo rápido
-.\.venv\Scripts\python.exe scripts\eval_chat_quality.py --limit 1000 --per-type 100 `
-  --model-id <uuid-lite> --out var/chat_eval/full.jsonl
+# Banco grande (1.000) con el modelo rápido de Gemini
+.\.venv\Scripts\python.exe scripts\eval_chat_quality.py --limit 1000 --per-type 400 `
+  --concurrency 3 --model-id <uuid-lite> --out var/chat_eval/full1000.jsonl
 ```
 
 Salida: `*.jsonl` (una fila por pregunta, con la respuesta recortada) y
