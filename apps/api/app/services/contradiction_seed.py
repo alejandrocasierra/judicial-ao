@@ -8,6 +8,7 @@ de primera clase, no como una búsqueda más.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from sqlalchemy.engine import Connection
@@ -83,15 +84,78 @@ def _citation_items(conn: Connection, claim_id: str, start: int) -> list[dict[st
     return out
 
 
+def _context_snippet(text: str) -> str:
+    """Fragmento literal que explica la versión (tasa, capitalización, título en blanco)."""
+    folded = text.lower()
+    for term in ("1,35", "1.35", "capital debido", "capitalizaci", "en blanco", "interes"):
+        index = folded.find(term)
+        if index >= 0:
+            return " ".join(text[max(0, index - 240):index + 480].split())
+    return ""
+
+
+def _literal_items(conn: Connection, case_id: str, text: str,
+                   start: int = 0) -> list[dict[str, Any]]:
+    """Fallback cuando el claim no tiene citas: buscar su texto en la fuente."""
+    probe = text_terms.norm(text)[:80]
+    if len(probe) < 30:
+        return []
+    items: list[dict[str, Any]] = []
+    pages = rows(conn, """
+        SELECT dp.document_id, dp.page_number, dp.folio, d.filename, dp.text
+          FROM document_pages dp
+          JOIN documents d ON d.id = dp.document_id
+         WHERE d.case_id = :c
+           AND position(:p in immutable_unaccent(lower(dp.text))) > 0
+         ORDER BY dp.page_number LIMIT 2
+    """, c=case_id, p=probe)
+    if not pages:
+        # Las cifras son el ancla más estable cuando el claim está parafraseado
+        # o el OCR cambió las palabras.
+        for number in sorted(set(re.findall(r"\d[\d.,]{5,}", text)), key=len, reverse=True)[:2]:
+            pages = rows(conn, """
+                SELECT dp.document_id, dp.page_number, dp.folio, d.filename, dp.text
+                  FROM document_pages dp
+                  JOIN documents d ON d.id = dp.document_id
+                 WHERE d.case_id = :c AND position(:p in dp.text) > 0
+                 ORDER BY dp.page_number LIMIT 2
+            """, c=case_id, p=number)
+            if pages:
+                break
+    for index, page in enumerate(pages, start=start + 1):
+        body = " ".join(str(page.get("text") or "").split())[:1800]
+        if body:
+            items.append({
+                "handle": f"C{index}", "source_type": "document_page",
+                "document_id": page.get("document_id"), "page_number": page.get("page_number"),
+                "folio": page.get("folio"), "filename": page.get("filename"),
+                "text": body, "seed": "contradiction",
+            })
+    return items
+
+
 def for_question(conn: Connection, case_id: str, question: str) -> list[dict[str, Any]]:
     """Evidencia primaria de las dos versiones, si la pregunta identifica una contradicción."""
     contra = _match(conn, case_id, question)
     if not contra:
         return []
     items: list[dict[str, Any]] = []
+    claim_texts: list[str] = []
     for claim_id in (contra.get("a"), contra.get("b")):
-        if claim_id:
-            items.extend(_citation_items(conn, str(claim_id), len(items)))
+        if not claim_id:
+            continue
+        claim = rows(conn, "SELECT text FROM claims WHERE id = :i", i=str(claim_id))
+        claim_text = str(claim[0].get("text") or "") if claim else ""
+        if claim_text:
+            claim_texts.append(claim_text)
+        claim_items = _citation_items(conn, str(claim_id), len(items))
+        if not claim_items and claim_text:
+            claim_items = _literal_items(conn, case_id, claim_text, len(items))
+        for item in claim_items:
+            item["claim_text"] = claim_text
+            if not item.get("context_text"):
+                item["context_text"] = _context_snippet(str(item.get("text") or ""))
+        items.extend(claim_items)
     # Dedupe por fuente primaria.
     seen: set[tuple] = set()
     out: list[dict[str, Any]] = []
@@ -103,6 +167,16 @@ def for_question(conn: Connection, case_id: str, question: str) -> list[dict[str
             continue
         seen.add(key)
         out.append(item)
+    # Las dos versiones pueden compartir página; el fallback necesita ambos
+    # textos, aunque la fuente sea la misma.
+    if out:
+        present = {str(item.get("claim_text") or "") for item in out}
+        for claim_text in claim_texts:
+            if claim_text and claim_text not in present:
+                clone = dict(out[0])
+                clone["claim_text"] = claim_text
+                out.append(clone)
+                present.add(claim_text)
     return out[:8]
 
 

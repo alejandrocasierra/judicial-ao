@@ -474,12 +474,16 @@ degradación, longitud, p50/p95). `--limit`, `--per-type`, `--types`,
 **Verificación contra la base**: `scripts/verify_chat_quality.py` resuelve cada
 cita a `document_pages`/`transcript_segments`, compara cada afirmación con el
 texto citado (términos y números), comprueba el tipo de pregunta contra
-`entities`/`claims`/`contradictions`, mide recall de la fuente esperada en el
-retrieval y, opcionalmente, un modelo distinto audita cada claim. No basta con
-que la respuesta cite: se mide si lo citado sostiene lo afirmado. La muestra de
-20 pasó de 42,9 % a 95 % de respuestas útiles y de 0 % a 100 % en entidades,
-pero el juez solo considera totalmente fieles 6 de cada 10: esa lista de errores
-es la entrada del siguiente ajuste de prompt.
+`entities`/`claims`/`contradictions`, mide `rag_recall_proxy` como **diagnóstico**
+(un claim puede citar otra fuente válida; no se cuenta como fallo) y un modelo
+distinto audita cada claim. No basta con que la respuesta cite: se mide si lo
+citado sostiene lo afirmado. El cierre de los cuatro casos (Administraciones,
+título valor, 0013 y diligencia) dio 4/4 fieles, 0 números fuera de fuente, 100 %
+de citas resueltas, 100 % de claims respaldadas y ambas versiones de la
+contradicción, con `worst: []`. La muestra amplia de 20 quedó en 95 % de
+respuestas totalmente fieles y 0 % de números fuera de fuente; las 3 abstenciones
+restantes son preguntas sin evidencia y dos contradicciones quedan parciales por
+cobertura, no por afirmaciones inventadas.
 
 **Límite conocido**: la respuesta profunda tarda 30–60 s con `gemini-3.8-flash`
 (la UI muestra «Consultando el expediente…»); el modo normal sigue en ~10–20 s.

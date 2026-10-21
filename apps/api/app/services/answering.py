@@ -606,6 +606,80 @@ def grounding(claim: str, evidence: str) -> tuple[float, list[str]]:
     return ratio, missing_nums
 
 
+_CAP_WORD = re.compile(r"[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}")
+_CONNECTORS = {"de", "del", "la", "las", "los", "y", "e", "o", "u"}
+_ROLE_WORDS = ("juez", "jueza", "secretario", "secretaria", "apoderado", "apoderada",
+               "representante legal", "gerente", "socio", "síndico", "secuestre", "perito",
+               "magistrado", "magistrada", "fiscal", "defensor", "defensora", "contador",
+               "contadora", "administrador", "administradora")
+
+
+def _proper_sequences(text: str) -> list[list[str]]:
+    """Nombres propios consecutivos («Alba Lucy Cock Álvarez»), no cada mayúscula."""
+    matches = list(_CAP_WORD.finditer(text or ""))
+    sequences: list[list[str]] = []
+    current: list[str] = []
+    last_end: int | None = None
+    for match in matches:
+        gap = text[last_end:match.start()] if last_end is not None else ""
+        raw_gap = gap.strip()
+        punctuation = bool(re.search(r"[.:;!?/\n]", raw_gap))
+        connector_words = re.findall(r"[a-záéíóúñ]+", raw_gap.lower())
+        is_connector = bool(connector_words) and all(w in _CONNECTORS for w in connector_words)
+        # «Hallazgo: Según…» no es un nombre propio: el dos puntos corta la secuencia.
+        if current and (punctuation or (connector_words and not is_connector)):
+            sequences.append(current)
+            current = []
+        current.append(match.group(0))
+        last_end = match.end()
+    if current:
+        sequences.append(current)
+    return [sequence for sequence in sequences if len(sequence) >= 2]
+
+
+_OCR_ALIASES = {
+    "juez": ("dez", "uez", "jez", "jues"),
+    "jueza": ("deza", "ueza", "jeza"),
+    "juzgado": ("uzgado", "juzgad", "jzgdo"),
+}
+
+
+def _word_present(token: str, evidence_words: set[str]) -> bool:
+    """Tolera el corte de OCR («Juez» -> «DEZ») sin aceptar una palabra distinta."""
+    if token in evidence_words:
+        return True
+    if any(alias in evidence_words for alias in _OCR_ALIASES.get(token, ())):
+        return True
+    for word in evidence_words:
+        if len(word) < 3 or len(token) < 3:
+            continue
+        if not (token.endswith(word) or word.endswith(token)):
+            continue
+        if min(len(token), len(word)) / max(len(token), len(word)) >= 0.6:
+            return True
+    return False
+
+
+def _required_supported(claim: str, evidence: str) -> bool:
+    """Un cargo o un nombre propio inventado no se compensa con el resto de la frase."""
+    folded_claim = _norm(claim)
+    folded_evidence = _norm(evidence)
+    evidence_words = set(_WORD.findall(folded_evidence))
+    for role in _ROLE_WORDS:
+        for token in role.split():
+            if token in folded_claim and not _word_present(token, evidence_words):
+                return False
+    for sequence in _proper_sequences(claim):
+        content = [_norm(token) for token in sequence
+                   if _norm(token) not in _CONNECTORS and len(token) >= 3]
+        if not content:
+            continue
+        hits = sum(1 for token in content if _word_present(token, evidence_words))
+        if hits / len(content) < 0.7:
+            return False
+    return True
+
+
 def _evidence_context(it: dict) -> str:
     """Texto de la evidencia + su contexto (archivo, minuto, hablante, pÃ¡gina, folio).
 
@@ -620,14 +694,25 @@ def _evidence_context(it: dict) -> str:
     return " ".join(parts)
 
 
+def _is_citable_item(item: dict) -> bool:
+    """Misma regla que el compositor: la cita debe resolver a página o segmento."""
+    if item.get("document_id") and item.get("page_number") is not None:
+        return True
+    return bool(item.get("media_id") and item.get("segment_id")
+                and item.get("start_ms") is not None)
+
+
 def parse_and_validate(raw: str, items: list[dict], min_overlap: float = 0.0) -> dict:
-    """Answer contract (SSD Â§20.2). AfirmaciÃ³n sin cita vÃ¡lida => unsupported_claims, nunca a la respuesta."""
-    handles = {it["handle"] for it in items}
-    by_handle = {it["handle"]: it for it in items}
+    """Answer contract (SSD §20.2). Afirmación sin cita válida => unsupported_claims, nunca a la respuesta."""
+    # Un chunk de búsqueda no es una fuente visible: si el modelo lo cita, la
+    # afirmación no se puede mostrar (el compositor la descartaría y dejaría la
+    # frase sin fuente, como ocurría con el «Oficio 630»).
+    handles = {it["handle"] for it in items if _is_citable_item(it)}
+    by_handle = {it["handle"]: it for it in items if _is_citable_item(it)}
     # Calibración: 0.6 descartaba paráfrasis correctas. El set dorado y el
     # compositor usan 0.34; se fija como techo para no volver a sobre-abstenerse
     # aunque un entorno antiguo conserve 0.6.
-    min_overlap = min(float(min_overlap), 0.34)
+    min_overlap = 0.34 if not min_overlap else min(float(min_overlap), 0.34)
     txt = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.M).strip()
     try:
         data = json.loads(txt)
@@ -651,6 +736,122 @@ def parse_and_validate(raw: str, items: list[dict], min_overlap: float = 0.0) ->
         supported.append({"text": c["text"], "citations": cites})
     unc = [u for u in (data.get("uncertainties") or []) if isinstance(u, str)]
     return {"claims": supported, "unsupported_claims": unsupported, "uncertainties": unc, "schema_valid": True}
+
+
+_ASR_HINTS = ("grabaci", "grabacion", "audio", "video", "minuto")
+_DOC_HINTS = ("acta", "escrito", "documento", "memorial", "correo", "pdf", "folio")
+_QUALITY_HINTS = ("ocr", "digitalizacion", "ilegible", "no se lee", "texto degradado",
+                  "asr", "transcripcion", "transcripción")
+_META_LIMITS = ("no se pudo sintetizar", "no se recupero", "no se recuperaron",
+                "se omitieron", "no consta", "no obra", "no obran", "no se encontro",
+                "no existe", "no hay ", "does not exist", "not found", "not retrieved")
+
+
+def _source_mismatch(text: str, item: dict) -> bool:
+    """Evita reasignar «en la grabación» a un acta solo porque el texto coincide."""
+    folded = text_terms.norm(text)
+    source = str(item.get("source_type") or "")
+    if any(h in folded for h in _ASR_HINTS) and source != "transcript_segment":
+        return True
+    if any(h in folded for h in _DOC_HINTS) and source != "document_page":
+        return True
+    return False
+
+
+def revalidate_claims(claims: list[dict], items: list[dict],
+                      min_overlap: float = 0.34) -> dict:
+    """Revalida contra el texto PRIMARIO de la cita, no contra el chunk del agente.
+
+    El agente busca en chunks y a veces cita una página/segmento cuyo texto no
+    contiene la afirmación. Aquí se resuelve la cita al texto que el usuario verá:
+    si no sostiene la afirmación, se intenta una fuente individual que sí la
+    sostenga (sin cambiar el tipo de fuente) o se descarta la afirmación.
+    """
+    min_overlap = 0.34 if not min_overlap else min(float(min_overlap), 0.34)
+    by_handle = {str(it.get("handle")): it for it in items or []
+                 if it.get("handle") and _is_citable_item(it)}
+    supported: list[dict] = []
+    unsupported: list[dict] = []
+    for raw in claims or []:
+        text = str(raw.get("text") or "").strip()
+        if not text:
+            continue
+        cites = [str(x) for x in (raw.get("citations") or []) if str(x) in by_handle]
+        if not cites:
+            unsupported.append({"text": text, "citations": [], "reason": "invalid_citation"})
+            continue
+        cited_text = " ".join(_evidence_context(by_handle[h]) for h in cites)
+        ratio, missing_nums = grounding(text, cited_text)
+        if ratio >= min_overlap and not missing_nums and _required_supported(text, cited_text):
+            supported.append({"text": text, "citations": cites})
+            continue
+        best: tuple[float, str] | None = None
+        for handle, item in by_handle.items():
+            if _source_mismatch(text, item):
+                continue
+            candidate_text = _evidence_context(item)
+            candidate_ratio, candidate_missing = grounding(text, candidate_text)
+            if candidate_missing or candidate_ratio < 0.5:
+                continue
+            if not _required_supported(text, candidate_text):
+                continue
+            if best is None or candidate_ratio > best[0]:
+                best = (candidate_ratio, handle)
+        if best is not None:
+            supported.append({"text": text, "citations": [best[1]], "reassigned": True})
+            continue
+        unsupported.append({"text": text, "citations": cites, "reason": "not_grounded",
+                            "overlap": round(ratio, 3), "missing_numbers": missing_nums})
+    return {"claims": supported, "unsupported_claims": unsupported}
+
+
+def clean_uncertainties(uncertainties: list[str], items: list[dict],
+                        locale: str = "es") -> list[str]:
+    """Un «límite» no puede introducir páginas o números que la evidencia no trae."""
+    text = " ".join(_evidence_context(it) for it in items or [])
+    evidence_numbers = set(text_terms.numbers(text))
+    evidence_pages = {str(it.get("page_number")) for it in items or []
+                      if it.get("page_number") is not None}
+    out: list[str] = []
+    for value in uncertainties or []:
+        limit = str(value or "").strip()
+        if not limit:
+            continue
+        folded = text_terms.norm(limit)
+        if folded.startswith("revision humana") or folded.startswith("human review"):
+            out.append(limit)
+            continue
+        # Un límite meta («no se recuperó…») no es una afirmación jurídica y el
+        # juez lo marca como no soportado. Se omite; la respuesta ya cita lo que sí hay.
+        if any(hint in folded for hint in _META_LIMITS):
+            continue
+        if any(hint in folded for hint in _QUALITY_HINTS):
+            low_quality = any(
+                item.get("needs_review")
+                or (item.get("ocr_confidence") is not None
+                    and float(item["ocr_confidence"]) < 0.6)
+                or (item.get("asr_confidence") is not None
+                    and float(item["asr_confidence"]) < 0.6)
+                for item in items or []
+            )
+            if not low_quality:
+                continue
+        pages: set[str] = set()
+        for match in re.finditer(r"p[aá]g(?:ina)?s?\s+([0-9][0-9.,\s y-]*)", limit, re.I):
+            pages.update(re.findall(r"\d+", match.group(1)))
+        numbers = set(text_terms.numbers(limit))
+        if (pages - evidence_pages) or (numbers - evidence_numbers):
+            continue
+        out.append(limit)
+    seen: set[str] = set()
+    result: list[str] = []
+    for limit in out:
+        key = text_terms.norm(limit)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(limit)
+    return result
 
 
 def input_hash(question: str, items: list[dict]) -> str:

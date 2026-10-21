@@ -32,7 +32,7 @@ from app.core.errors import AppError
 from app.core.i18n import negotiate, t
 from app.schemas import ChatMessageIn, ChatSessionIn, IntentFeedbackIn, QueryIn
 from app.security.deps import Principal, case_access, current_principal
-from app.services import (audit, case_tools, contradiction_seed, correction,
+from app.services import (audit, case_tools, claim_seed, contradiction_seed, correction,
                           deadline as deadline_mod, entity_seed, intent as intent_service,
                           intent_profile, memory, occurrences, query_hints, ratelimit,
                           role_answer, text_terms)
@@ -511,6 +511,15 @@ def _seed_entity(p: Principal, case_id: UUID, question: str) -> list[dict]:
         return []
 
 
+def _seed_claim(p: Principal, case_id: UUID, question: str) -> list[dict]:
+    try:
+        with tx(p.org_id, p.user_id) as c:
+            return claim_seed.for_question(c, str(case_id), question)
+    except Exception:  # noqa: BLE001 — la semilla es opcional
+        log.debug("claim seed failed", exc_info=True)
+        return []
+
+
 def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Request,
                p: Principal, locale: str, case: dict, s, *, emit=None, deadline=None,
                background: BackgroundTasks | None = None) -> dict:
@@ -560,11 +569,13 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     decision = intent_profile.refine(decision, body.content,
                                      org_id=p.org_id, user_id=p.user_id)
     intent_value = str(getattr(decision.intent, "value", decision.intent))
+    contradiction_items = _seed_contradiction(p, case_id, body.content)
     entity_route = (decision.intent is intent_service.Intent.LOOKUP
                     and _entity_question(p, case_id, body.content))
-    if (decision.intent is intent_service.Intent.ANALYSIS or entity_route) \
-            and deadline.budget_ms < s.ANALYSIS_DEADLINE_MS:
-        # El análisis exhaustivo y el camino de entidad/grafo no caben en 30 s.
+    if (decision.intent is intent_service.Intent.ANALYSIS or entity_route
+            or contradiction_items) and deadline.budget_ms < s.ANALYSIS_DEADLINE_MS:
+        # El análisis exhaustivo, la contradicción concreta y el camino de
+        # entidad/grafo no caben en 30 s.
         deadline = deadline_mod.Deadline(s.ANALYSIS_DEADLINE_MS)
     _safe_emit(emit, "routing", {"intent": intent_value})
 
@@ -581,9 +592,10 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     if body.strategy == "agent":
         result = _query("agent")
     elif body.strategy == "rag":
-        result = _query("rag")
+        result = _query("rag", _seed_claim(p, case_id, body.content))
     elif decision.intent is intent_service.Intent.AGGREGATION:
-        result = _aggregation_result(p, case_id, body.content, locale) or _query("rag")
+        result = (_aggregation_result(p, case_id, body.content, locale)
+                  or _query("rag", _seed_claim(p, case_id, body.content)))
     elif decision.intent is intent_service.Intent.NAVIGATE:
         _safe_emit(emit, "synthesizing", {"strategy": "locate"})
         result = _navigate_result(p, case_id, body.content, decision, locale,
@@ -592,7 +604,7 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
         seed = _process_path_seed(p, case_id, body.content, ocr_mode, asr_mode)
         result = _query("rag", seed)
     elif decision.intent is intent_service.Intent.ANALYSIS:
-        result = _query("agent", _seed_contradiction(p, case_id, body.content))
+        result = _query("agent", contradiction_items)
     elif decision.intent is intent_service.Intent.CORRECTION:
         # Aplicar/confirmar correcciones ya se atendió arriba; si no había pendiente,
         # el camino histórico es el agente con la pista de corrección.
@@ -600,11 +612,15 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     elif correction.is_reprocess_question(body.content):
         # «¿Cómo mejoro el OCR/ASR?»: diagnosticar exige tools (suggest_reprocess).
         result = _query("agent")
+    elif contradiction_items:
+        # Aunque el clasificador lo etiquete como «dato», si describe una
+        # contradicción registrada, el agente debe ver las dos versiones.
+        result = _query("agent", contradiction_items)
     elif decision.intent is intent_service.Intent.LOOKUP and entity_route:
         # «¿Quién es X?» / «¿Qué se dice sobre X?»: el grafo y find_person, no solo chunks.
         result = _query("agent", _seed_entity(p, case_id, body.content))
     else:
-        result = _query("rag")
+        result = _query("rag", _seed_claim(p, case_id, body.content))
 
     # Los "@" siempre producen tarjeta ver/descargar, aunque el agente no llamara get_file.
     if body.attachments:

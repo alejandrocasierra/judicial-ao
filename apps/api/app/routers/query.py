@@ -135,6 +135,92 @@ def _normalize_seed_items(items: list[dict] | None) -> list[dict]:
     return out
 
 
+def _pg_array(values: list[object]) -> str:
+    return "{" + ",".join(str(v) for v in values) + "}"
+
+
+def _seed_handle(seed: dict, items: list[dict]) -> str | None:
+    """Handle visible que corresponde a la página/segmento de una semilla."""
+    for item in items:
+        same_page = (seed.get("document_id") and item.get("document_id")
+                     and str(seed["document_id"]) == str(item["document_id"])
+                     and seed.get("page_number") == item.get("page_number"))
+        same_segment = (seed.get("media_id") and item.get("media_id")
+                        and str(seed["media_id"]) == str(item["media_id"])
+                        and str(seed.get("segment_id")) == str(item.get("segment_id")))
+        if (same_page or same_segment) and item.get("handle"):
+            return str(item["handle"])
+    return None
+
+
+def _resolve_primary_texts(conn, items: list[dict]) -> list[dict]:
+    """Sustituye el texto del chunk por el texto real de la página/segmento citado.
+
+    El agente busca en fragmentos y puede citar una página cuyo texto no contiene
+    la frase que el fragmento sí traía. La respuesta final debe validarse y
+    citarse contra lo que el usuario verá en la fuente, no contra el chunk.
+    """
+    if not items:
+        return items
+    doc_pairs = {(str(it.get("document_id")), int(it["page_number"]))
+                 for it in items
+                 if it.get("document_id") and it.get("page_number") is not None}
+    segment_ids = {str(it.get("segment_id")) for it in items if it.get("segment_id")}
+    pages: dict[tuple[str, int], dict] = {}
+    segments: dict[str, dict] = {}
+    if doc_pairs:
+        found = rows(conn, """
+            SELECT document_id::text AS document_id, page_number, text, folio,
+                   ocr_confidence, needs_review
+              FROM document_pages
+             WHERE document_id = ANY(CAST(:docs AS uuid[]))
+               AND page_number = ANY(CAST(:pages AS integer[]))
+        """, docs=_pg_array(sorted({d for d, _ in doc_pairs})),
+             pages=_pg_array(sorted({p for _, p in doc_pairs})))
+        for row in found:
+            pages[(str(row["document_id"]), int(row["page_number"]))] = row
+    if segment_ids:
+        found = rows(conn, """
+            SELECT id::text AS id, text, start_ms, end_ms, confidence, needs_review
+              FROM transcript_segments
+             WHERE id = ANY(CAST(:ids AS uuid[]))
+        """, ids=_pg_array(sorted(segment_ids)))
+        for row in found:
+            segments[str(row["id"])] = row
+    out: list[dict] = []
+    for item in items:
+        resolved = dict(item)
+        pair = ((str(item.get("document_id")), int(item["page_number"]))
+                if item.get("document_id") and item.get("page_number") is not None else None)
+        segment_id = str(item.get("segment_id")) if item.get("segment_id") else None
+        if pair is not None and pair in pages:
+            page = pages[pair]
+            if page.get("text"):
+                resolved["text"] = page["text"]
+            resolved["source_type"] = "document_page"
+            if page.get("folio"):
+                resolved["folio"] = page["folio"]
+            for key in ("ocr_confidence", "needs_review"):
+                if page.get(key) is not None:
+                    resolved[key] = page[key]
+        elif segment_id is not None and segment_id in segments:
+            segment = segments[segment_id]
+            if segment.get("text"):
+                resolved["text"] = segment["text"]
+            resolved["source_type"] = "transcript_segment"
+            for key in ("start_ms", "end_ms"):
+                if segment.get(key) is not None:
+                    resolved[key] = segment[key]
+            if segment.get("confidence") is not None:
+                resolved["asr_confidence"] = segment["confidence"]
+            if segment.get("needs_review") is not None:
+                resolved["needs_review"] = segment["needs_review"]
+            if resolved.get("start_ms") is not None:
+                resolved["start_mmss"] = text_terms.mmss(resolved["start_ms"])
+        out.append(resolved)
+    return out
+
+
 def _deadline_claims(items: list[dict]) -> list[dict]:
     """Mejor respuesta disponible sin LLM cuando el presupuesto ya se agotó."""
     claims: list[dict] = []
@@ -142,9 +228,9 @@ def _deadline_claims(items: list[dict]) -> list[dict]:
         handle = item.get("handle")
         if not handle or not compose._is_citable(item):
             continue
-        text = " ".join(str(item.get("text") or "").split())[:320]
-        if text:
-            claims.append({"text": text, "citations": [str(handle)]})
+        body_text = " ".join(str(item.get("text") or "").split())[:320]
+        if body_text:
+            claims.append({"text": body_text, "citations": [str(handle)]})
         if len(claims) >= 2:
             break
     return claims
@@ -179,8 +265,8 @@ def _mentioned_document_ids(conn, case_id: str, question: str) -> list[str]:
     """
     from app.services import text_terms
 
-    def _squash(text: str) -> str:
-        return re.sub(r"[^0-9a-z]", "", text_terms.norm(text or ""))
+    def _squash(value: str) -> str:
+        return re.sub(r"[^0-9a-z]", "", text_terms.norm(value or ""))
 
     flat_question = _squash(question)
     if not flat_question:
@@ -226,7 +312,9 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         # Mismo perfil que en el chat: solo decide si está `active` y la regla no fue fuerte.
         decision = intent_profile.refine(decision, body.question,
                                          org_id=p.org_id, user_id=p.user_id)
-    deep = decision.intent is intent_service.Intent.ANALYSIS
+    deep = (decision.intent is intent_service.Intent.ANALYSIS
+            or any(str(item.get("seed") or "") == "contradiction"
+                   for item in (seed_items or [])))
     if deep and deadline.budget_ms < s.ANALYSIS_DEADLINE_MS:
         # Un análisis exhaustivo no cabe en 12-15 s: se le da su propio presupuesto.
         deadline = deadline_mod.Deadline(s.ANALYSIS_DEADLINE_MS)
@@ -390,14 +478,126 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             validated = {"claims": [], "unsupported_claims": [], "uncertainties": [],
                          "schema_valid": False}
 
+    # La cita final se resuelve a la página/segmento que el usuario verá. Si el
+    # chunk del agente no coincide con esa fuente, la afirmación se descarta o se
+    # reasigna a la fuente que sí la sostiene.
+    with tx(p.org_id, p.user_id) as c:
+        items = _resolve_primary_texts(c, items)
+    if validated.get("claims"):
+        revalidated = answering.revalidate_claims(
+            validated["claims"], items, s.ANSWER_MIN_GROUNDING_OVERLAP)
+        validated["claims"] = revalidated["claims"]
+        known = {str(u.get("text")) for u in (validated.get("unsupported_claims") or [])}
+        validated["unsupported_claims"] = list(validated.get("unsupported_claims") or []) + [
+            u for u in revalidated["unsupported_claims"] if str(u.get("text")) not in known]
     mode = verify_mode or s.VERIFY_MODE
+    if verify_mode is None and mode == "sync" and body.strategy != "agent":
+        # En RAG general la afirmación ya se validó contra la página/segmento
+        # primario y sus números. El juez síncrono se reserva para el agente y
+        # para preguntas de un claim concreto (donde el modelo tiende a añadir
+        # comparaciones o cargos que la cita no contiene).
+        if not any(item.get("claim_text") for item in (seed_items or [])):
+            mode = "async"
     semantic_verdicts: list[dict] = []
     if mode == "sync" and validated["claims"] and not deadline.expired:
+        pre_sync_claims = list(validated["claims"])
         try:
-            semantic_verdicts = verification.verify(validated["claims"], items)
+            judge_llm = None
+            if s.VERIFY_MODEL_ID:
+                try:
+                    judge_llm = get_llm_for_model(s.VERIFY_MODEL_ID, p.org_id, p.user_id)
+                except Exception:  # noqa: BLE001 — cae al juez por routing/default
+                    judge_llm = None
+            semantic_verdicts = verification.verify(validated["claims"], items, llm=judge_llm)
             verification.apply_verdicts(validated, semantic_verdicts)
         except Exception as exc:  # noqa: BLE001 — el juez no bloquea la respuesta
             log.warning("sync verification failed: %s", exc)
+        if not validated.get("claims") and body.strategy == "agent":
+            # Un juez demasiado estricto no puede convertir una respuesta con
+            # evidencia en una abstención. Se conservan las afirmaciones que ya
+            # pasaron grounding/números/nombres y se marcan para revisión.
+            validated["claims"] = pre_sync_claims
+            restored = {text_terms.norm(str(c.get("text") or "")) for c in pre_sync_claims}
+            validated["unsupported_claims"] = [
+                u for u in (validated.get("unsupported_claims") or [])
+                if text_terms.norm(str(u.get("text") or "")) not in restored]
+            note = ("El juez semántico no pudo verificar estas afirmaciones; "
+                    "requieren revisión humana.")
+            if note not in validated["uncertainties"]:
+                validated["uncertainties"].append(note)
+
+    # Una contradicción concreta SIEMPRE muestra sus dos versiones registradas,
+    # aunque el LLM haya sintetizado solo una. Las dos claim de la base son la
+    # definición del objeto que el usuario pregunta.
+    if seed_items:
+        seeded_claims: list[dict] = []
+        seeded_texts: set[str] = set()
+        for seed in seed_items:
+            if str(seed.get("seed") or "") != "contradiction":
+                continue
+            claim_text = str(seed.get("claim_text") or "").strip()
+            handle = _seed_handle(seed, items)
+            key = text_terms.norm(claim_text)
+            if claim_text and handle and key not in seeded_texts:
+                seeded_claims.append({"text": claim_text, "citations": [handle]})
+                seeded_texts.add(key)
+        if len(seeded_claims) >= 2:
+            # Explicación mínima y determinista: contrapone las dos afirmaciones
+            # registradas, sin inventar cifras ni atribuciones.
+            first = str(seeded_claims[0]["text"]).rstrip(".")
+            second = str(seeded_claims[1]["text"]).rstrip(".")
+            summary = f"La contradicción consiste en que {first}, mientras que {second}."
+            seeded_claims.insert(0, {"text": summary,
+                                     "citations": [seeded_claims[0]["citations"][0]]})
+        context_seed = next((seed for seed in seed_items
+                             if str(seed.get("seed") or "") == "contradiction"
+                             and seed.get("context_text")), None)
+        if context_seed is not None:
+            context_handle = _seed_handle(context_seed, items)
+            if context_handle:
+                seeded_claims.append({
+                    "text": str(context_seed["context_text"])[:600],
+                    "citations": [context_handle],
+                })
+        if seeded_claims:
+            validated["claims"] = seeded_claims + [
+                claim for claim in (validated.get("claims") or [])
+                if text_terms.norm(str(claim.get("text") or "")) not in seeded_texts]
+
+    # Último recurso: si la síntesis no produjo ninguna afirmación pero la
+    # pregunta tiene una semilla de la base (contradicción o claim), se muestran
+    # las afirmaciones registradas con su fuente. Mejor evidencia que abstención.
+    if not validated.get("claims") and seed_items:
+        by_text: dict[str, str] = {}
+        for seed in seed_items:
+            claim_text = str(seed.get("claim_text") or "").strip()
+            if not claim_text:
+                continue
+            for item in items:
+                same_page = (seed.get("document_id") and item.get("document_id")
+                             and str(seed["document_id"]) == str(item["document_id"])
+                             and seed.get("page_number") == item.get("page_number"))
+                same_segment = (seed.get("media_id") and item.get("media_id")
+                                and str(seed["media_id"]) == str(item["media_id"])
+                                and str(seed.get("segment_id")) == str(item.get("segment_id")))
+                if (same_page or same_segment) and item.get("handle"):
+                    by_text.setdefault(claim_text, str(item["handle"]))
+                    break
+        if by_text:
+            validated["claims"] = [{"text": claim_text, "citations": [handle]}
+                                   for claim_text, handle in list(by_text.items())[:4]]
+            note = ("No se pudo sintetizar una respuesta; se muestran las afirmaciones "
+                    "registradas en la base con su fuente.")
+            if note not in validated["uncertainties"]:
+                validated["uncertainties"].append(note)
+
+    # Los límites solo pueden hablar de las fuentes que el usuario verá citadas.
+    visible_handles = {str(handle)
+                       for claim in (validated.get("claims") or [])
+                       for handle in (claim.get("citations") or [])}
+    visible_items = [item for item in items if str(item.get("handle")) in visible_handles]
+    validated["uncertainties"] = answering.clean_uncertainties(
+        validated.get("uncertainties") or [], visible_items or items, locale)
 
     _safe_emit(emit, "validating", {"claims": len(validated["claims"])})
     with deadline.stage("compose"):

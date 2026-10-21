@@ -255,6 +255,9 @@ class Settings(BaseSettings):
     ANSWER_MIN_GROUNDING_OVERLAP: float = Field(ge=0.0, le=1.0)
     # Verificación semántica: sync (bloquea), async (post-response) u off.
     VERIFY_MODE: Literal["sync", "async", "off"] = "async"
+    # Modelo juez (ai_models.id). Si falta, usa LLM_ROUTING["verification"] o el
+    # proveedor por defecto. Se prefiere un modelo distinto al que respondió.
+    VERIFY_MODEL_ID: str | None = None
     # Reescribir la consulta con el historial (determinista + sinónimos; el LLM
     # opcional solo se usa si LLM_ROUTING define "query_rewrite").
     QUERY_REWRITE_ENABLED: bool = True

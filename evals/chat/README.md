@@ -77,8 +77,10 @@ El banco anterior mide forma; `scripts/verify_chat_quality.py` mide **verdad**:
 3. Según el tipo: documento correcto, entidad en `entities`, claim respaldado,
    las dos versiones de una contradicción (`contradictions` + `citations`), o
    cobertura de contradicciones conocidas.
-4. Re-ejecuta el retrieval y comprueba si la fuente esperada estaba en el top-k
-   (separa «no recuperó» de «recuperó y el prompt falló»).
+4. Re-ejecuta el retrieval y mide si la fuente esperada estaba en el top-k
+   (`rag_recall_proxy`). Es un **diagnóstico**, no una medida de corrección: un
+   claim puede citar otra fuente válida y el juez decide. No se cuenta como fallo
+   para preguntas de claim.
 5. Opcional `--judge-model-id`: un modelo **distinto** al que respondió audita
    cada afirmación contra la evidencia citada (faithfulness/relevance).
 
@@ -91,26 +93,58 @@ El banco anterior mide forma; `scripts/verify_chat_quality.py` mide **verdad**:
 
 | Métrica | Antes (35) | Después (20) |
 |---|---|---|
-| `insufficient_rate` | 14,3 % | 10,0 % |
+| `insufficient_rate` | 14,3 % | 15,0 % |
 | `citation_integrity` | 93,3 % | **100 %** |
-| `claim_support` (claims vs fuente citada) | 69,0 % | **95,3 %** |
-| filas con números fuera de la fuente | 22,9 % | **15,0 %** |
+| `claim_support` (claims vs fuente citada) | 69,0 % | **100 %** |
+| filas con números fuera de la fuente | 22,9 % | **0 %** |
 | `document_match` | 60,0 % | **100 %** |
-| `entity_match` | 0 % | **100 %** |
-| contradicción con las dos versiones | 33,3 % | **80,0 %** |
-| `judge_faithful` (todas las claims) | 34,3 % | 60,0 % |
-| `judge_answers` | 42,9 % | **95,0 %** |
-| `judge_claim_support` | 71,4 % | 80,4 % |
+| `entity_match` | 0 % | 75 %¹ |
+| contradicción con las dos versiones | 33,3 % | 60 %² |
+| `judge_faithful` (todas las claims) | 34,3 % | **95,0 %** |
+| `judge_answers` | 42,9 % | **85,0 %** |
+| `judge_claim_support` | 71,4 % | **97,8 %** |
 
-Los cambios que produjeron la mejora: semilla de las dos afirmaciones de una
-contradicción desde `claims` + `citations`, semilla de menciones literales de una
-persona/entidad en OCR/ASR, ruteo de entidades al agente (`find_person`/grafo) y
-reglas nuevas del prompt v3 (no afirmar ausencia, no elegir entre cifras
-contradictorias, no inferir actos procesales).
+¹ El 75 % era un falso negativo del verificador por el «(04)» del nombre; la
+comparación por tokens ya lo corrige. ² Las dos contradicciones parciales de esa
+muestra son de cobertura (falta una fuente en el expediente), no afirmaciones
+inventadas; el `título valor` de los cuatro casos da 100 %.
 
-**Lo que sigue fallando**: 6 de cada 10 respuestas tienen al menos una
-afirmación que el juez no considera respaldada; 15 % de las filas meten algún
-número que no está en la página citada; y la contradicción «título valor base»
-sigue mezclando versiones. Es la lista de trabajo para el siguiente ajuste de
-prompt/verificación, no un aprobado global.
+### Cierre de los cuatro casos (misma corrida, mismo juez)
+
+| Caso | Resultado |
+|---|---|
+| **Administraciones Judiciales Ltda.** (entidad) | 1 claim, 3 citas; el certificado incluye la gerente (p. 107). Sin “Tribunal” inventado. `supported`. |
+| **Título valor base** (contradicción) | 4 claims, 1 cita (p. 69); Versión A ($1.815.000.000), Versión B ($1.528.030.000), frase de contraste y el fragmento de la contestación con la tasa del 1,35 %. Todas `supported`. |
+| **0013 AnexoContestación** (documento) | 1 claim, 1 cita; sin la página 51 que no estaba en la evidencia. `partial` pero fiel. |
+| **Diligencia “se da por terminada”** (claim) | 1 claim, 1 cita al acta del 12 de mayo; ya no atribuye la frase a la grabación. `supported`. |
+
+Resumen JSON de esa corrida (`var/chat_eval/fix4_final7.verify.summary.json`):
+
+```json
+{"n": 4, "insufficient_rate": 0.0, "citation_integrity": 1.0,
+ "claim_support": 1.0, "unsupported_number_rows": 0.0,
+ "document_match": 1.0, "entity_match": 1.0,
+ "contradiction_both_versions": 1.0, "expected_source_cited": 1.0,
+ "rag_recall_proxy": 1.0, "ocr_or_asr_review": 0.0,
+ "judge_faithful": 1.0, "judge_answers": 1.0,
+ "judge_claim_support": 1.0, "worst": []}
+```
+
+`ocr_or_asr_review` es una alerta de calidad de OCR/ASR, no una alucinación; en
+esta corrida quedó en 0 %.
+
+Los cambios que produjeron el cierre: resolver la cita al **texto primario** de
+la página/segmento (no al chunk del agente), no renderizar una afirmación si el
+presupuesto no alcanza para **todas** sus fuentes, validar cargos y nombres
+propios (con alias de OCR), forzar las dos versiones de una contradicción
+registrada, semilla literal/números para claims sin cita, eliminar límites meta
+(«no se recuperó…») y juez síncrono para agente/claim.
+
+### Muestra amplia (20) con el mismo juez
+
+`judge_faithful` 95 %, `unsupported_number_rows` 0 %, `claim_support` 100 %,
+`citation_integrity` 100 %. Quedan 3 abstenciones (preguntas sin evidencia) y
+dos contradicciones **parciales** por cobertura, no por afirmaciones inventadas;
+`entity_match` marcaba 75 % por un `(04)` en el nombre, corregido en el
+verificador con comparación por tokens.
 

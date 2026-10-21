@@ -100,13 +100,25 @@ def test_ut_cmp_08_budget_limits_visible_citations():
     assert out.used_handles == ["E1", "E2", "E3", "E4"]
 
 
-def test_ut_cmp_09_budget_limits_citations_per_file():
+def test_ut_cmp_09_budget_keeps_all_sources_for_a_claim():
     ev = [_doc("E1", 1, "El pago consta en la página uno."),
           _doc("E2", 2, "El pago consta en la página dos."),
           _doc("E3", 3, "El pago consta en la página tres.")]
     claims = [_claim(ev[i]["text"], f"E{i+1}") for i in range(3)]
     out = _render("¿Qué dice el expediente sobre el pago?", claims, ev,
                   max_citations=4, max_per_file=2)
+    # El tope por archivo ya no recorta una cita: las tres páginas se muestran.
+    assert out.used_handles == ["E1", "E2", "E3"]
+    assert "p. 3" in out.answer
+
+
+def test_ut_cmp_09b_global_budget_omits_claim_instead_of_partial_citation():
+    ev = [_doc("E1", 1, "El pago consta en la página uno."),
+          _doc("E2", 2, "El pago consta en la página dos."),
+          _doc("E3", 3, "El pago consta en la página tres.")]
+    claims = [_claim(ev[i]["text"], f"E{i+1}") for i in range(3)]
+    out = _render("¿Qué dice el expediente sobre el pago?", claims, ev,
+                  max_citations=2, max_per_file=10)
     assert out.used_handles == ["E1", "E2"]
     assert "p. 3" not in out.answer
 

@@ -9,13 +9,13 @@ Reglas duras:
 - una cifra/fecha que no aparece en la evidencia citada se mueve a «Límites»;
 - un fragmento copiado del ASR (>85 % literal y <20 % de solape con la pregunta)
   se degrada a «Lo que dice el audio», nunca a respuesta directa;
-- presupuesto de citas: ≤ MAX_VISIBLE_CITATIONS y ≤ MAX_CITATIONS_PER_FILE,
-  sin duplicar página ni segmento, y solo se listan las fuentes referenciadas.
+- presupuesto de citas: ≤ MAX_VISIBLE_CITATIONS, sin duplicar página ni segmento,
+  y solo se listan las fuentes referenciadas. Una afirmación se muestra con TODAS
+  sus fuentes; si el presupuesto global no alcanza, se omite la afirmación.
 """
 from __future__ import annotations
 
 import re
-from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
@@ -211,7 +211,8 @@ def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dic
     """Compone el Markdown final a partir de claims validados y evidencia."""
     settings = get_settings()
     max_citations = max_citations or settings.MAX_VISIBLE_CITATIONS
-    max_per_file = max_per_file or settings.MAX_CITATIONS_PER_FILE
+    # `max_per_file` se conserva por compatibilidad de la firma; ya no se usa
+    # como recorte porque podía dejar una afirmación con una cita incompleta.
     limits = _dedupe_texts(uncertainties)
     intent_value = str(getattr(intent, "value", intent) or "")
 
@@ -260,7 +261,6 @@ def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dic
 
     used: list[str] = []
     markers: dict[str, int] = {}
-    per_file: Counter[str] = Counter()
     seen_locations: set[tuple] = set()
 
     def _allocate(candidate: dict) -> list[str]:
@@ -272,14 +272,11 @@ def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dic
             if len(used) >= max_citations:
                 continue
             item = by_handle[handle]
-            if per_file[_file_key(item)] >= max_per_file:
-                continue
             location = _location_key(item)
             if location in seen_locations:
                 continue
             used.append(handle)
             markers[handle] = len(used)
-            per_file[_file_key(item)] += 1
             seen_locations.add(location)
             allocated.append(handle)
         return allocated
@@ -303,7 +300,19 @@ def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dic
             trimmed.append(candidate)
         ordered = trimmed
     for candidate in ordered:
+        before_used = list(used)
+        before_markers = dict(markers)
+        before_locations = set(seen_locations)
         allocated = _allocate(candidate)
+        if len(allocated) < len(candidate["citations"]):
+            # El presupuesto global no alcanzó para todas las fuentes de esta
+            # afirmación: mejor omitirla que mostrarla con una cita parcial.
+            used[:] = before_used
+            markers.clear()
+            markers.update(before_markers)
+            seen_locations.clear()
+            seen_locations.update(before_locations)
+            continue
         if allocated:
             rendered.append({**candidate, "citations": allocated})
 

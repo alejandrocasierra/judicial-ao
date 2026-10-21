@@ -48,7 +48,8 @@ def test_ut_ev_05_grounding_accepts_minute_and_speaker_from_labels():
     import json
 
     items = [{"handle": "TR1", "source_type": "transcript_segment", "text": "¿Quién es Jorge?",
-              "start_mmss": "01:58", "speaker": "Alba Lucy Cock Alvarez", "filename": "0077.mp4"}]
+              "start_mmss": "01:58", "speaker": "Alba Lucy Cock Alvarez", "filename": "0077.mp4",
+              "media_id": "m1", "segment_id": "s1", "start_ms": 118000}]
     raw = json.dumps({"claims": [{"text": "En el minuto 01:58, Alba Lucy Cock Alvarez preguntó «¿Quién es Jorge?».",
                                   "citations": ["TR1"]}], "uncertainties": []})
     out = answering.parse_and_validate(raw, items, min_overlap=0.5)

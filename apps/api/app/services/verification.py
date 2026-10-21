@@ -20,6 +20,7 @@ from sqlalchemy import text as sql_text
 from app.core.config import get_settings
 from app.core.db import tx
 from app.providers.llm import get_llm, get_llm_for_task
+from app.services import text_terms
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +65,8 @@ def _system_prompt() -> str:
     target = path / "verify_answer.v2.md"
     if not target.exists():
         target = path / "verify_answer.v1.md"
-    return target.read_text(encoding="utf-8").split("---", 2)[2].strip()
+    return (target.read_text(encoding="utf-8").split("---", 2)[2].strip()
+            .replace("{{LOCALE}}", "es"))
 
 
 def verify(claims: list[dict[str, Any]], evidence: list[dict[str, Any]], llm=None) -> list[dict[str, Any]]:
@@ -73,7 +75,13 @@ def verify(claims: list[dict[str, Any]], evidence: list[dict[str, Any]], llm=Non
         return []
     try:
         system = _system_prompt()
-        user = _build_prompt(claims, evidence)
+        # El juez solo debe ver las fuentes que la respuesta citará. Si ve todo
+        # el expediente, puede aprobar una afirmación con una página no citada
+        # (p. ej. un número que aparece en otro documento).
+        cited = {str(handle) for claim in claims
+                 for handle in (claim.get("citations") or [])}
+        visible = [item for item in evidence if str(item.get("handle")) in cited]
+        user = _build_prompt(claims, visible or evidence)
         result = _judge_llm(llm).complete(system, user)
     except Exception as exc:  # noqa: BLE001 — el juez es opcional
         log.warning("verification failed: %s", exc)
@@ -86,13 +94,14 @@ def verify(claims: list[dict[str, Any]], evidence: list[dict[str, Any]], llm=Non
         return []
     if not isinstance(verdicts, list):
         return []
-    by_text = {cl["text"]: cl.get("citations", []) for cl in claims}
+    by_text = {text_terms.norm(cl["text"]): cl.get("citations", []) for cl in claims}
     out: list[dict[str, Any]] = []
     for verdict in verdicts:
         if not isinstance(verdict, dict):
             continue
         claim_text = verdict.get("claim", "")
-        verdict["citations"] = by_text.get(claim_text, verdict.get("citations", []))
+        verdict["citations"] = by_text.get(text_terms.norm(claim_text),
+                                          verdict.get("citations", []))
         status = verdict.get("status")
         if status not in ("supported", "not_supported", "contradicted", "needs_review"):
             verdict["status"] = "needs_review"
@@ -105,23 +114,43 @@ def unsupported_verdicts(verdicts: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def apply_verdicts(validated: dict[str, Any], verdicts: list[dict[str, Any]]) -> dict[str, Any]:
-    """Mueve a `unsupported_claims` lo que el juez no respalda (sin duplicar)."""
+    """Quita de la respuesta lo que el juez no respalda; nunca lo deja como hecho.
+
+    Un veredicto `needs_review` tampoco se publica como afirmación: se mueve a
+    límites para que un humano decida. El match es por texto normalizado porque
+    el juez a veces devuelve la afirmación truncada.
+    """
     unsupported = list(validated.get("unsupported_claims") or [])
-    known = {str(item.get("text")) for item in unsupported}
+    known = {text_terms.norm(str(item.get("text") or "")) for item in unsupported}
     uncertainties = list(validated.get("uncertainties") or [])
+    claims = list(validated.get("claims") or [])
+    by_norm = {text_terms.norm(str(c.get("text") or "")): c for c in claims}
     for verdict in verdicts or []:
         claim = str(verdict.get("claim") or "")
         status = verdict.get("status")
+        folded = text_terms.norm(claim)
+        target = by_norm.get(folded)
+        if target is None and folded:
+            for candidate in claims:
+                candidate_norm = text_terms.norm(str(candidate.get("text") or ""))
+                if candidate_norm and (candidate_norm[:80] in folded
+                                       or folded[:80] in candidate_norm):
+                    target = candidate
+                    break
         if status in _UNSUPPORTED:
-            if claim and claim not in known:
-                known.add(claim)
+            if claim and folded not in known:
+                known.add(folded)
                 unsupported.append({"text": claim, "citations": verdict.get("citations", []),
                                     "reason": status, "semantic_reason": verdict.get("reason", "")})
-            validated["claims"] = [c for c in (validated.get("claims") or []) if c.get("text") != claim]
+            if target is not None:
+                claims = [c for c in claims if c is not target]
         elif status == "needs_review":
+            if target is not None:
+                claims = [c for c in claims if c is not target]
             note = f"Revisión humana sugerida: {claim} ({verdict.get('reason', '')})"
             if note not in uncertainties:
                 uncertainties.append(note)
+    validated["claims"] = claims
     validated["unsupported_claims"] = unsupported
     validated["uncertainties"] = uncertainties
     return validated
