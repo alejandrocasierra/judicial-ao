@@ -293,3 +293,71 @@ def test_it_pipe_10_forget_style_and_retention(client, auth, ids, owner_db):
         cur.execute("""SELECT count(*) FROM intent_exemplar
                         WHERE user_id = %s AND question_hash = 'hash-retencion'""", (user_id,))
         assert cur.fetchone()[0] == 0
+
+
+def test_it_pipe_11_activacion_automatica_con_evidencia(client, auth, ids, owner_db, monkeypatch):
+    """10 correcciones del usuario + embeddings semánticos → el perfil se activa solo.
+
+    Se sustituye el proveedor por uno determinista (mismo vector para las
+    paráfrasis) para no depender de un modelo de 2 GB en la suite.
+    """
+    from app.services import intent as intent_service
+    from app.services import intent_learning, intent_profile
+
+    h = auth("abogada.alfa")
+    sid = _session(client, h, ids["pago"])
+    with owner_db.cursor() as cur:
+        cur.execute("SELECT organization_id, created_by FROM chat_sessions WHERE id = %s", (sid,))
+        org_id, user_id = cur.fetchone()
+
+    questions = [f"Hay algo raro entre lo que dice el perito y el acta {i}" for i in range(10)]
+    with owner_db.cursor() as cur:
+        for index, question in enumerate(questions):
+            asked = f"now() - interval '2 hours' + make_interval(secs => {index * 60})"
+            answered = f"now() - interval '2 hours' + make_interval(secs => {index * 60 + 5})"
+            cur.execute(f"""INSERT INTO chat_messages
+                              (organization_id, session_id, role, content, created_at)
+                            VALUES (%s, %s, 'user', %s, {asked})""", (org_id, sid, question))
+            cur.execute(f"""INSERT INTO chat_messages
+                              (organization_id, session_id, role, content, intent,
+                               intent_source, created_at)
+                            VALUES (%s, %s, 'assistant', '', 'dato', 'rules', {answered})
+                            RETURNING id""", (org_id, sid))
+            message_id = cur.fetchone()[0]
+            cur.execute("""INSERT INTO intent_feedback
+                             (organization_id, case_id, session_id, message_id, user_id,
+                              verdict, corrected_intent, router_intent, router_version)
+                           VALUES (%s, %s, %s, %s, %s, 'wrong_intent', 'analisis', 'dato', 'test')""",
+                        (org_id, ids["pago"], sid, message_id, user_id))
+    owner_db.commit()
+
+    class _StubEmbedding:
+        name = "stub"
+        model_name = "stub-model"
+
+        def embed(self, texts):
+            base = [1.0] + [0.0] * 1023
+            return [list(base) for _ in texts]
+
+    stub = _StubEmbedding()
+    monkeypatch.setattr(intent_learning, "_provider", lambda: (stub, "stub", "stub-model"))
+    monkeypatch.setattr(intent_learning, "embedding_capability",
+                        lambda: {"provider": "stub", "model": "stub-model", "same": 1.0,
+                                 "different": 0.0, "gap": 1.0, "semantic": True})
+    report = intent_learning.rebuild(str(org_id), user_id=str(user_id))
+    assert len(report) == 1
+    assert report[0]["judged"] == 10
+    assert report[0]["rules_accuracy"] == 0.0
+    assert report[0]["profile_accuracy"] == 1.0
+    assert report[0]["status"] == "active"
+    assert report[0]["reason"] == "profile_beats_rules"
+
+    # Y en el turno, el perfil activo rescata el default sin tocar los adjuntos.
+    monkeypatch.setattr(intent_profile, "_embed", lambda _q: list([1.0] + [0.0] * 1023))
+    monkeypatch.setattr(intent_profile, "intent_model_label", lambda _s=None: "stub-model")
+    base = intent_service.classify("¿Hay algo raro entre lo que dice el perito y el acta?")
+    refined = intent_profile.refine(base, "¿Hay algo raro entre lo que dice el perito y el acta?",
+                                    org_id=str(org_id), user_id=str(user_id))
+    assert base.intent is intent_service.Intent.LOOKUP
+    assert refined.intent is intent_service.Intent.ANALYSIS
+    assert refined.source == "profile"
