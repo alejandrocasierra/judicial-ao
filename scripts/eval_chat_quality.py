@@ -87,7 +87,7 @@ def _db_questions(case_number: str, per_type: int) -> list[dict]:
         out.append({"type": "document", "question":
                     f"¿Qué contiene y qué afirma el documento {item['filename']}?"})
     for item in contradictions:
-        desc = " ".join(str(item["description"]).split())[:120]
+        desc = " ".join(str(item["description"]).split())[:800]
         out.append({"type": "contradiction", "question":
                     f"Explique esta contradicción del expediente y las dos versiones que la sustentan: {desc}"})
     for topic in TOPICS:
@@ -200,6 +200,8 @@ def main() -> int:
     p.add_argument("--case-number", default="11001310302120180036100")
     p.add_argument("--model-id", default=None)
     p.add_argument("--limit", type=int, default=30)
+    p.add_argument("--concurrency", type=int, default=1,
+                   help="Preguntas en paralelo (default 1; usa 2-3 con modelos rápidos)")
     p.add_argument("--per-type", type=int, default=6,
                    help="Preguntas por entidad/documento/contradicción (default 6)")
     p.add_argument("--types", default=None, help="Filtro: entity,document,contradiction,topic,exhaustive")
@@ -227,20 +229,41 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict] = []
+
+    def _work(item: dict) -> dict:
+        row = _run_one(args.api, headers, case_id, args.model_id, item["question"])
+        row["type"] = item["type"]
+        return row
+
+    def _emit(fh, row: dict, index: int, total: int) -> None:
+        rows.append(row)
+        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        fh.flush()
+        mark = "ERR" if row.get("error") else (
+            f"{row.get('answer_kind'):11} cit={row.get('citations')} "
+            f"{row.get('elapsed'):6.1f}s len={row.get('length')}")
+        print(f"[{index:3}/{total}] {row.get('type', '?'):14} {mark}")
+        print(f"    {str(row.get('question', ''))[:150]}")
+        if row.get("error"):
+            print(f"    -> {row['error']}")
+
     with out.open("w", encoding="utf-8") as fh:
-        for index, item in enumerate(bank, start=1):
-            row = _run_one(args.api, headers, case_id, args.model_id, item["question"])
-            row["type"] = item["type"]
-            rows.append(row)
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-            fh.flush()
-            mark = "ERR" if row.get("error") else (
-                f"{row.get('answer_kind'):11} cit={row.get('citations')} "
-                f"{row.get('elapsed'):6.1f}s len={row.get('length')}")
-            print(f"[{index:3}/{len(bank)}] {item['type']:14} {mark}")
-            print(f"    {item['question'][:150]}")
-            if row.get("error"):
-                print(f"    -> {row['error']}")
+        if args.concurrency > 1:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
+                futures = {pool.submit(_work, item): item for item in bank}
+                for index, future in enumerate(as_completed(futures), start=1):
+                    item = futures[future]
+                    try:
+                        row = future.result()
+                    except Exception as exc:  # noqa: BLE001 — una pregunta no tumba el banco
+                        row = {"error": str(exc), "question": item["question"],
+                               "type": item["type"]}
+                    _emit(fh, row, index, len(bank))
+        else:
+            for index, item in enumerate(bank, start=1):
+                _emit(fh, _work(item), index, len(bank))
 
     summary = _summary(rows)
     (out.with_suffix(".summary.json")).write_text(
