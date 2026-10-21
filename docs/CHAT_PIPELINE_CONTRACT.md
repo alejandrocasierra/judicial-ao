@@ -490,8 +490,13 @@ mismo usuario/expediente en sesiones anteriores; una pregunta repetida del mismo
 usuario, expediente, modelo, agente, estrategia, pipeline y versión de evidencia
 se sirve desde `cache` (`cached: true`) sin retrieval ni LLM. Las preguntas
 contextuales incluyen el hash de los últimos turnos; con adjuntos no se cachea.
-Los seguimientos heredan el **último tema con contenido** mediante
-`query_rewrite`: «clima en Obando» → «seguro porque salgo sin paraguas» →
+La conversación persiste en PostgreSQL (`chat_sessions`, `chat_messages` y
+`summary`), no en el navegador: al volver al otro día se recupera el hilo y el
+tema. El widget fija por expediente el id de la última conversación para reabrir
+esa misma; si no, usa la más reciente. Una conversación nueva solo hereda los
+últimos 2 intercambios entre sesiones. Los seguimientos heredan el **último tema
+con contenido** mediante `query_rewrite`: «clima en Obando» → «seguro porque
+salgo sin paraguas» →
 «¿definitivamente no va a llover?», hasta que aparece un tema nuevo; también los
 seguimientos por rol («¿qué dice la parte demandada?») heredan «intereses» sin
 que el usuario lo repita. `needs_history` incluye ese contexto en la clave de

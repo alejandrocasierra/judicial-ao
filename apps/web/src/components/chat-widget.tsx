@@ -125,6 +125,12 @@ const STAGE_LABELS: Record<string, string> = {
 };
 const STAGE_FALLBACK = "Analizando la pregunta…";
 
+/** Recuerda en el navegador qué conversación del expediente se estaba viendo.
+ *  El historial real vive en PostgreSQL; esto solo evita abrir otra al recargar. */
+function lastSessionKey(caseId: string) {
+  return `judicial:chat:last:${caseId}`;
+}
+
 function mmss(ms: number) {
   const s = Math.floor(ms / 1000);
   const h = Math.floor(s / 3600);
@@ -378,7 +384,10 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
         const ss = await api.get<Session[]>(`/cases/${caseId}/chats`);
         setSessions(ss);
         if (!sessionId || !ss.some((s) => s.id === sessionId)) {
-          setSession(ss[0]?.id ?? null);
+          let saved: string | null = null;
+          try { saved = localStorage.getItem(lastSessionKey(caseId)); } catch { saved = null; }
+          const preferred = ss.find((s) => s.id === saved) ?? ss[0];
+          setSession(preferred?.id ?? null);
         }
       } catch { setSessions([]); }
       try {
@@ -416,6 +425,13 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
     })();
     return () => { cancelled = true; };
   }, [open, caseId, sessionId]);
+
+  // El historial y el resumen están en el servidor; esto solo fija la sesión
+  // exacta para que al volver al otro día se abra la misma conversación.
+  useEffect(() => {
+    if (!sessionId) return;
+    try { localStorage.setItem(lastSessionKey(caseId), sessionId); } catch { /* navegador sin storage */ }
+  }, [caseId, sessionId]);
 
   const activeSession = useMemo(() => sessions.find((s) => s.id === sessionId), [sessions, sessionId]);
   const ocrMode = modeOverride?.ocr ?? activeSession?.ocr_mode ?? "todos";
@@ -763,7 +779,10 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
     try {
       await api.delete(`/cases/${caseId}/chats/${sid}`);
       setSessions((ss) => ss.filter((s) => s.id !== sid));
-      if (sid === sessionId) setSession(null);
+      if (sid === sessionId) {
+        setSession(null);
+        try { localStorage.removeItem(lastSessionKey(caseId)); } catch { /* sin storage */ }
+      }
       toast.success("Conversación archivada");
     } catch (e) { toast.error(e instanceof Error ? e.message : "No se pudo archivar"); }
   }, [caseId, sessionId, setSession]);
@@ -791,7 +810,10 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                 <BrainCircuit className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" title="Nueva conversación" aria-label="Nueva conversación"
-                onClick={() => { setSession(null); setMessages([]); setModeOverride(null); setCorrecting(null); }}>
+                onClick={() => {
+                  setSession(null); setMessages([]); setModeOverride(null); setCorrecting(null);
+                  try { localStorage.removeItem(lastSessionKey(caseId)); } catch { /* sin storage */ }
+                }}>
                 <Plus className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" aria-label="Cerrar chat" onClick={() => setOpen(false)}>
@@ -804,8 +826,15 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
             <div className="flex flex-col gap-2 sm:flex-row">
               {sessions.length > 0 && (
                 <Select value={sessionId ?? ""} onValueChange={(v) => {
-                  if (v === "__new__") { setSession(null); setMessages([]); setPendingCorrection(null); setModeOverride(null); }
-                  else { setSession(v || null); setModeOverride(null); }
+                  if (v === "__new__") {
+                    setSession(null); setMessages([]); setPendingCorrection(null); setModeOverride(null);
+                    try { localStorage.removeItem(lastSessionKey(caseId)); } catch { /* sin storage */ }
+                  } else {
+                    setSession(v || null); setModeOverride(null);
+                    try {
+                      if (v) localStorage.setItem(lastSessionKey(caseId), v);
+                    } catch { /* sin storage */ }
+                  }
                 }}>
                   <SelectTrigger className="h-8 flex-1 text-xs">
                     <SelectValue placeholder="Nueva conversación" />

@@ -146,6 +146,12 @@ registrada, semilla literal/números para claims sin cita, eliminar límites met
   intercambios del mismo usuario y expediente en sesiones anteriores (máx. 4
   mensajes), además del historial de la sesión actual. Sirve para «lo anterior»
   sin arrastrar todo el historial.
+- **Persistencia entre días**: `chat_sessions`, `chat_messages` y
+  `chat_sessions.summary` viven en PostgreSQL, no en el navegador. El widget
+  guarda por expediente el id de la última conversación en `localStorage` y la
+  reabre; si no existe, usa la más reciente. Al volver al otro día se recuperan
+  los mensajes, el resumen y el tema. Si se abre una conversación **nueva**, solo
+  se heredan los últimos 2 intercambios entre sesiones, no todo el hilo.
 - **Seguimiento de tema**: `query_rewrite` guarda la última pregunta con
   contenido y la arrastra en seguimientos («seguro…», «¿definitivamente no va a
   llover?») hasta que aparece un tema nuevo. También reconoce seguimientos por
