@@ -109,7 +109,8 @@ class OpenAIEmbedding:
     def _client_instance(self) -> Any:
         if self._client is None:
             import openai
-            kwargs: dict[str, Any] = {"api_key": self.settings.EMBEDDING_API_KEY}
+            kwargs: dict[str, Any] = {"api_key": self.settings.EMBEDDING_API_KEY,
+                                      "timeout": getattr(self.settings, "EMBEDDING_TIMEOUT_S", 10.0)}
             base = self.settings.EMBEDDING_API_BASE_URL
             if base:
                 kwargs["base_url"] = base

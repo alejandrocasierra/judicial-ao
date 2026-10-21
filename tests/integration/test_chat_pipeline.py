@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 
 import pytest
 
@@ -133,3 +134,162 @@ def test_it_pipe_05_stream_emits_stage_token_and_done(client, auth, ids):
     done = next(data for name, data in events if name == "done")
     assert done["answer"].startswith(tokens)
     assert done["assistant_message"]["id"]
+
+
+def test_it_pipe_07_persists_the_whole_routing_decision(client, auth, ids, owner_db):
+    """Sin `reason`/`confidence` no se puede auditar ni aprender del router."""
+    h = auth("abogada.alfa")
+    sid = _session(client, h, ids["pago"])
+    body = _send(client, h, ids["pago"], sid, "¿Qué evidencia hay sobre pagos?")
+    with owner_db.cursor() as cur:
+        cur.execute("""SELECT intent, intent_confidence, intent_reason, intent_source, router_version
+                         FROM chat_messages WHERE id = %s""",
+                    (body["assistant_message"]["id"],))
+        intent, confidence, reason, source, version = cur.fetchone()
+    assert intent == "dato"
+    assert 0.0 <= float(confidence) <= 1.0
+    assert reason == "default_lookup"  # la pregunta que disparó todo el rediseño
+    assert source == "rules"
+    assert version
+
+
+def test_it_pipe_08_feedback_is_one_verdict_per_user_and_message(client, auth, ids, owner_db):
+    """El veredicto es la etiqueta verdadera: se actualiza, no se acumula."""
+    h = auth("abogada.alfa")
+    sid = _session(client, h, ids["pago"])
+    body = _send(client, h, ids["pago"], sid, "¿En qué minuto se habla de pagos?")
+    mid = body["assistant_message"]["id"]
+    url = f"/v1/cases/{ids['pago']}/chats/{sid}/messages/{mid}/feedback"
+
+    assert client.post(url, headers=h, json={"verdict": "rejected"}).status_code == 201
+    # `wrong_intent` sin intención no aporta etiqueta: se rechaza.
+    assert client.post(url, headers=h, json={"verdict": "wrong_intent"}).status_code == 422
+    # Y `corrected_intent` no vale para un simple «me gusta».
+    assert client.post(url, headers=h, json={"verdict": "accepted",
+                                             "corrected_intent": "dato"}).status_code == 422
+
+    r = client.post(url, headers=h, json={"verdict": "wrong_intent", "corrected_intent": "dato"})
+    assert r.status_code == 201, r.text
+    assert r.json()["corrected_intent"] == "dato"
+
+    with owner_db.cursor() as cur:
+        cur.execute("""SELECT count(*), max(verdict), max(corrected_intent), max(router_intent),
+                              max(router_version)
+                         FROM intent_feedback WHERE message_id = %s""", (mid,))
+        total, verdict, corrected, router_intent, version = cur.fetchone()
+    assert total == 1  # upsert: un veredicto por usuario y mensaje
+    assert verdict == "wrong_intent" and corrected == "dato"
+    assert router_intent == "navegar" and version
+
+    # Un mensaje que no es de esta sesión no se puede valorar.
+    missing = f"/v1/cases/{ids['pago']}/chats/{sid}/messages/{uuid4()}/feedback"
+    assert client.post(missing, headers=h, json={"verdict": "accepted"}).status_code == 404
+
+
+def test_it_pipe_09_feedback_becomes_exemplar_and_profile(client, auth, ids, owner_db):
+    """El circuito completo: veredicto → ejemplo → perfil, sin intervención."""
+    from app.services import intent_learning
+
+    h = auth("abogada.alfa")
+    sid = _session(client, h, ids["pago"])
+    question = "¿En qué minuto se habla de pagos?"
+    body = _send(client, h, ids["pago"], sid, question)
+    mid = body["assistant_message"]["id"]
+    url = f"/v1/cases/{ids['pago']}/chats/{sid}/messages/{mid}/feedback"
+
+    with owner_db.cursor() as cur:
+        cur.execute("SELECT organization_id, created_by FROM chat_sessions WHERE id = %s", (sid,))
+        org_id, user_id = cur.fetchone()
+
+    assert client.post(url, headers=h, json={"verdict": "accepted"}).status_code == 201
+    report = intent_learning.rebuild(str(org_id), user_id=str(user_id))
+    assert len(report) == 1
+    # Con embeddings `fake` no hay espacio semántico: se mide, pero NUNCA se activa.
+    assert report[0]["status"] == "shadow"
+    assert report[0]["reason"] == "embedding_provider_not_semantic"
+
+    fingerprint = intent_learning.question_hash(question)
+    with owner_db.cursor() as cur:
+        cur.execute("""SELECT label, source, weight FROM intent_exemplar
+                        WHERE user_id = %s AND question_hash = %s""", (user_id, fingerprint))
+        exemplar = cur.fetchone()
+        cur.execute("SELECT status, version, exemplars FROM intent_profile WHERE user_id = %s",
+                    (user_id,))
+        profile = cur.fetchone()
+    assert exemplar is not None
+    assert exemplar[0] == "navegar" and exemplar[1] == "feedback"
+    assert float(exemplar[2]) == 1.0
+    assert profile[0] == "shadow" and profile[1] >= 1 and profile[2] >= 1
+
+    # El veredicto vuelve en el GET: al recargar, el botón recuerda la elección.
+    listed = client.get(f"/v1/cases/{ids['pago']}/chats/{sid}/messages?limit=100", headers=h)
+    assert listed.status_code == 200
+    saved = next(m for m in listed.json()["messages"] if m["id"] == mid)
+    assert saved["verdict"] == "accepted" and saved["corrected_intent"] is None
+
+    # Cambiar de opinión olvida el ejemplo: el error no se queda en el perfil.
+    assert client.post(url, headers=h, json={"verdict": "rejected"}).status_code == 201
+    intent_learning.rebuild(str(org_id), user_id=str(user_id))
+    with owner_db.cursor() as cur:
+        cur.execute("""SELECT count(*) FROM intent_exemplar
+                        WHERE user_id = %s AND question_hash = %s""", (user_id, fingerprint))
+        assert cur.fetchone()[0] == 0
+
+    listed = client.get(f"/v1/cases/{ids['pago']}/chats/{sid}/messages?limit=100", headers=h)
+    saved = next(m for m in listed.json()["messages"] if m["id"] == mid)
+    assert saved["verdict"] == "rejected"
+
+
+def test_it_pipe_10_forget_style_and_retention(client, auth, ids, owner_db):
+    """«Olvidar mi estilo» borra el dato derivado; la retención caduca ejemplos."""
+    from app.services import intent_learning
+
+    h = auth("abogada.alfa")
+    sid = _session(client, h, ids["pago"])
+    body = _send(client, h, ids["pago"], sid, "¿En qué minuto se habla de pagos?")
+    mid = body["assistant_message"]["id"]
+    url = f"/v1/cases/{ids['pago']}/chats/{sid}/messages/{mid}/feedback"
+    assert client.post(url, headers=h, json={"verdict": "accepted"}).status_code == 201
+
+    with owner_db.cursor() as cur:
+        cur.execute("SELECT organization_id, created_by FROM chat_sessions WHERE id = %s", (sid,))
+        org_id, user_id = cur.fetchone()
+    intent_learning.rebuild(str(org_id), user_id=str(user_id))
+
+    forgotten = client.delete("/v1/auth/me/intent-profile", headers=h)
+    assert forgotten.status_code == 200, forgotten.text
+    assert forgotten.json()["exemplars_deleted"] >= 1
+    with owner_db.cursor() as cur:
+        cur.execute("SELECT count(*) FROM intent_exemplar WHERE user_id = %s", (user_id,))
+        assert cur.fetchone()[0] == 0
+        cur.execute("SELECT count(*) FROM intent_profile WHERE user_id = %s", (user_id,))
+        assert cur.fetchone()[0] == 0
+        cur.execute("SELECT count(*) FROM intent_feedback WHERE user_id = %s", (user_id,))
+        assert cur.fetchone()[0] == 0
+        cur.execute("""SELECT count(*) FROM audit_logs
+                        WHERE action = 'intent_profile.forgotten' AND entity_id = %s""",
+                    (str(user_id),))
+        assert cur.fetchone()[0] >= 1
+
+    # El olvido es durable: el job nocturno no puede reconstruirlo sin veredictos.
+    fingerprint = intent_learning.question_hash("¿En qué minuto se habla de pagos?")
+    intent_learning.rebuild(str(org_id), user_id=str(user_id))
+    with owner_db.cursor() as cur:
+        cur.execute("""SELECT count(*) FROM intent_exemplar
+                        WHERE user_id = %s AND question_hash = %s""", (user_id, fingerprint))
+        assert cur.fetchone()[0] == 0
+
+    # Retención: un ejemplo de hace 90 días desaparece con 30 de retención.
+    with owner_db.cursor() as cur:
+        cur.execute("""INSERT INTO intent_exemplar
+                         (organization_id, user_id, label, question, question_hash, source,
+                          weight, created_at)
+                       VALUES (%s, %s, 'dato', 'pregunta vieja', 'hash-retencion', 'feedback',
+                               1.0, now() - interval '90 days')""", (org_id, user_id))
+        owner_db.commit()
+    purged = intent_learning.purge_expired(str(org_id), days=30)
+    assert purged["exemplars"] >= 1
+    with owner_db.cursor() as cur:
+        cur.execute("""SELECT count(*) FROM intent_exemplar
+                        WHERE user_id = %s AND question_hash = 'hash-retencion'""", (user_id,))
+        assert cur.fetchone()[0] == 0

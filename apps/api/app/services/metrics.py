@@ -42,6 +42,28 @@ asr_failures = Counter("judicial_asr_failures_total", "Fallos de ASR", ["org_id"
 # Rate limiting
 rate_limit_hits = Counter("judicial_rate_limit_hits_total", "Rate limit aplicado", ["org_id", "endpoint"])
 
+# Perfil de intención por usuario (0052): estado del aprendizaje y su coste.
+intent_profile_status = Gauge(
+    "judicial_intent_profile_status",
+    "Estado del perfil de intención por usuario (1 = estado actual)",
+    ["org_id", "status"],
+)
+intent_profile_navegar_fp = Gauge(
+    "judicial_intent_profile_navegar_fp",
+    "Falsos positivos de navegar medidos en sombra",
+    ["org_id", "kind"],
+)
+intent_profile_exemplars = Gauge(
+    "judicial_intent_profile_exemplars",
+    "Ejemplos aprendidos por los perfiles de la organización",
+    ["org_id"],
+)
+intent_profile_degraded = Counter(
+    "judicial_intent_profile_degraded_total",
+    "Perfiles que dejaron de decidir por empeorar",
+    ["org_id", "reason"],
+)
+
 
 @contextmanager
 def track_stage(stage: str, org_id: str | None = None):
@@ -112,6 +134,21 @@ def update_citation_accuracy(org_id: str, case_id: str, accuracy: float):
 def update_retrieval_hit_rate(org_id: str, case_id: str, hit_rate: float):
     """Actualiza la tasa de acierto de retrieval."""
     retrieval_hit_rate.labels(org_id=org_id, case_id=case_id).set(hit_rate)
+
+
+def track_intent_profile(org_id: str, *, status: str, reason: str, exemplars: int,
+                         fp_profile: int, fp_rules: int):
+    """Publica el estado y la salud del perfil de intención de una organización."""
+    for value in ("off", "shadow", "active"):
+        intent_profile_status.labels(org_id=org_id, status=value).set(1.0 if value == status else 0.0)
+    intent_profile_exemplars.labels(org_id=org_id).set(float(exemplars))
+    intent_profile_navegar_fp.labels(org_id=org_id, kind="profile").set(float(fp_profile))
+    intent_profile_navegar_fp.labels(org_id=org_id, kind="rules").set(float(fp_rules))
+
+
+def track_intent_profile_degraded(org_id: str, reason: str):
+    """Un perfil que decidía dejó de hacerlo: es una alerta, no un detalle."""
+    intent_profile_degraded.labels(org_id=org_id, reason=reason or "unknown").inc()
 
 
 def metrics_endpoint() -> bytes:

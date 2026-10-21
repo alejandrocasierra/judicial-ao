@@ -29,10 +29,10 @@ from app.core.config import get_settings
 from app.core.db import one, rows, tx
 from app.core.errors import AppError
 from app.core.i18n import negotiate, t
-from app.schemas import ChatMessageIn, ChatSessionIn, QueryIn
+from app.schemas import ChatMessageIn, ChatSessionIn, IntentFeedbackIn, QueryIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import (audit, case_tools, correction, deadline as deadline_mod, intent as intent_service,
-                          memory, occurrences, query_hints, ratelimit, role_answer, text_terms)
+                          intent_profile, memory, occurrences, query_hints, ratelimit, role_answer, text_terms)
 from app.services.case_tools import ToolContext
 from app.routers.query import _attachment_file_cards, _run_query, _safe_emit
 
@@ -108,7 +108,9 @@ def _finish_confirmation(s, p: Principal, case_id: UUID, session_id: UUID, user_
                          answer: str, request: Request, extra: dict | None = None,
                          citations: list | None = None, file_cards: list | None = None,
                          answer_kind: str = "correction", intent: str = "correccion",
-                         degraded: bool = False) -> dict:
+                         degraded: bool = False, intent_confidence: float = 1.0,
+                         intent_reason: str = "confirmation_flow",
+                         intent_source: str = "deterministic") -> dict:
     """Persiste el turno de una respuesta determinista (confirmación/cancelación/corrección)."""
     result = {"answer": answer, "answer_kind": answer_kind, "intent": intent, "degraded": degraded,
               "claims": [], "citations": citations or [], "citations_used": [], "unsupported_claims": [],
@@ -117,15 +119,19 @@ def _finish_confirmation(s, p: Principal, case_id: UUID, session_id: UUID, user_
     with tx(p.org_id, p.user_id) as c:
         assistant_msg = one(c, """INSERT INTO chat_messages
                 (organization_id, session_id, role, content, attachments, citations, occurrences,
-                 uncertainties, occurrences_term, occurrences_note, answer_kind, intent, degraded, model_run_id)
+                 uncertainties, occurrences_term, occurrences_note, answer_kind, intent, degraded, model_run_id,
+                 intent_confidence, intent_reason, intent_source, router_version)
             VALUES (:o, :s, 'assistant', :t, CAST(:fc AS jsonb), CAST(:ci AS jsonb), CAST(:oc AS jsonb),
-                    CAST(:unc AS jsonb), :ot, :on, :ak, :intent, :dg, NULL) RETURNING id, created_at""",
+                    CAST(:unc AS jsonb), :ot, :on, :ak, :intent, :dg, NULL, :ic, :ir, :isrc, :rv)
+            RETURNING id, created_at""",
                             o=p.org_id, s=str(session_id), t=answer,
                             fc=json.dumps(file_cards or []), ci=json.dumps(citations or []),
                             oc=json.dumps(result.get("occurrences") or []),
                             unc=json.dumps(result.get("uncertainties") or []),
                             ot=result.get("occurrences_term"), on=result.get("occurrences_note"),
-                            ak=answer_kind, intent=intent, dg=degraded)
+                            ak=answer_kind, intent=intent, dg=degraded,
+                            ic=intent_confidence, ir=intent_reason, isrc=intent_source,
+                            rv=intent_service.ROUTER_VERSION)
         c.execute(text("UPDATE chat_sessions SET updated_at = now() WHERE id = :s"), {"s": str(session_id)})
     return {"user_message": user_msg, "assistant_message": assistant_msg, **result}
 
@@ -332,15 +338,57 @@ def list_messages(case_id: UUID, session_id: UUID, limit: int = 50, offset: int 
     offset = max(0, offset)
     with tx(p.org_id, p.user_id) as c:
         _session(c, case_id, session_id)
-        msgs = rows(c, """SELECT * FROM (
+        msgs = rows(c, """SELECT page.*, f.verdict, f.corrected_intent
+            FROM (
                 SELECT id, role, content, attachments, citations, occurrences, uncertainties,
                        occurrences_term, occurrences_note, answer_kind, intent,
+                       intent_confidence, intent_reason, intent_source, router_version,
                        degraded, model_run_id, created_at
                 FROM chat_messages WHERE session_id = :s
                 ORDER BY created_at DESC, id DESC LIMIT :l OFFSET :o
-            ) page ORDER BY created_at ASC, id ASC""",
-                   s=str(session_id), l=limit, o=offset)
+            ) page
+            LEFT JOIN intent_feedback f ON f.message_id = page.id AND f.user_id = :u
+            ORDER BY page.created_at ASC, page.id ASC""",
+                   s=str(session_id), l=limit, o=offset, u=p.user_id)
     return {"messages": msgs, "limit": limit, "offset": offset}
+
+
+@router.post("/{session_id}/messages/{message_id}/feedback", status_code=201)
+def send_feedback(case_id: UUID, session_id: UUID, message_id: UUID, body: IntentFeedbackIn,
+                  p: Principal = Depends(current_principal)):
+    """Veredicto del usuario sobre un turno: la única etiqueta VERDADERA del router.
+
+    `wrong_intent` trae la intención correcta; `accepted`/`rejected` son un clic.
+    Un veredicto por usuario y mensaje (upsert): cambiar de opinión actualiza el
+    anterior en vez de acumular filas. Es una llamada aparte de la del turno, así
+    que nunca afecta al deadline ni a la respuesta ya emitida.
+    """
+    case_access(p, case_id, "case.read")
+    corrected = body.corrected_intent if body.verdict == "wrong_intent" else None
+    with tx(p.org_id, p.user_id) as c:
+        msg = one(c, """SELECT m.intent, m.router_version
+                          FROM chat_messages m
+                          JOIN chat_sessions s ON s.id = m.session_id
+                         WHERE m.id = :m AND m.session_id = :s AND s.case_id = :c
+                           AND m.role = 'assistant'""",
+                  m=str(message_id), s=str(session_id), c=str(case_id))
+        if not msg:
+            raise AppError("CHAT_NOT_FOUND", 404)
+        saved = one(c, """INSERT INTO intent_feedback
+                (organization_id, case_id, session_id, message_id, user_id,
+                 verdict, corrected_intent, note, router_intent, router_version)
+            VALUES (:o, :c, :s, :m, :u, :v, :ci, :n, :ri, :rv)
+            ON CONFLICT (message_id, user_id) DO UPDATE
+               SET verdict = EXCLUDED.verdict,
+                   corrected_intent = EXCLUDED.corrected_intent,
+                   note = EXCLUDED.note,
+                   router_intent = EXCLUDED.router_intent,
+                   router_version = EXCLUDED.router_version
+            RETURNING id, verdict, corrected_intent, updated_at""",
+                         o=p.org_id, c=str(case_id), s=str(session_id), m=str(message_id),
+                         u=p.user_id, v=body.verdict, ci=corrected, n=body.note,
+                         ri=msg.get("intent"), rv=msg.get("router_version"))
+    return saved
 
 
 def _prepare_turn(case_id: UUID, session_id: UUID, body: ChatMessageIn, p: Principal):
@@ -348,7 +396,7 @@ def _prepare_turn(case_id: UUID, session_id: UUID, body: ChatMessageIn, p: Princ
     s = get_settings()
     with tx(p.org_id, p.user_id) as c:
         session = _session(c, case_id, session_id)
-        history = rows(c, """SELECT role, content FROM chat_messages WHERE session_id = :s
+        history = rows(c, """SELECT role, content, intent FROM chat_messages WHERE session_id = :s
             ORDER BY created_at DESC, id DESC LIMIT :k""", s=str(session_id), k=s.CHAT_HISTORY_TURNS)
         history.reverse()
         attachments_json = json.dumps([{"kind": a.kind, "id": str(a.id), "name": a.name}
@@ -366,9 +414,12 @@ def _prepare_turn(case_id: UUID, session_id: UUID, body: ChatMessageIn, p: Princ
         if reuse:
             user_msg = {"id": last["id"], "created_at": last["created_at"]}
         else:
-            user_msg = one(c, """INSERT INTO chat_messages (organization_id, session_id, role, content, attachments)
-                VALUES (:o, :s, 'user', :t, CAST(:a AS jsonb)) RETURNING id, created_at""",
-                           o=p.org_id, s=str(session_id), t=body.content, a=attachments_json)
+            user_msg = one(c, """INSERT INTO chat_messages
+                    (organization_id, session_id, role, content, attachments, user_id)
+                VALUES (:o, :s, 'user', :t, CAST(:a AS jsonb), :u)
+                RETURNING id, created_at""",
+                           o=p.org_id, s=str(session_id), t=body.content, a=attachments_json,
+                           u=p.user_id)
         ocr_mode = body.ocr_mode if body.ocr_mode is not None else session.get("ocr_mode")
         asr_mode = body.asr_mode if body.asr_mode is not None else session.get("asr_mode")
         # El agente/modelo del mensaje tiene prioridad; si cambian, la sesión los recuerda.
@@ -433,7 +484,10 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     decision = intent_service.classify(
         body.content, has_attachments=bool(body.attachments),
         is_correction=correction.is_correction(body.content),
-        history=history, hints=hints)
+        history=history, hints=hints, llm=intent_service.intent_llm())
+    # Perfil por usuario: solo actúa si está `active` y la regla no fue fuerte.
+    decision = intent_profile.refine(decision, body.content,
+                                     org_id=p.org_id, user_id=p.user_id)
     intent_value = str(getattr(decision.intent, "value", decision.intent))
     _safe_emit(emit, "routing", {"intent": intent_value})
 
@@ -519,9 +573,10 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     with tx(p.org_id, p.user_id) as c:
         assistant_msg = one(c, """INSERT INTO chat_messages (organization_id, session_id, role, content,
                                      attachments, citations, occurrences, uncertainties, occurrences_term,
-                                     occurrences_note, answer_kind, intent, degraded, model_run_id)
+                                     occurrences_note, answer_kind, intent, degraded, model_run_id,
+                                     intent_confidence, intent_reason, intent_source, router_version)
             VALUES (:o, :s, 'assistant', :t, CAST(:fc AS jsonb), CAST(:ci AS jsonb), CAST(:oc AS jsonb),
-                    CAST(:unc AS jsonb), :ot, :on, :ak, :intent, :dg, :mr)
+                    CAST(:unc AS jsonb), :ot, :on, :ak, :intent, :dg, :mr, :ic, :ir, :isrc, :rv)
             RETURNING id, created_at, answer_kind, intent, degraded""",
                             o=p.org_id, s=str(session_id), t=result["answer"],
                             fc=json.dumps(result.get("file_cards", [])),
@@ -530,7 +585,9 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
                             unc=json.dumps(result.get("uncertainties") or []),
                             ot=result.get("occurrences_term"), on=result.get("occurrences_note"),
                             ak=answer_kind, intent=intent_out, dg=degraded,
-                            mr=result.get("model_run_id"))
+                            mr=result.get("model_run_id"),
+                            ic=float(decision.confidence), ir=decision.reason,
+                            isrc=decision.source, rv=intent_service.ROUTER_VERSION)
         # Título automático de la primera pregunta y actividad de la sesión.
         title = session["title"] or body.content[:80]
         c.execute(text("UPDATE chat_sessions SET title = :t, updated_at = now() WHERE id = :s"),

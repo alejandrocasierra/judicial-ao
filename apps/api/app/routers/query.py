@@ -23,7 +23,8 @@ from app.providers.llm import get_llm
 from app.schemas import QueryIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import (agent, answering, audit, case_tools, compose, deadline as deadline_mod,
-                          intent as intent_service, metrics, query_hints, ratelimit, role_answer,
+                          intent as intent_service, intent_profile, metrics, query_hints,
+                          ratelimit, role_answer,
                           skills, text_terms, verification)
 from app.services.compose import ComposeResult
 
@@ -205,7 +206,11 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     decision = intent_decision
     if decision is None:
         decision = intent_service.classify(body.question, has_attachments=bool(body.attachments),
-                                           history=history, hints=hints)
+                                           history=history, hints=hints,
+                                           llm=intent_service.intent_llm())
+        # Mismo perfil que en el chat: solo decide si está `active` y la regla no fue fuerte.
+        decision = intent_profile.refine(decision, body.question,
+                                         org_id=p.org_id, user_id=p.user_id)
     intent_value = _intent_value(decision) or "dato"
     _safe_emit(emit, "routing", {"intent": intent_value})
 

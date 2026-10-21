@@ -244,6 +244,33 @@ class ChatMessageIn(Strict):
     _c = field_validator("content")(_no_control)
 
 
+# Mismos valores que `services.intent.Intent`; un test los mantiene sincronizados
+# (schemas no importa servicios: se mantiene libre de dependencias de dominio).
+IntentValue = Literal["navegar", "dato", "analisis", "procedimental", "agregacion", "lectura", "correccion"]
+
+
+class IntentFeedbackIn(Strict):
+    """Veredicto del usuario sobre un turno del chat.
+
+    `accepted`/`rejected` son un clic; `wrong_intent` exige decir cuál era la
+    intención. Es la única fuente de etiquetas verdaderas para el router: el
+    corpus y el perfil por usuario se construyen a partir de esto.
+    """
+    verdict: Literal["accepted", "rejected", "wrong_intent"]
+    corrected_intent: IntentValue | None = None
+    note: str = Field(default="", max_length=500)
+
+    _n = field_validator("note")(_no_control)
+
+    @model_validator(mode="after")
+    def _intent_only_when_wrong(self):
+        if self.verdict == "wrong_intent" and self.corrected_intent is None:
+            raise ValueError("corrected_intent is required when verdict is wrong_intent")
+        if self.verdict != "wrong_intent" and self.corrected_intent is not None:
+            raise ValueError("corrected_intent only applies to verdict wrong_intent")
+        return self
+
+
 class QueryIn(Strict):
     question: str = Field(min_length=3)
     mode: Literal["fact_lookup", "evidence_lookup", "timeline", "person", "document", "testimony", "contradiction",

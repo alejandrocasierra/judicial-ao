@@ -90,3 +90,27 @@ def me(p: Principal = Depends(current_principal)):
     with tx(p.org_id, p.user_id) as c:
         u = one(c, "SELECT id, email, full_name, org_role, locale, organization_id FROM users WHERE id = :u", u=p.user_id)
     return {**u, "permissions": sorted(p.permissions)}
+
+
+@router.delete("/me/intent-profile")
+def forget_intent_profile(request: Request, p: Principal = Depends(current_principal)):
+    """«Olvidar mi estilo»: borra los ejemplos, el perfil y los veredictos DEL usuario.
+
+    Es dato personal derivado (conducta + etiquetas). Borrar solo el perfil no
+    basta: el job nocturno lo reconstruiría desde `intent_feedback`, así que el
+    olvido incluye sus veredictos. No toca los mensajes ni el expediente. Se audita
+    el borrado (sin contenido).
+    """
+    with tx(p.org_id, p.user_id) as c:
+        feedback = c.execute(text("DELETE FROM intent_feedback WHERE user_id = :u"),
+                             {"u": p.user_id}).rowcount or 0
+        exemplars = c.execute(text("DELETE FROM intent_exemplar WHERE user_id = :u"),
+                              {"u": p.user_id}).rowcount or 0
+        profiles = c.execute(text("DELETE FROM intent_profile WHERE user_id = :u"),
+                             {"u": p.user_id}).rowcount or 0
+        audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="intent_profile.forgotten",
+                     entity_type="user", entity_id=p.user_id,
+                     after={"exemplars": int(exemplars), "profiles": int(profiles),
+                            "feedback": int(feedback)}, request=request)
+    return {"exemplars_deleted": int(exemplars), "feedback_deleted": int(feedback),
+            "profile_deleted": bool(profiles)}

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -15,10 +17,38 @@ from app.core.i18n import negotiate
 from app.routers import admin, audit_router, auth, cases, chats, citations, documents, folders, graph, health, meta, models, query, review
 
 
+def _warm_intent_embeddings() -> None:
+    """Carga el modelo semántico del perfil en segundo plano, no en el primer turno.
+
+    Solo para `sentence-transformers` (cargar 2 GB en el primer turno activo
+    rompería el deadline). Si falla, el perfil se salta el turno: la regla decide.
+    """
+    settings = get_settings()
+    if settings.INTENT_EMBEDDING_BACKEND != "sentence-transformers":
+        return
+
+    def run() -> None:
+        try:
+            from app.services.intent_profile import intent_embedding_provider
+
+            intent_embedding_provider(settings).embed(["warmup"])
+            logging.getLogger(__name__).info("intent embedding model warmed up")
+        except Exception as exc:  # noqa: BLE001 — el perfil es opcional
+            logging.getLogger(__name__).warning("intent embedding warmup failed: %s", exc)
+
+    threading.Thread(target=run, daemon=True, name="intent-embedding-warmup").start()
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    _warm_intent_embeddings()
+    yield
+
+
 def create_app() -> FastAPI:
     s = get_settings()
     logging.basicConfig(level=s.LOG_LEVEL, format='{"level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}')
-    app = FastAPI(title=s.APP_NAME, version=s.PIPELINE_VERSION,
+    app = FastAPI(title=s.APP_NAME, version=s.PIPELINE_VERSION, lifespan=_lifespan,
                   docs_url=None if s.APP_ENV == "production" else "/docs",
                   openapi_url=None if s.APP_ENV == "production" else "/openapi.json")
     app.add_middleware(CORSMiddleware, allow_origins=s.cors_origins, allow_credentials=False,

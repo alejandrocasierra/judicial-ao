@@ -13,6 +13,7 @@ import { usePathname } from "next/navigation";
 import {
   MessageSquare, X, Send, Loader2, Bot, FileText, Video, Cpu, Plus,
   Download, Eye, Archive, AlertTriangle, Square, Copy, RotateCcw, RefreshCw,
+  ThumbsUp, ThumbsDown, BrainCircuit,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,8 @@ interface FileCard {
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  /** Id persistido del mensaje (solo assistant): necesario para valorar el turno. */
+  id?: string;
   attachments?: Attachment[];
   citations?: Citation[];
   occurrences?: Citation[];
@@ -65,6 +68,7 @@ interface ChatMessage {
 }
 interface HistoryMessage {
   role: "user" | "assistant";
+  id?: string;
   content: string;
   attachments?: unknown[] | null;
   citations?: Citation[] | null;
@@ -74,7 +78,24 @@ interface HistoryMessage {
   degraded?: boolean | null;
   occurrences_note?: string | null;
   occurrences_term?: string | null;
+  /** Veredicto ya guardado por este usuario (el botón recuerda la elección). */
+  verdict?: Verdict | null;
+  corrected_intent?: string | null;
 }
+type Verdict = "accepted" | "rejected" | "wrong_intent";
+interface FeedbackState { verdict: Verdict; corrected?: string }
+/** Las 7 intenciones en lenguaje humano: lo que el usuario quería, no jerga. */
+const INTENT_OPTIONS = [
+  { value: "dato", label: "Un dato", hint: "Un hecho concreto del expediente" },
+  { value: "analisis", label: "Un análisis", hint: "Comparar, contradicciones, implicaciones" },
+  { value: "procedimental", label: "Cómo ocurrió", hint: "Antecedentes y cadena procesal" },
+  { value: "agregacion", label: "Una lista", hint: "Quiénes intervinieron o cuántos son" },
+  { value: "navegar", label: "Dónde aparece", hint: "Página, minuto o archivo de una mención" },
+  { value: "lectura", label: "Leer o resumir", hint: "Un documento o un adjunto" },
+  { value: "correccion", label: "Corregir", hint: "Un dato o un hablante ya dicho" },
+] as const;
+const INTENT_LABELS: Record<string, string> =
+  Object.fromEntries(INTENT_OPTIONS.map((o) => [o.value, o.label]));
 type RecognitionMode = "todos" | "basico" | "document_ai";
 
 interface Session {
@@ -260,6 +281,7 @@ function mapHistory(m: HistoryMessage): ChatMessage {
   if (m.role === "assistant") {
     return {
       role: "assistant",
+      id: m.id,
       content: m.content,
       citations: m.citations || undefined,
       occurrences: m.occurrences || undefined,
@@ -276,6 +298,17 @@ function mapHistory(m: HistoryMessage): ChatMessage {
     content: m.content,
     attachments: (m.attachments as unknown as Attachment[]) || undefined,
   };
+}
+
+/** El veredicto vive en el backend: al recargar, el botón recuerda la elección. */
+function feedbackFromHistory(messages: HistoryMessage[]): Record<string, FeedbackState> {
+  const out: Record<string, FeedbackState> = {};
+  for (const m of messages) {
+    if (m.role === "assistant" && m.id && m.verdict) {
+      out[m.id] = { verdict: m.verdict, corrected: m.corrected_intent || undefined };
+    }
+  }
+  return out;
 }
 
 /** El chat vive DENTRO de un proceso: sin expediente abierto no hay botón flotante.
@@ -311,6 +344,10 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
   const [mediaView, setMediaView] = useState<{ id: string; ms: number; name?: string } | null>(null);
   const [pendingCorrection, setPendingCorrection] = useState<{ tool: string; summary: string } | null>(null);
   const [stage, setStage] = useState<{ label: string; intent?: string } | null>(null);
+  /** Veredicto local por mensaje (optimista); el backend lo persiste en intent_feedback. */
+  const [feedback, setFeedback] = useState<Record<string, FeedbackState>>({});
+  /** Mensaje cuyo «no era esto» está abierto para elegir la intención correcta. */
+  const [correcting, setCorrecting] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -371,6 +408,8 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
           `/cases/${caseId}/chats/${sessionId}/messages`, { limit: "100" });
         if (cancelled) return;
         setMessages(r.messages.map(mapHistory));
+        setFeedback(feedbackFromHistory(r.messages));
+        setCorrecting(null);
       } catch { if (!cancelled) setMessages([]); }
     })();
     return () => { cancelled = true; };
@@ -452,6 +491,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
           if (mapped[i].role !== "assistant") continue;
           mapped[i] = {
             ...mapped[i],
+            id: mapped[i].id || meta.assistant_message?.id,
             content: mapped[i].content || meta.answer || "",
             citations: meta.citations ?? mapped[i].citations,
             occurrences: meta.occurrences ?? mapped[i].occurrences,
@@ -466,6 +506,8 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
         }
       }
       setMessages(mapped);
+      // Conserva el veredicto optimista del turno recién enviado y suma los persistidos.
+      setFeedback((prev) => ({ ...prev, ...feedbackFromHistory(r.messages) }));
     } catch { /* se conserva lo que haya en pantalla */ }
   }
 
@@ -631,6 +673,54 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
     }
   }
 
+  /** Veredicto del turno: alimenta el corpus y el perfil de intención del usuario.
+   * Es optimista en la UI y se revierte si el POST falla. */
+  async function postFeedback(message: ChatMessage, verdict: Verdict, corrected?: string) {
+    const id = message.id;
+    if (!id || !sessionId) return;
+    const previous = feedback[id];
+    setCorrecting(null);
+    setFeedback((f) => ({ ...f, [id]: { verdict, corrected } }));
+    try {
+      const body = verdict === "wrong_intent"
+        ? { verdict, corrected_intent: corrected }
+        : { verdict };
+      const saved = await api.post<{ verdict: Verdict; corrected_intent: string | null }>(
+        `/cases/${caseId}/chats/${sessionId}/messages/${id}/feedback`, body);
+      setFeedback((f) => ({
+        ...f,
+        [id]: { verdict: saved.verdict, corrected: saved.corrected_intent || undefined },
+      }));
+      toast.success(
+        verdict === "accepted" ? "Gracias: ayuda a afinar la búsqueda"
+          : verdict === "wrong_intent"
+            ? `Anotado: querías ${INTENT_LABELS[corrected || ""] || "otra cosa"}`
+            : "Anotado: no era lo que pedías");
+    } catch {
+      setFeedback((f) => {
+        const next = { ...f };
+        if (previous) next[id] = previous;
+        else delete next[id];
+        return next;
+      });
+      toast.error("No se pudo guardar tu valoración");
+    }
+  }
+
+  function pickCorrection(message: ChatMessage, intent: string) {
+    void postFeedback(message, "wrong_intent", intent);
+  }
+
+  /** «Olvidar mi estilo»: borra los ejemplos y el perfil de ESTE usuario. */
+  async function forgetStyle() {
+    if (!window.confirm("Se borrarán los ejemplos que el chat ha aprendido de tu forma de preguntar. ¿Continuar?")) return;
+    try {
+      const r = await api.delete<{ exemplars_deleted: number }>("/auth/me/intent-profile");
+      setFeedback({});
+      toast.success(`Listo: ${r.exemplars_deleted} ejemplos olvidados`);
+    } catch { toast.error("No se pudo olvidar el estilo"); }
+  }
+
   function regenerate(index: number) {
     if (loading) return;
     const previousUser = [...messages.slice(0, index)].reverse().find((m) => m.role === "user");
@@ -691,8 +781,12 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
           <div className="flex items-center justify-between border-b px-4 py-3">
             <h3 className="font-semibold">Chat IA</h3>
             <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" title="Olvidar mi estilo de búsqueda"
+                aria-label="Olvidar mi estilo de búsqueda" onClick={() => void forgetStyle()}>
+                <BrainCircuit className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" title="Nueva conversación" aria-label="Nueva conversación"
-                onClick={() => { setSession(null); setMessages([]); setModeOverride(null); }}>
+                onClick={() => { setSession(null); setMessages([]); setModeOverride(null); setCorrecting(null); }}>
                 <Plus className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" aria-label="Cerrar chat" onClick={() => setOpen(false)}>
@@ -871,6 +965,48 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                         <RefreshCw className="mr-1 h-3 w-3" aria-hidden="true" /> Reintentar
                       </Button>
                     )}
+                    {!m.error && m.id && (
+                      <>
+                        <Button variant="ghost" size="sm"
+                          className={cn("h-7 px-2 text-xs", feedback[m.id]?.verdict === "accepted" && "text-emerald-600 dark:text-emerald-400")}
+                          title="Era lo que pedía" aria-label="Era lo que pedía"
+                          aria-pressed={feedback[m.id]?.verdict === "accepted"}
+                          onClick={() => void postFeedback(m, "accepted")}>
+                          <ThumbsUp className="mr-1 h-3 w-3" aria-hidden="true" /> Útil
+                        </Button>
+                        <Button variant="ghost" size="sm"
+                          className={cn("h-7 px-2 text-xs",
+                            (feedback[m.id]?.verdict === "rejected" || feedback[m.id]?.verdict === "wrong_intent") && "text-destructive")}
+                          title="No era lo que pedía: dime qué era" aria-label="No era lo que pedía: dime qué era"
+                          aria-pressed={feedback[m.id]?.verdict === "rejected" || feedback[m.id]?.verdict === "wrong_intent"}
+                          onClick={() => setCorrecting((c) => (c === m.id ? null : (m.id ?? null)))}>
+                          <ThumbsDown className="mr-1 h-3 w-3" aria-hidden="true" /> No era esto
+                        </Button>
+                        {feedback[m.id]?.verdict === "wrong_intent" && (
+                          <span className="px-1 text-xs text-muted-foreground">
+                            Era: {INTENT_LABELS[feedback[m.id]?.corrected || ""] || "otra cosa"}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+                {correcting === m.id && (
+                  <div className="mt-2 rounded-md border bg-background p-2" role="group" aria-label="¿Qué querías pedir?">
+                    <p className="mb-1.5 text-xs font-medium">¿Qué querías?</p>
+                    <div className="flex flex-wrap gap-1">
+                      {INTENT_OPTIONS.map((option) => (
+                        <Button key={option.value} variant="outline" size="sm"
+                          className="h-7 px-2 text-xs" title={option.hint}
+                          onClick={() => pickCorrection(m, option.value)}>
+                          {option.label}
+                        </Button>
+                      ))}
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                        onClick={() => void postFeedback(m, "rejected")}>
+                        No lo sé
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>

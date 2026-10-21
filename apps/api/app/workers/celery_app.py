@@ -25,7 +25,7 @@ celery_app = Celery(
     "judicial",
     broker=_settings.CELERY_BROKER_URL,
     backend=_settings.CELERY_RESULT_BACKEND,
-    include=["app.workers.executor", "app.workers.backups"],
+    include=["app.workers.executor", "app.workers.backups", "app.workers.intent_learning"],
 )
 celery_app.conf.update(
     task_always_eager=_settings.CELERY_TASK_ALWAYS_EAGER,
@@ -56,6 +56,12 @@ celery_app.conf.update(
         # Backup PostgreSQL diario a las 02:00 (SSD §113; RPO ≤ 1h con WAL).
         "daily-backups": {
             "task": "backups.daily",
+            "schedule": 24 * 60 * 60.0,
+        },
+        # Perfil de intención por usuario (0052): deriva ejemplos de la conducta,
+        # mide en sombra y activa/degrada solo. Sin LLM y sin intervención.
+        "intent-profiles": {
+            "task": "intent.rebuild_profiles",
             "schedule": 24 * 60 * 60.0,
         },
     },

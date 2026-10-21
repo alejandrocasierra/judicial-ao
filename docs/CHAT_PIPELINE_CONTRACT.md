@@ -299,6 +299,123 @@ Backend debe cargar v2/v8 si existen y caer a v1/v7 si no.
   `tests/behavior/test_chat_pagos.py`, `tests/unit/test_judge.py`.
 - Workflow CI que ejecute capa A/B offline.
 
+### 1.16 Instrumentación y feedback (migración 0051)
+
+Sin esto el router no se puede auditar ni mejorar: la etiqueta sin el `reason` no
+explica la decisión, y sin veredicto del usuario no hay etiqueta verdadera.
+
+**Persistido por turno** (en el mensaje del asistente, junto a `intent`):
+
+| Columna | Contenido |
+|---|---|
+| `intent_confidence` | 0..1; NULL en turnos deterministas sin router |
+| `intent_reason` | familia de regla (`default_lookup`, `explicit_location_signal`, `correction_phrase`, …) |
+| `intent_source` | `rules` \| `llm` \| `override` \| `deterministic` |
+| `router_version` | `intent.ROUTER_VERSION`; se sube a mano al cambiar reglas o umbrales |
+
+**`POST /v1/cases/{case_id}/chats/{session_id}/messages/{message_id}/feedback`**
+
+```json
+{"verdict": "accepted | rejected | wrong_intent", "corrected_intent": "navegar", "note": ""}
+```
+
+- `wrong_intent` **exige** `corrected_intent`; en cualquier otro veredicto se
+  rechaza (422). `extra="forbid"`: no se puede inyectar `organization_id`.
+- Un veredicto por usuario y mensaje (`UNIQUE (message_id, user_id)` + upsert):
+  cambiar de opinión actualiza, no acumula.
+- Solo sobre mensajes `assistant` de la propia sesión y expediente → 404 si no.
+- `intent_feedback` lleva RLS forzado, `tenant_isolation`, triggers
+  `enforce_same_org` y grant al rol de la API, igual que el resto del tenant.
+- `GET .../messages` devuelve `verdict` y `corrected_intent` del usuario actual
+  (LEFT JOIN por `message_id`): al recargar, el botón recuerda la elección.
+
+**Revisión L2 (banda ambigua)** — `classify(..., llm=...)` consulta el modelo
+barato cuando la regla quedó por debajo de 0.9 (default 0.45 y coincidencias
+múltiples 0.62). Nunca en reglas fuertes, adjuntos, hints ni seguimientos.
+Guardarraíles sobre la respuesta del modelo: no puede producir `navegar` sin
+señal de ubicación, no puede producir `correccion` (flujo determinista) y una
+confianza < 0.5 se descarta. Caché de 1 h por pregunta. Se activa solo si
+`LLM_ROUTING` define `intent` (o `summary`); sin routing, el router es 100 %
+reglas. `INTENT_LLM_ENABLED=false` lo apaga.
+
+**Seguimientos** — `classify` usa `history` (rol + `intent` del asistente): una
+pregunta corta con marcador deíctico («¿Y en la página 12?», «y eso qué
+implica») hereda la intención anterior con `reason=followup_inherit` y
+`confidence=0.72`. Límites: no hereda `correccion`, no hereda `navegar` sin
+señal de ubicación y una regla fuerte (0.9) nunca se pisa.
+
+**Corpus de medición** (`evals/intent/`): 146 preguntas etiquetadas — 26 reales
+exportadas de la base (`source=real`), 50 del set dorado (`source=golden`) y 70
+semilla (`source=seed`). El eval reporta accuracy por procedencia; las preguntas
+reales son la señal que importa. Baseline actual del router de reglas: **93,8 %**
+(real 88,5 %, golden 92,0 %), **0 falsos positivos** de `navegar` y `agregacion`.
+Los 5 errores restantes son erratas reales (`juces`, `cuentos`, `nombredes`) y
+dos casos de análisis coloquial: los cubre el L2/perfil, no una regex nueva.
+
+**Regla de aprendizaje**: el router nunca se reentrena con su propia predicción.
+Solo cuentan la conducta del usuario (veredicto, reformulación, cambio de
+estrategia) y el corpus etiquetado a mano.
+
+### 1.17 Perfil de intención por usuario (migración 0052 + job)
+
+El router aprende el dialecto de cada usuario con **memoria de ejemplos**, no con
+fine-tuning: `intent_exemplar` (pregunta + etiqueta + vector, ≤ 200 por usuario) y
+un voto kNN ponderado en el turno (`services/intent_profile.py`).
+
+| Pieza | Regla |
+|---|---|
+| Peso por origen | feedback 1.0 · corpus 0.8 · contrafactual 0.4 |
+| Recencia | `0,5^(días/90)` |
+| Decisión | solo si `confidence < 0.9`, margen ≥ 0.15 y ≥ 2 vecinos con similitud ≥ 0.55 |
+| Vetos | `navegar` sin señal de ubicación · `correccion` · adjuntos · corrección explícita · hint |
+| Activar | ≥ 10 turnos juzgados, accuracy ≥ reglas + 0.10 y sin nuevos FP de `navegar` |
+| Degradar | si el perfil empeora o añade FP de `navegar` |
+| Embeddings | se mide, no se supone: sonda de paráfrasis vs preguntas distintas (`probe_embeddings`). `fake` y `local-hash` no pasan y el perfil queda en `shadow` |
+| Retención | `INTENT_PROFILE_RETENTION_DAYS` (365): los ejemplos caducan, no se reinsertan y los perfiles sin ejemplos se borran |
+| Olvido | `DELETE /v1/auth/me/intent-profile` borra ejemplos + perfil + **sus veredictos** (si no, el job los reconstruye) y lo audita (`intent_profile.forgotten`) |
+| Auto-entrenamiento | un `accepted` sobre una decisión `source=profile/llm` no crea ejemplo: el perfil no se valida con su propia predicción |
+
+**Sonda de capacidad** (`scripts/check_embeddings.py`): 4 pares paráfrasis y 3
+pares de intención distinta. Se exige similitud media ≥ 0,55 y margen ≥ 0,08.
+No depende del nombre del proveedor: cualquier modelo que separe significado
+activa el perfil; un hash léxico o aleatorio no. El perfil usa su **propio
+espacio** (`INTENT_EMBEDDING_BACKEND` / `INTENT_EMBEDDING_MODEL`) para no obligar
+a reindexar los chunks; si se dejan vacíos hereda `EMBEDDING_*`. Modelos de 1024
+dimensiones (la columna es `vector(1024)`): `BAAI/bge-m3`,
+`intfloat/multilingual-e5-large` o `openai` con `dimensions=1024`.
+
+**Job automático** `intent.rebuild_profiles` (Celery beat, cada 24 h,
+`app/workers/intent_learning.py`): deriva ejemplos de `intent_feedback` y de
+reformulaciones exitosas tras un turno fallido (< 10 min, misma sesión), mide en
+sombra con leave-one-out y escribe `intent_profile.status` (`off`/`shadow`/`active`).
+El veredicto más reciente de cada pregunta manda: aceptar después de rechazar
+recupera el ejemplo; rechazar después de aceptar lo olvida.
+
+**Alerta de degradación**: si un perfil `active` deja de decidir o su FP de
+`navegar` sube respecto de la medición anterior, el job escribe `audit_logs`
+(`intent_profile.degraded`), incrementa
+`judicial_intent_profile_degraded_total` y, si `INTENT_ALERT_WEBHOOK` está
+configurado, POSTea el evento (3 s, nunca rompe el job). `scripts/intent_health.py`
+sale con código 1 si hay perfiles degradados o con más FP de `navegar` que las
+reglas, para un cron/CI externo. Las métricas del job viven en el proceso Celery:
+`/metrics` de la API no las agrega sin `PROMETHEUS_MULTIPROC_DIR`; el healthcheck
+es la fuente autoritativa.
+
+**Límite conocido de la sombra**: la medición compara reglas vs perfil sin el L2
+ni el historial (no hay un LLM determinista en el job), y con el mismo
+`MAX_NEIGHBORS` que producción. Es una comparación internamente consistente, no
+una réplica exacta del turno; la validación final es el veredicto real.
+
+Backfill e inspección manual:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_embeddings.py
+.\.venv\Scripts\python.exe scripts\build_intent_profiles.py --all
+.\.venv\Scripts\python.exe scripts\build_intent_profiles.py --org-id <uuid> --dry-run
+.\.venv\Scripts\python.exe scripts\build_intent_profiles.py --all --purge
+.\.venv\Scripts\python.exe scripts\intent_health.py
+```
+
 ---
 
 ## 2. Propiedad de archivos

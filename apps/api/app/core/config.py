@@ -262,6 +262,17 @@ class Settings(BaseSettings):
     EMBEDDING_API_BASE_URL: str
     EMBEDDING_BATCH_SIZE: int = Field(gt=0)
     EMBEDDING_MAX_CHARS: int = Field(gt=0)
+    EMBEDDING_TIMEOUT_S: float = Field(default=10.0, gt=0)
+
+    # Perfil de intención (0052). `INTENT_LLM_ENABLED` solo tiene efecto si
+    # LLM_ROUTING define "intent" o "summary"; sin routing el router es 100 % reglas.
+    INTENT_LLM_ENABLED: bool = True
+    INTENT_PROFILE_RETENTION_DAYS: int = Field(default=365, ge=0)
+    INTENT_ALERT_WEBHOOK: str = ""
+    # Espacio vectorial PROPIO del perfil: no se mezcla con el índice de chunks.
+    # Si se deja vacío hereda EMBEDDING_PROVIDER/MODEL (que puede ser léxico).
+    INTENT_EMBEDDING_BACKEND: Literal["fake", "openai", "sentence-transformers", "local-hash"] | None = None
+    INTENT_EMBEDDING_MODEL: str = ""
 
     CASE_MAX_PROCESSING_COST: float = Field(gt=0)
     CASE_MAX_LLM_TOKENS: int = Field(gt=0)

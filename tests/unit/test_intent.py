@@ -128,11 +128,13 @@ def test_int_09_llm_revises_low_confidence_decision():
     assert decision.reason == "requires reasoning"
 
 
-def test_int_10_llm_navigate_gets_nav_term():
+def test_int_10_llm_cannot_invent_navigation():
+    """El LLM no puede convertir una pregunta sustantiva en una lista de menciones."""
     llm = _LLM('{"intent": "navegar", "confidence": 0.7, "reason": "location"}')
     decision = intent.classify("háblame del pagaré 001", llm=llm)
-    assert decision.intent is INT.NAVIGATE
-    assert decision.nav_term == text_terms.specific_term("háblame del pagaré 001")
+    assert llm.calls == 1
+    assert decision.intent is INT.LOOKUP
+    assert decision.source == "rules"
 
 
 def test_int_11_invalid_llm_json_falls_back_to_rules():
@@ -164,10 +166,11 @@ def test_int_14_llm_reason_cannot_leak_question_text():
 
 
 def test_int_15_llm_accepts_enum_name_and_clamps_confidence():
-    llm = _LLM('{"intent": "NAVIGATE", "confidence": 7, "reason": "location"}')
+    llm = _LLM('{"intent": "LOOKUP", "confidence": 7, "reason": "hecho"}')
     decision = intent.classify("háblame del pagaré", llm=llm)
-    assert decision.intent is INT.NAVIGATE
+    assert decision.intent is INT.LOOKUP
     assert decision.confidence == 1.0
+    assert decision.source == "llm"
 
 
 def test_int_17_hints_can_name_an_intent():
@@ -192,3 +195,80 @@ def test_int_20_helpers():
     assert intent.uses_graph(intent.classify("¿Qué evidencia hay sobre pagos?"))
     assert intent.uses_graph(intent.classify("compara la demanda y la contestación"))
     assert not intent.uses_graph(intent.classify("¿Cuántos jueces intervinieron?"))
+
+
+def test_int_21_followup_inherits_previous_intent():
+    """«¿Y en la página 12?» no se sostiene sola: hereda el turno anterior."""
+    history = [{"role": "user", "content": "compara la demanda"},
+               {"role": "assistant", "intent": "analisis"}]
+    decision = intent.classify("¿Y en la página 12?", history=history)
+    assert decision.intent is INT.ANALYSIS
+    assert decision.reason == "followup_inherit"
+    assert decision.confidence < 0.9
+    assert not intent.has_location_signal("¿Y en la página 12?")
+
+
+def test_int_22_followup_never_inherits_navigation_without_location_signal():
+    history = [{"role": "assistant", "intent": "navegar"}]
+    decision = intent.classify("¿y eso?", history=history)
+    assert decision.intent is INT.LOOKUP
+    assert decision.reason == "default_lookup"
+
+
+def test_int_23_strong_rule_beats_history():
+    history = [{"role": "assistant", "intent": "analisis"}]
+    decision = intent.classify("¿Cuántos testigos declararon?", history=history)
+    assert decision.intent is INT.AGGREGATION
+    assert decision.confidence == 0.9
+
+
+def test_int_24_without_history_there_is_no_inheritance():
+    decision = intent.classify("¿Y en la página 12?")
+    assert decision.intent is INT.LOOKUP
+    assert decision.reason == "default_lookup"
+
+
+def test_int_25_llm_reviews_ambiguous_multiple_matches():
+    question = "corrige el hablante y compara los testimonios"
+    base = intent.classify(question)
+    assert base.confidence == 0.62  # dos familias: corrección + análisis
+    llm = _LLM('{"intent": "analisis", "confidence": 0.8, "reason": "compara"}')
+    decision = intent.classify(question, llm=llm)
+    assert llm.calls == 1
+    assert decision.intent is INT.ANALYSIS
+    assert decision.source == "llm"
+
+
+def test_int_26_llm_never_reviews_attachments():
+    llm = _LLM('{"intent": "dato", "confidence": 0.9}')
+    decision = intent.classify("¿qué dice?", has_attachments=True, llm=llm)
+    assert decision.intent is INT.READ
+    assert llm.calls == 0
+
+
+def test_int_27_llm_low_confidence_is_ignored():
+    llm = _LLM('{"intent": "analisis", "confidence": 0.2}')
+    decision = intent.classify("háblame del pagaré", llm=llm)
+    assert decision.intent is INT.LOOKUP
+    assert decision.source == "rules"
+
+
+def test_int_28_llm_cannot_decide_correction():
+    llm = _LLM('{"intent": "correccion", "confidence": 0.9}')
+    decision = intent.classify("háblame del pagaré", llm=llm)
+    assert decision.intent is INT.LOOKUP
+    assert decision.source == "rules"
+
+
+def test_int_29_los_guardarrailes_de_precision_siguen_en_pie():
+    """Las dos clases caras no se disparan con una pregunta sustantiva."""
+    assert intent.classify(
+        "¿Dónde está la contradicción entre la demanda y la contestación?").intent is INT.ANALYSIS
+    assert intent.classify("Localiza la fecha de la audiencia en el expediente.").intent is INT.LOOKUP
+    assert intent.classify(
+        "Corrige mi entendimiento: ¿el pago fue en mayo o en marzo?").intent is INT.LOOKUP
+    assert intent.classify("¿Está equivocado el perito?").intent is INT.LOOKUP
+    assert not intent.has_location_signal("¿Dónde está la contradicción?")
+    assert not intent.has_location_signal("Localiza el nombre del perito")
+    assert intent.has_location_signal("¿Dónde aparece el pagaré 001?")
+    assert intent.classify("Estabas equivocado: el pago fue en mayo.").intent is INT.CORRECTION
