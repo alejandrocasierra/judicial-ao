@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import queue
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from uuid import UUID
@@ -31,8 +32,10 @@ from app.core.errors import AppError
 from app.core.i18n import negotiate, t
 from app.schemas import ChatMessageIn, ChatSessionIn, IntentFeedbackIn, QueryIn
 from app.security.deps import Principal, case_access, current_principal
-from app.services import (audit, case_tools, correction, deadline as deadline_mod, intent as intent_service,
-                          intent_profile, memory, occurrences, query_hints, ratelimit, role_answer, text_terms)
+from app.services import (audit, case_tools, contradiction_seed, correction,
+                          deadline as deadline_mod, entity_seed, intent as intent_service,
+                          intent_profile, memory, occurrences, query_hints, ratelimit,
+                          role_answer, text_terms)
 from app.services.case_tools import ToolContext
 from app.routers.query import _attachment_file_cards, _run_query, _safe_emit
 
@@ -464,6 +467,50 @@ def _default_chat_agent(p: Principal) -> str | None:
     return str(row["id"]) if row else None
 
 
+def _entity_question(p: Principal, case_id: UUID, question: str) -> bool:
+    """¿La pregunta nombra una persona/entidad del expediente?
+
+    Esas preguntas necesitan `find_person`/grafo, no solo búsqueda de chunks:
+    el nombre puede vivir en `entities`/`speakers` y no en el texto de la página.
+    """
+    match = re.search(r"(?:qui[eé]n es|quien es|qui[eé]n fue|sobre)\s+(.+?)\s*\??$",
+                      question or "", re.I)
+    if not match:
+        return False
+    name = " ".join(text_terms.norm(match.group(1)).split())
+    if len(name) < 5 or len(name.split()) > 7:
+        return False
+    parts = [p for p in name.split() if len(p) >= 3]
+    if not parts:
+        return False
+    first, last = parts[0], parts[-1]
+    with tx(p.org_id, p.user_id) as c:
+        found = one(c, """SELECT 1 FROM entities
+                           WHERE case_id = :c
+                             AND normalized_name LIKE :a
+                             AND normalized_name LIKE :b
+                           LIMIT 1""", c=str(case_id), a=f"%{first}%", b=f"%{last}%")
+    return bool(found)
+
+
+def _seed_contradiction(p: Principal, case_id: UUID, question: str) -> list[dict]:
+    try:
+        with tx(p.org_id, p.user_id) as c:
+            return contradiction_seed.for_question(c, str(case_id), question)
+    except Exception:  # noqa: BLE001 — la semilla es opcional
+        log.debug("contradiction seed failed", exc_info=True)
+        return []
+
+
+def _seed_entity(p: Principal, case_id: UUID, question: str) -> list[dict]:
+    try:
+        with tx(p.org_id, p.user_id) as c:
+            return entity_seed.for_question(c, str(case_id), question)
+    except Exception:  # noqa: BLE001 — la semilla es opcional
+        log.debug("entity seed failed", exc_info=True)
+        return []
+
+
 def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Request,
                p: Principal, locale: str, case: dict, s, *, emit=None, deadline=None,
                background: BackgroundTasks | None = None) -> dict:
@@ -513,8 +560,11 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     decision = intent_profile.refine(decision, body.content,
                                      org_id=p.org_id, user_id=p.user_id)
     intent_value = str(getattr(decision.intent, "value", decision.intent))
-    if decision.intent is intent_service.Intent.ANALYSIS and deadline.budget_ms < s.ANALYSIS_DEADLINE_MS:
-        # El análisis exhaustivo no cabe en el presupuesto de un turno normal.
+    entity_route = (decision.intent is intent_service.Intent.LOOKUP
+                    and _entity_question(p, case_id, body.content))
+    if (decision.intent is intent_service.Intent.ANALYSIS or entity_route) \
+            and deadline.budget_ms < s.ANALYSIS_DEADLINE_MS:
+        # El análisis exhaustivo y el camino de entidad/grafo no caben en 30 s.
         deadline = deadline_mod.Deadline(s.ANALYSIS_DEADLINE_MS)
     _safe_emit(emit, "routing", {"intent": intent_value})
 
@@ -542,7 +592,7 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
         seed = _process_path_seed(p, case_id, body.content, ocr_mode, asr_mode)
         result = _query("rag", seed)
     elif decision.intent is intent_service.Intent.ANALYSIS:
-        result = _query("agent")
+        result = _query("agent", _seed_contradiction(p, case_id, body.content))
     elif decision.intent is intent_service.Intent.CORRECTION:
         # Aplicar/confirmar correcciones ya se atendió arriba; si no había pendiente,
         # el camino histórico es el agente con la pista de corrección.
@@ -550,6 +600,9 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     elif correction.is_reprocess_question(body.content):
         # «¿Cómo mejoro el OCR/ASR?»: diagnosticar exige tools (suggest_reprocess).
         result = _query("agent")
+    elif decision.intent is intent_service.Intent.LOOKUP and entity_route:
+        # «¿Quién es X?» / «¿Qué se dice sobre X?»: el grafo y find_person, no solo chunks.
+        result = _query("agent", _seed_entity(p, case_id, body.content))
     else:
         result = _query("rag")
 

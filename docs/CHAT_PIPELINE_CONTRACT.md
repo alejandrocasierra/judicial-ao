@@ -466,9 +466,20 @@ parecía perder el hilo; el agente no usaba skills y solo miraba una muestra.
 | Lote de 21 preguntas | — | temas 8/8, contradicciones 4/4, exhaustiva 1/1, entidades 3/4 |
 
 **Banco de pruebas**: `scripts/eval_chat_quality.py` genera preguntas de entidades,
-documentos, contradicciones, temas y la pregunta exhaustiva desde la propia base,
-las ejecuta contra la API y guarda JSONL + resumen (abstención, citas, degradación,
-longitud, p50/p95). `--limit`, `--per-type`, `--types`, `--model-id`.
+documentos, contradicciones, claims, temas y la pregunta exhaustiva desde la propia
+base, las ejecuta contra la API y guarda JSONL + resumen (abstención, citas,
+degradación, longitud, p50/p95). `--limit`, `--per-type`, `--types`,
+`--concurrency`, `--model-id`.
+
+**Verificación contra la base**: `scripts/verify_chat_quality.py` resuelve cada
+cita a `document_pages`/`transcript_segments`, compara cada afirmación con el
+texto citado (términos y números), comprueba el tipo de pregunta contra
+`entities`/`claims`/`contradictions`, mide recall de la fuente esperada en el
+retrieval y, opcionalmente, un modelo distinto audita cada claim. No basta con
+que la respuesta cite: se mide si lo citado sostiene lo afirmado. La muestra de
+20 pasó de 42,9 % a 95 % de respuestas útiles y de 0 % a 100 % en entidades,
+pero el juez solo considera totalmente fieles 6 de cada 10: esa lista de errores
+es la entrada del siguiente ajuste de prompt.
 
 **Límite conocido**: la respuesta profunda tarda 30–60 s con `gemini-3.8-flash`
 (la UI muestra «Consultando el expediente…»); el modo normal sigue en ~10–20 s.

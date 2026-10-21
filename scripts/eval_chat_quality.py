@@ -71,8 +71,11 @@ def _db_questions(case_number: str, per_type: int) -> list[dict]:
     with tx(org_id) as c:
         entities = rows(c, """SELECT name FROM entities
                                WHERE case_id = :c
-                                 AND entity_type IN ('person', 'organization', 'contract')
+                                 AND entity_type IN ('person', 'organization')
+                                 AND resolution_status = 'MATCH'
                                  AND name ~ '[A-Za-zÁÉÍÓÚÑáéíóúñ]'
+                                 AND name !~* '\\.(pdf|docx|mp4|jpg|png)$'
+                                 AND name !~* '^(pagare|pagaré|unidad|lote|oficio|correo|auto|acta|memorial|escrito|ratificacion)\\b'
                                  AND length(name) BETWEEN 5 AND 60
                                ORDER BY random() LIMIT :n""", c=case_id, n=per_type)
         documents = rows(c, """SELECT filename FROM documents
@@ -141,8 +144,9 @@ def _run_one(api: str, headers: dict, case_id: str, model_id: str | None,
 
     def _post(url: str, **kwargs):
         """Reintenta 429/5xx con backoff: el banco no debe morir por un burst."""
+        timeout = kwargs.pop("timeout", 240)
         for attempt in range(4):
-            response = requests.post(url, **kwargs)
+            response = requests.post(url, timeout=timeout, **kwargs)
             if response.status_code != 429 and response.status_code < 500:
                 return response
             wait = response.headers.get("Retry-After")
@@ -153,16 +157,24 @@ def _run_one(api: str, headers: dict, case_id: str, model_id: str | None,
             time.sleep(delay)
         return response
 
+    def _call(url: str, **kwargs):
+        response = _post(url, **kwargs)
+        if response.status_code == 401:
+            # El banco grande tarda más que el TTL del access token: renovar y repetir.
+            headers["Authorization"] = _login(api)["Authorization"]
+            response = _post(url, **kwargs)
+        return response
+
     payload: dict = {"content": question}
     if model_id:
         payload["model_id"] = model_id
-    r = _post(f"{api}/cases/{case_id}/chats", headers=headers,
+    r = _call(f"{api}/cases/{case_id}/chats", headers=headers,
               json={"model_id": model_id, "title": question[:80]}, timeout=30)
     if not r.ok:
         return {"error": f"create_session:{r.status_code}", "question": question}
     session = r.json()["id"]
     started = time.monotonic()
-    r = _post(f"{api}/cases/{case_id}/chats/{session}/messages",
+    r = _call(f"{api}/cases/{case_id}/chats/{session}/messages",
               headers=headers, json=payload, timeout=timeout)
     elapsed = time.monotonic() - started
     if not r.ok:
@@ -172,6 +184,7 @@ def _run_one(api: str, headers: dict, case_id: str, model_id: str | None,
     return {
         "question": question,
         "session": session,
+        "model_id": model_id,
         "elapsed": round(elapsed, 2),
         "answer_kind": body.get("answer_kind"),
         "intent": body.get("intent"),
@@ -181,7 +194,12 @@ def _run_one(api: str, headers: dict, case_id: str, model_id: str | None,
         "evidence": body.get("evidence_count"),
         "length": len(answer),
         "refusal": "no se encontr" in answer.lower() or "no hay evidencia" in answer.lower(),
-        "answer": answer[:1500],
+        # Datos para el verificador contra la base (no solo contar citas).
+        "claims_detail": body.get("claims") or [],
+        "citations_detail": body.get("citations") or [],
+        "model_run_id": body.get("model_run_id"),
+        "uncertainties": body.get("uncertainties") or [],
+        "answer": answer,
     }
 
 
