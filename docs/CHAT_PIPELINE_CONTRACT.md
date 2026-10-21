@@ -490,10 +490,14 @@ mismo usuario/expediente en sesiones anteriores; una pregunta repetida del mismo
 usuario, expediente, modelo, agente, estrategia, pipeline y versión de evidencia
 se sirve desde `cache` (`cached: true`) sin retrieval ni LLM. Las preguntas
 contextuales incluyen el hash de los últimos turnos; con adjuntos no se cachea.
-**Agentes**: contradicción/análisis usan el «Cronista probatorio» y el resto el
-«Asistente del expediente»; se cargan prompt y skills sin que el usuario los
-mencione. **Partes**: las preguntas de rol/partes usan la tabla `parties`
-(demandados=2, partes=24), no menciones sueltas de páginas.
+Los seguimientos por rol («¿qué dice la parte demandada?») heredan el tema del
+turno anterior mediante `query_rewrite`, aunque el usuario no repita
+«intereses». **Agentes**: contradicción/análisis usan el «Cronista probatorio» y
+el resto el «Asistente del expediente»; se cargan prompt y skills sin que el
+usuario los mencione. **Partes**: las preguntas de identidad/rol usan la tabla
+`parties` (demandados=2, partes=24), no menciones sueltas de páginas; «qué dice
+la parte demandada» no se confunde con una lista de demandados. **Etapas**: el
+SSE informa agente/skill, investigación, revisión, redacción y verificación.
 
 **Límite conocido**: la respuesta profunda tarda 30–60 s con `gemini-3.8-flash`
 (la UI muestra «Consultando el expediente…»); el modo normal sigue en ~10–20 s.

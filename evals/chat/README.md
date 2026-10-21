@@ -146,6 +146,13 @@ registrada, semilla literal/números para claims sin cita, eliminar límites met
   intercambios del mismo usuario y expediente en sesiones anteriores (máx. 4
   mensajes), además del historial de la sesión actual. Sirve para «lo anterior»
   sin arrastrar todo el historial.
+- **Seguimiento por rol**: `query_rewrite` reconoce que «¿Qué dice la parte
+  demandada?» es un seguimiento de «intereses» y busca con el tema anterior; no
+  exige que el usuario lo repita. Probado en la misma sesión: la segunda
+  respuesta habla de los intereses alegados por la defensa, no «no se encontró».
+- **Etapas visibles**: el SSE manda agente + skill, «Investigando el
+  expediente», «Revisando la evidencia», «Redactando la respuesta» y
+  «Verificando citas, cifras y nombres»; el widget los muestra en secuencia.
 - **Caché de respuestas**: una pregunta repetida del mismo usuario/expediente,
   modelo, agente, estrategia, versión de pipeline y versión de evidencia
   devuelve la respuesta completa (`cached: true`) sin retrieval ni LLM. TTL

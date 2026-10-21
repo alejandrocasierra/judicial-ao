@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services import party_answer
+from app.services import party_answer, query_rewrite
 
 pytestmark = pytest.mark.unit
 
@@ -15,6 +15,23 @@ def test_role_detection_distinguishes_defendants_from_all_parties():
         "attorney_claimant", "attorney_defendant"]
     assert party_answer.requested_roles("¿Quiénes son las partes?") == []
     assert party_answer.requested_roles("¿Quiénes son los testigos?") is None
+
+
+def test_identity_vs_content_question():
+    assert party_answer.is_identity_question("¿Cuál es el nombre de la parte demandante?")
+    assert party_answer.is_identity_question("¿Quiénes son los demandados?")
+    assert not party_answer.is_identity_question("¿Qué dice la parte demandada?")
+    assert not party_answer.is_identity_question(
+        "En el proceso al demandante se le pagaron intereses")
+
+
+def test_role_followup_inherits_previous_topic():
+    variants = query_rewrite.rewrite(
+        "¿Qué dice la parte demandada?",
+        history=[{"role": "user",
+                  "content": "En el proceso al demandante se le pagaron intereses"}],
+    )
+    assert any("intereses" in variant.lower() for variant in variants)
 
 
 def test_render_uses_party_roles_and_does_not_invent_defendants(monkeypatch):

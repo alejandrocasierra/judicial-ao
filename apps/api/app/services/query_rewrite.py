@@ -45,6 +45,11 @@ _DEICTIC_ANY = (
 # Pronombres personales: se comprueban sobre el texto original porque `norm`
 # elimina la tilde y «él» quedaría indistinguible del artículo «el».
 _PRONOUN_START = re.compile(r"^(el|ella|ellos|ellas)\b", re.I)
+# Seguimientos por rol sin tema explícito: «¿qué dice la parte demandada?» debe
+# heredar «intereses» del turno anterior, no buscar solo «parte demandada».
+_ROLE_FOLLOWUP = re.compile(
+    r"\b(parte|demandante|demandado|demandada|demanda|actor|actora|ejecutante|"
+    r"ejecutado|apoderad[oa]|juez|señor|senor|rojas|garz[oó]n)\b", re.I)
 
 
 def _fold(text: str) -> str:
@@ -58,7 +63,11 @@ def _is_elliptical(question: str) -> bool:
     if any(folded.startswith(prefix) for prefix in _ELLIPTICAL):
         return True
     # Pregunta corta que contiene un deíctico: «qué dice Jorge Rojas sobre lo anterior».
-    return len(folded.split()) <= 14 and any(marker in folded for marker in _DEICTIC_ANY)
+    if len(folded.split()) <= 14 and any(marker in folded for marker in _DEICTIC_ANY):
+        return True
+    # Seguimiento por rol sin tema: «¿qué dice la parte demandada?» hereda el tema
+    # del turno anterior (p. ej. «intereses»).
+    return bool(_ROLE_FOLLOWUP.search(folded) and len(folded.split()) <= 14)
 
 
 def _history_text(turn: Any) -> str:

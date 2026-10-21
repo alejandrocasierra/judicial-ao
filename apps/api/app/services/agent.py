@@ -292,9 +292,14 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                     "evidence_count": 0}
         evidence = primary_evidence
 
+        _emit(emit, "reviewing", {
+            "label": "Revisando la evidencia que devolvieron las herramientas…",
+            "evidence": len(evidence),
+        })
         # Síntesis final con el prompt de respuesta RAG existente (v3 en modo profundo)
         system, prompt_id, prompt_version = answering.system_prompt(locale, deep=deep)
         user = answering.build_user_prompt(question, evidence, history=history_turns, deep=deep)
+        _emit(emit, "synthesizing", {"label": "Redactando la respuesta…"})
         try:
             result = llm.complete(system, user)
         except Exception as exc:  # noqa: BLE001

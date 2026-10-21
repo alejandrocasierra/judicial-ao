@@ -418,7 +418,13 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         # Un análisis exhaustivo no cabe en 12-15 s: se le da su propio presupuesto.
         deadline = deadline_mod.Deadline(s.ANALYSIS_DEADLINE_MS)
     intent_value = _intent_value(decision) or "dato"
-    _safe_emit(emit, "routing", {"intent": intent_value})
+    # En el chat, `_send_core` ya emitió routing con agente/skill. Solo el
+    # endpoint directo /query necesita este evento para no duplicar la etapa.
+    if intent_decision is None:
+        _safe_emit(emit, "routing", {
+            "intent": intent_value,
+            "label": "Analizando la pregunta…",
+        })
 
     if body.strategy == "agent":
         agent_prompt = None
@@ -434,8 +440,10 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         seed = _normalize_seed_items(seed_items) if seed_items is not None else \
             role_answer.authoritative_evidence(str(p.org_id), str(p.user_id), str(case_id), body.question)
         with deadline.stage("agent"):
-            _safe_emit(emit, "retrieving", {"strategy": "agent"})
-            _safe_emit(emit, "synthesizing", {"strategy": "agent"})
+            _safe_emit(emit, "retrieving", {
+                "strategy": "agent",
+                "label": "Investigando con el agente y sus herramientas…",
+            })
             max_steps = s.DEEP_MAX_STEPS if deep else 5
             with tx(p.org_id, p.user_id) as c:
                 agent_result = agent.run_agent_query(
@@ -498,7 +506,10 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         plan = _build_plan(body.question, decision, s, history)
         diagnostics: dict = {}
         with deadline.stage("retrieving"):
-            _safe_emit(emit, "retrieving", {"strategy": "rag"})
+            _safe_emit(emit, "retrieving", {
+                "strategy": "rag",
+                "label": "Investigando el expediente (OCR/ASR/pgvector)…",
+            })
             doc_ids = [str(a.id) for a in body.attachments if a.kind == "document"]
             media_ids = [str(a.id) for a in body.attachments if a.kind == "media"]
             if not doc_ids:
@@ -545,7 +556,14 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                                  degraded=deadline.degraded, emit=emit)
         system, prompt_id, prompt_version = _answer_system_prompt(locale, deep=deep)
         task = "answer_question"
-        _safe_emit(emit, "synthesizing", {"evidence": len(items)})
+        _safe_emit(emit, "reviewing", {
+            "label": "Revisando la evidencia recuperada…",
+            "evidence": len(items),
+        })
+        _safe_emit(emit, "synthesizing", {
+            "label": "Redactando la respuesta…",
+            "evidence": len(items),
+        })
         synthesis_failed = False
         if deadline.can("synthesizing", 50):
             with deadline.stage("synthesizing"):
@@ -708,7 +726,10 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     validated["uncertainties"] = answering.clean_uncertainties(
         validated.get("uncertainties") or [], visible_items or items, locale)
 
-    _safe_emit(emit, "validating", {"claims": len(validated["claims"])})
+    _safe_emit(emit, "validating", {
+        "claims": len(validated["claims"]),
+        "label": "Verificando citas, cifras y nombres…",
+    })
     with deadline.stage("compose"):
         composed: ComposeResult = compose.render(
             body.question, intent=getattr(decision, "intent", None), claims=validated["claims"],

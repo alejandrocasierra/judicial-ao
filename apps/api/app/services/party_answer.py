@@ -36,6 +36,9 @@ _JUEZ = re.compile(r"\bjue(?:z|ces|za|zas)\b", re.I)
 _MAGISTRADO = re.compile(r"\bmagistrad[oa]s?\b", re.I)
 _TERCERO = re.compile(r"\btercer[oa]s?\b", re.I)
 _REPRESENTANTE = re.compile(r"\brepresentante(?:s)? legal(?:es)?\b", re.I)
+_IDENTITY = re.compile(
+    r"\b(quienes son|quien es|cual es el nombre|cuales son los nombres|cuantos|"
+    r"cuantas|nombre de|integrantes|lista de|dime los|dime las)\b", re.I)
 
 
 def requested_roles(question: str) -> list[str] | None:
@@ -59,11 +62,20 @@ def requested_roles(question: str) -> list[str] | None:
     return None
 
 
+def is_identity_question(question: str) -> bool:
+    """Distinguir «quiénes son los demandados» de «qué dice la parte demandada»."""
+    if requested_roles(question) is None:
+        return False
+    return bool(_IDENTITY.search(text_terms.norm(question)))
+
+
 def _label(role: str) -> str:
     return ROLE_LABELS.get(role, role.replace("_", " ").capitalize())
 
 
 def render_for_question(conn: Connection, case_id: str, question: str) -> str | None:
+    if not is_identity_question(question):
+        return None
     roles = requested_roles(question)
     if roles is None:
         return None
@@ -106,4 +118,4 @@ def render_for_question(conn: Connection, case_id: str, question: str) -> str | 
     return "\n".join(lines)
 
 
-__all__ = ["render_for_question", "requested_roles"]
+__all__ = ["render_for_question", "requested_roles", "is_identity_question"]

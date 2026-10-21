@@ -601,6 +601,7 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
                                      org_id=p.org_id, user_id=p.user_id)
     intent_value = str(getattr(decision.intent, "value", decision.intent))
     contradiction_items = _seed_contradiction(p, case_id, body.content)
+    party_identity = party_answer.is_identity_question(body.content)
     entity_route = (decision.intent is intent_service.Intent.LOOKUP
                     and _entity_question(p, case_id, body.content))
     if (decision.intent is intent_service.Intent.ANALYSIS or entity_route
@@ -614,8 +615,19 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
                           if contradiction_items or decision.intent is intent_service.Intent.ANALYSIS
                           else "Asistente del expediente")
         agent_id = _default_chat_agent(p, preferred=selected_agent)
-    _safe_emit(emit, "routing", {"intent": intent_value,
-                                 "agent": selected_agent or session.get("agent_id")})
+    if contradiction_items or decision.intent is intent_service.Intent.ANALYSIS:
+        skill_label = "Cazador de contradicciones / Cronologista"
+    elif party_identity:
+        skill_label = "Ficha de partes del proceso"
+    elif entity_route:
+        skill_label = "Relacionador de personas"
+    else:
+        skill_label = "Analista de documento / evidencia"
+    agent_label = selected_agent or ("Agente seleccionado" if session.get("agent_id") else "Asistente del expediente")
+    _safe_emit(emit, "routing", {
+        "intent": intent_value, "agent": agent_label, "skill": skill_label,
+        "label": f"Analizando la pregunta · Agente: {agent_label} · Skill: {skill_label}",
+    })
 
     def _query(strategy: str, seed: list[dict] | None = None) -> dict:
         query_body = QueryIn(question=body.content, strategy=strategy,
@@ -631,6 +643,11 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
         result = _query("agent")
     elif body.strategy == "rag":
         result = _query("rag", _seed_claim(p, case_id, body.content))
+    elif party_identity:
+        # «¿Cuál es el nombre de la parte demandante?» es identidad, no RAG:
+        # la ficha de partes es la fuente y evita mezclar demandantes de etapas.
+        result = (_aggregation_result(p, case_id, body.content, locale)
+                  or _query("rag", _seed_claim(p, case_id, body.content)))
     elif decision.intent is intent_service.Intent.AGGREGATION:
         result = (_aggregation_result(p, case_id, body.content, locale)
                   or _query("rag", _seed_claim(p, case_id, body.content)))
@@ -782,7 +799,8 @@ def stream_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request
         executor = ThreadPoolExecutor(max_workers=1)
         executor.submit(worker)
         try:
-            yield _sse("stage", {"stage": "accepted"})
+            yield _sse("stage", {"stage": "accepted",
+                                 "label": "Preparando la consulta…"})
             while True:
                 item = events.get()
                 if item is None:
@@ -804,7 +822,11 @@ def stream_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request
                     yield _sse("error", data)
                     continue
                 if event == "tool":
-                    yield _sse("stage", {"stage": "retrieving", "tool": data.get("name")})
+                    yield _sse("stage", {
+                        "stage": "retrieving",
+                        "label": f"Consultando {data.get('name', 'el expediente')}…",
+                        "tool": data.get("name"),
+                    })
                     continue
                 # routing/retrieving/synthesizing/validating → SIEMPRE evento `stage`.
                 yield _sse("stage", {"stage": event, **data})

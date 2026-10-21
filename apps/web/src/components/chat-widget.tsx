@@ -115,12 +115,13 @@ interface SendResponse {
  * esta traducción. Sin porcentajes: no hay progreso medible que mostrar. */
 const STAGE_LABELS: Record<string, string> = {
   accepted: "Preparando la consulta…",
-  routing: "Analizando la pregunta…",
-  retrieving: "Buscando evidencia…",
+  routing: "Analizando la pregunta y eligiendo agente…",
+  retrieving: "Investigando el expediente…",
   tool: "Consultando el expediente…",
   reranking: "Ordenando la evidencia…",
-  synthesizing: "Redactando…",
-  validating: "Verificando citas…",
+  reviewing: "Revisando la evidencia…",
+  synthesizing: "Redactando la respuesta…",
+  validating: "Verificando citas, cifras y nombres…",
 };
 const STAGE_FALLBACK = "Analizando la pregunta…";
 
@@ -594,9 +595,12 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
               // `stage: done` es el cierre interno del pipeline; el evento `done`
               // con la respuesta completa llega justo después.
               if (stageName === "done") return;
+              const tool = typeof d.tool === "string" ? d.tool : "";
               const label = typeof d.label === "string" && d.label
                 ? d.label
-                : STAGE_LABELS[stageName] || STAGE_FALLBACK;
+                : tool
+                  ? `Consultando ${tool}…`
+                  : STAGE_LABELS[stageName] || STAGE_FALLBACK;
               setStage({ label, intent: typeof d.intent === "string" ? d.intent : undefined });
             } else if (event === "token") {
               if (typeof d.text === "string" && d.text) appendStreamToken(d.text);
