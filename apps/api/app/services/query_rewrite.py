@@ -51,6 +51,62 @@ _ROLE_FOLLOWUP = re.compile(
     r"\b(parte|demandante|demandado|demandada|demanda|actor|actora|ejecutante|"
     r"ejecutado|apoderad[oa]|juez|señor|senor|rojas|garz[oó]n)\b", re.I)
 
+# Términos que no abren un tema nuevo: continuaciones, clima/tiempo y roles.
+# El ejemplo «seguro porque voy a salir sin paraguas» después de «clima en
+# Obando» debe conservar clima/Obando.
+_FOLLOWUP_TERMS = {
+    "seguro", "segura", "seguramente", "definitivamente", "entonces", "porque",
+    "pues", "ahora", "luego", "despues", "tambien", "ademas", "si", "no",
+    "voy", "vas", "va", "vamos", "van", "salir", "llevo", "llevar",
+    "clima", "tiempo", "temperatura", "lluvia", "llover", "paraguas",
+    "soleado", "nublado", "frio", "calor", "hoy", "manana", "ayer", "tarde",
+    "noche", "semana", "fin", "parte", "demandante", "demandado",
+    "demandada", "actor", "actora", "ejecutante", "ejecutado", "apoderado",
+    "apoderada", "juez", "senor", "senora", "rojas", "garzon",
+}
+
+
+def _topic_terms(text: str) -> set[str]:
+    return {term for term in text_terms.content_terms(text)
+            if term not in _FOLLOWUP_TERMS}
+
+
+def _is_topic_bearing(text: str) -> bool:
+    return bool(_topic_terms(text))
+
+
+def _last_topic(history: list[dict] | None) -> str | None:
+    """Última pregunta del usuario que abrió un tema (no un simple seguimiento)."""
+    for turn in reversed(history or []):
+        if _history_role(turn) not in ("user", "usuario", "human"):
+            continue
+        text = _history_text(turn)
+        if text and _is_topic_bearing(text):
+            return text
+    return None
+
+
+def _topic_shift(question: str, topic: str) -> bool:
+    """Un tema nuevo con contenido propio reemplaza al anterior."""
+    current = set(text_terms.content_terms(question))
+    previous = set(text_terms.content_terms(topic))
+    new = {term for term in current - previous
+           if term not in _FOLLOWUP_TERMS}
+    return bool(new) and not (current & previous)
+
+
+def _needs_context(question: str, topic: str | None) -> bool:
+    if not topic:
+        return False
+    if _is_elliptical(question):
+        return True
+    return not _topic_shift(question, topic) and not _is_topic_bearing(question)
+
+
+def needs_history(question: str, history: list[dict] | None) -> bool:
+    """Para la caché: esta pregunta depende del tema anterior."""
+    return _needs_context(question, _last_topic(history))
+
 
 def _fold(text: str) -> str:
     return text_terms.norm(text).lstrip("¿¡ ").strip()
@@ -187,6 +243,9 @@ def rewrite(question: str, history: list[dict] | None = None, llm=None) -> list[
         return []
 
     bases: list[str] = [original]
+    topic = _last_topic(history)
+    if topic and _needs_context(original, topic) and not _topic_shift(original, topic):
+        bases.append(f"{topic} {original}")
     previous = last_user_question(history)
     if previous and _is_elliptical(original):
         bases.append(f"{previous} {original}")
@@ -211,4 +270,4 @@ def rewrite(question: str, history: list[dict] | None = None, llm=None) -> list[
     return out or [original]
 
 
-__all__ = ["rewrite", "last_user_question"]
+__all__ = ["rewrite", "last_user_question", "needs_history"]

@@ -490,9 +490,12 @@ mismo usuario/expediente en sesiones anteriores; una pregunta repetida del mismo
 usuario, expediente, modelo, agente, estrategia, pipeline y versión de evidencia
 se sirve desde `cache` (`cached: true`) sin retrieval ni LLM. Las preguntas
 contextuales incluyen el hash de los últimos turnos; con adjuntos no se cachea.
-Los seguimientos por rol («¿qué dice la parte demandada?») heredan el tema del
-turno anterior mediante `query_rewrite`, aunque el usuario no repita
-«intereses». **Agentes**: contradicción/análisis usan el «Cronista probatorio» y
+Los seguimientos heredan el **último tema con contenido** mediante
+`query_rewrite`: «clima en Obando» → «seguro porque salgo sin paraguas» →
+«¿definitivamente no va a llover?», hasta que aparece un tema nuevo; también los
+seguimientos por rol («¿qué dice la parte demandada?») heredan «intereses» sin
+que el usuario lo repita. `needs_history` incluye ese contexto en la clave de
+caché para no reutilizar una respuesta de otro tema. **Agentes**: contradicción/análisis usan el «Cronista probatorio» y
 el resto el «Asistente del expediente»; se cargan prompt y skills sin que el
 usuario los mencione. **Partes**: las preguntas de identidad/rol usan la tabla
 `parties` (demandados=2, partes=24), no menciones sueltas de páginas; «qué dice

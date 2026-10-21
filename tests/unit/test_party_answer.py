@@ -25,6 +25,38 @@ def test_identity_vs_content_question():
         "En el proceso al demandante se le pagaron intereses")
 
 
+def test_general_topic_followup_weather():
+    history = [
+        {"role": "user", "content": "¿Cómo está el clima en Obando?"},
+        {"role": "assistant", "content": "Está soleado."},
+    ]
+    followup = query_rewrite.rewrite(
+        "Seguro porque voy a salir y no llevo paraguas", history=history)
+    assert any("obando" in variant.lower() for variant in followup)
+    assert query_rewrite.needs_history(
+        "Seguro porque voy a salir y no llevo paraguas", history)
+
+    longer = history + [
+        {"role": "user", "content": "Seguro porque voy a salir y no llevo paraguas"},
+        {"role": "assistant", "content": "Sí, sigue soleado."},
+    ]
+    rain = query_rewrite.rewrite("¿Definitivamente no va a llover?", history=longer)
+    assert any("obando" in variant.lower() for variant in rain)
+
+    new_topic = query_rewrite.rewrite("Ahora háblame de los intereses", history=history)
+    assert not any("obando" in variant.lower() for variant in new_topic)
+    assert not query_rewrite.needs_history("Ahora háblame de los intereses", history)
+
+    summary_history = [{
+        "role": "user",
+        "content": ("Resumen de la conversación previa:\n"
+                    "- Usuario: ¿Cómo está el clima en Obando?\n"
+                    "- Asistente: Está soleado."),
+    }]
+    later = query_rewrite.rewrite("¿Definitivamente no va a llover?", history=summary_history)
+    assert any("obando" in variant.lower() for variant in later)
+
+
 def test_role_followup_inherits_previous_topic():
     variants = query_rewrite.rewrite(
         "¿Qué dice la parte demandada?",

@@ -430,6 +430,13 @@ def _prepare_turn(case_id: UUID, session_id: UUID, body: ChatMessageIn, p: Princ
         history = ([{"role": str(turn.get("role") or ""),
                      "content": str(turn.get("content") or "")[:800]}
                     for turn in previous] + history)
+        # Cuando la conversación supera la ventana de turnos, el resumen sigue
+        # aportando el tema para que un seguimiento no se quede sin contexto.
+        if session.get("summary"):
+            history.insert(0, {
+                "role": "user",
+                "content": "Resumen de la conversación previa:\n" + str(session["summary"]),
+            })
         attachments_json = json.dumps([{"kind": a.kind, "id": str(a.id), "name": a.name}
                                        for a in body.attachments])
         # Idempotencia del fallback SSE: si el último mensaje es el MISMO usuario

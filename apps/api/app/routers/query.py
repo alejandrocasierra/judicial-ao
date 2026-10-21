@@ -27,8 +27,8 @@ from app.schemas import QueryIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import (agent, answering, audit, cache, case_tools, compose,
                           deadline as deadline_mod, intent as intent_service, intent_profile,
-                          metrics, query_hints, ratelimit, role_answer, skills, text_terms,
-                          verification)
+                          metrics, query_hints, query_rewrite, ratelimit, role_answer, skills,
+                          text_terms, verification)
 from app.services.compose import ComposeResult
 
 router = APIRouter(prefix="/cases/{case_id}", tags=["ai"])
@@ -175,7 +175,8 @@ def _answer_cache_key(conn, case_id: str, body, p: Principal, s,
     except Exception:  # noqa: BLE001 — sin versión de evidencia no se cachea
         return None
     history_hash = ""
-    if _CONTEXTUAL_QUESTION.search(body.question or ""):
+    if _CONTEXTUAL_QUESTION.search(body.question or "") or query_rewrite.needs_history(
+            body.question or "", history):
         history_hash = hashlib.sha256(json.dumps(
             [{"role": str(turn.get("role") or ""),
               "content": str(turn.get("content") or "")[:500]}

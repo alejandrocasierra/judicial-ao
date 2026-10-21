@@ -146,10 +146,12 @@ registrada, semilla literal/números para claims sin cita, eliminar límites met
   intercambios del mismo usuario y expediente en sesiones anteriores (máx. 4
   mensajes), además del historial de la sesión actual. Sirve para «lo anterior»
   sin arrastrar todo el historial.
-- **Seguimiento por rol**: `query_rewrite` reconoce que «¿Qué dice la parte
-  demandada?» es un seguimiento de «intereses» y busca con el tema anterior; no
-  exige que el usuario lo repita. Probado en la misma sesión: la segunda
-  respuesta habla de los intereses alegados por la defensa, no «no se encontró».
+- **Seguimiento de tema**: `query_rewrite` guarda la última pregunta con
+  contenido y la arrastra en seguimientos («seguro…», «¿definitivamente no va a
+  llover?») hasta que aparece un tema nuevo. También reconoce seguimientos por
+  rol: «¿Qué dice la parte demandada?» después de «intereses» busca intereses.
+  Probado con clima/Obando y con la misma sesión legal: la segunda respuesta
+  habla de los intereses alegados por la defensa, no «no se encontró».
 - **Etapas visibles**: el SSE manda agente + skill, «Investigando el
   expediente», «Revisando la evidencia», «Redactando la respuesta» y
   «Verificando citas, cifras y nombres»; el widget los muestra en secuencia.
