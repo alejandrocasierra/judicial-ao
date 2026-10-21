@@ -144,6 +144,27 @@ def content_terms(text: str | None, min_len: int = 3) -> list[str]:
     return tokens(text, min_len=min_len)
 
 
+def search_terms(text: str | None, min_len: int = 3) -> list[str]:
+    """Términos para BUSCAR, no para validar afirmaciones.
+
+    `content_terms` descarta palabras de reporte/dominio («dice», «expediente»,
+    «audiencia») porque no sirven para medir grounding. En una búsqueda sí
+    identifican el tema: filtrarlas dejaba la consulta FTS vacía y el turno
+    respondía «no hay evidencia» aunque hubiera cientos de fragmentos.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for tok in raw_tokens(text, min_len=min_len):
+        key = norm(tok)
+        if len(key) < min_len or key in seen:
+            continue
+        if key in STOPWORDS or key in QUESTION_WORDS:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
+
+
 def stem(word: str) -> str:
     """Stemmer español mínimo y determinista (plurales y terminaciones).
 

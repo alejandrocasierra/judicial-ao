@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from uuid import UUID
@@ -90,24 +91,9 @@ def _attachment_file_cards(conn, case_id: UUID, body: QueryIn) -> list[dict]:
     return cards
 
 
-def _answer_system_prompt(locale: str) -> tuple[str, str, str]:
-    """`answer_question.v2.md` si existe (contrato §1.13); si no, el v1 de answering."""
-    import re
-    s = get_settings()
-    path = s.path(s.PROMPTS_DIR) / "answer_question.v2.md"
-    if not path.exists():
-        return answering.system_prompt(locale)
-    try:
-        raw = path.read_text(encoding="utf-8")
-        meta, body = raw.split("---", 2)[1], raw.split("---", 2)[2]
-        prompt_id = re.search(r"prompt_id:\s*(\S+)", meta)
-        version = re.search(r"version:\s*(\S+)", meta)
-        return (body.strip().replace("{{LOCALE}}", locale),
-                prompt_id.group(1) if prompt_id else "answer_question",
-                version.group(1) if version else "2")
-    except Exception as exc:  # noqa: BLE001 — prompt nuevo mal formado: v1
-        log.warning("answer_question.v2.md unreadable: %s", exc)
-        return answering.system_prompt(locale)
+def _answer_system_prompt(locale: str, deep: bool = False) -> tuple[str, str, str]:
+    """Prompt de síntesis: v3 (análisis exhaustivo) o v2 (turno normal)."""
+    return answering.system_prompt(locale, deep=deep)
 
 
 def _build_plan(question: str, decision, s, history: list[dict] | None):
@@ -184,6 +170,35 @@ def query(case_id: UUID, body: QueryIn, request: Request, background: Background
                           ocr_mode=body.ocr_mode, asr_mode=body.asr_mode, background=background)
 
 
+def _mentioned_document_ids(conn, case_id: str, question: str) -> list[str]:
+    """Documentos nombrados literalmente en la pregunta («¿qué dice X.pdf?»).
+
+    Sin esto, el nombre del archivo no está en el texto de los chunks: la
+    búsqueda híbrida devolvía 0 y el chat decía «no hay evidencia» sobre un
+    documento que el usuario acababa de nombrar.
+    """
+    from app.services import text_terms
+
+    def _squash(text: str) -> str:
+        return re.sub(r"[^0-9a-z]", "", text_terms.norm(text or ""))
+
+    flat_question = _squash(question)
+    if not flat_question:
+        return []
+    found: list[str] = []
+    for doc in rows(conn, "SELECT id, filename FROM documents WHERE case_id = :c",
+                    c=str(case_id)):
+        name = str(doc.get("filename") or "")
+        flat_name = _squash(name)
+        flat_stem = _squash(name.rsplit(".", 1)[0])
+        if (len(flat_name) >= 12 and flat_name in flat_question) or (
+                len(flat_stem) >= 12 and flat_stem in flat_question):
+            found.append(str(doc["id"]))
+            if len(found) >= 3:
+                break
+    return found
+
+
 def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, locale: str, case: dict, s,
                history: list[dict] | None = None, hints: list[str] | None = None,
                ocr_mode: str | None = None, asr_mode: str | None = None,
@@ -211,6 +226,10 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         # Mismo perfil que en el chat: solo decide si está `active` y la regla no fue fuerte.
         decision = intent_profile.refine(decision, body.question,
                                          org_id=p.org_id, user_id=p.user_id)
+    deep = decision.intent is intent_service.Intent.ANALYSIS
+    if deep and deadline.budget_ms < s.ANALYSIS_DEADLINE_MS:
+        # Un análisis exhaustivo no cabe en 12-15 s: se le da su propio presupuesto.
+        deadline = deadline_mod.Deadline(s.ANALYSIS_DEADLINE_MS)
     intent_value = _intent_value(decision) or "dato"
     _safe_emit(emit, "routing", {"intent": intent_value})
 
@@ -230,7 +249,7 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         with deadline.stage("agent"):
             _safe_emit(emit, "retrieving", {"strategy": "agent"})
             _safe_emit(emit, "synthesizing", {"strategy": "agent"})
-            max_steps = 3 if intent_value == "analisis" else 5
+            max_steps = s.DEEP_MAX_STEPS if deep else 5
             with tx(p.org_id, p.user_id) as c:
                 agent_result = agent.run_agent_query(
                     c, str(case_id), body.question, locale,
@@ -240,7 +259,7 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                     history_turns=history, hints=hints, seed_evidence=seed,
                     ocr_mode=ocr_mode, asr_mode=asr_mode,
                     emit=emit, allowed_tools=allowed_tools, verify=False, max_steps=max_steps,
-                    parameters=agent_parameters)
+                    parameters=agent_parameters, deep=deep)
         # Propagación diferida por las tools de escritura (reindex pgvector, rebuild del
         # grafo, encolado de jobs): solo DESPUÉS de confirmar la transacción del loop.
         case_tools.drain_actions(agent_result.pop("post_commit", []))
@@ -295,6 +314,9 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             _safe_emit(emit, "retrieving", {"strategy": "rag"})
             doc_ids = [str(a.id) for a in body.attachments if a.kind == "document"]
             media_ids = [str(a.id) for a in body.attachments if a.kind == "media"]
+            if not doc_ids:
+                with tx(p.org_id, p.user_id) as c_docs:
+                    doc_ids = _mentioned_document_ids(c_docs, str(case_id), body.question)
             scoped_future = None
             executor = None
             if doc_ids or media_ids:
@@ -334,14 +356,15 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         if not items:
             return _insufficient(case_id, body, request, p, locale, decision=decision,
                                  degraded=deadline.degraded, emit=emit)
-        system, prompt_id, prompt_version = _answer_system_prompt(locale)
+        system, prompt_id, prompt_version = _answer_system_prompt(locale, deep=deep)
         task = "answer_question"
         _safe_emit(emit, "synthesizing", {"evidence": len(items)})
         synthesis_failed = False
         if deadline.can("synthesizing", 50):
             with deadline.stage("synthesizing"):
                 try:
-                    result = llm.complete(system, answering.build_user_prompt(body.question, items))
+                    result = llm.complete(system, answering.build_user_prompt(
+                        body.question, items, history=history, deep=deep))
                     raw_text = result.text
                 except Exception as exc:  # noqa: BLE001 — proveedor caído: compositor con evidencia
                     log.warning("synthesis failed: %s", exc)
@@ -381,8 +404,9 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         composed: ComposeResult = compose.render(
             body.question, intent=getattr(decision, "intent", None), claims=validated["claims"],
             evidence=items, uncertainties=validated["uncertainties"], locale=locale,
-            max_citations=s.MAX_VISIBLE_CITATIONS, max_per_file=s.MAX_CITATIONS_PER_FILE,
-            coverage=coverage)
+            max_citations=(s.DEEP_MAX_VISIBLE_CITATIONS if deep else s.MAX_VISIBLE_CITATIONS),
+            max_per_file=(s.DEEP_MAX_CITATIONS_PER_FILE if deep else s.MAX_CITATIONS_PER_FILE),
+            coverage=coverage, deep=deep)
 
     # Preguntas de rol sin claims del modelo: lista determinista como respuesta.
     if composed.answer_kind == compose.INSUFFICIENT:

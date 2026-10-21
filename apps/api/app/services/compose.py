@@ -206,7 +206,8 @@ def _source_line(item: dict, marker: int, locale: str) -> str:
 
 def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dict],
            uncertainties: list[str], locale: str, max_citations: int | None = None,
-           max_per_file: int | None = None, coverage: float | None = None) -> ComposeResult:
+           max_per_file: int | None = None, coverage: float | None = None,
+           deep: bool = False) -> ComposeResult:
     """Compone el Markdown final a partir de claims validados y evidencia."""
     settings = get_settings()
     max_citations = max_citations or settings.MAX_VISIBLE_CITATIONS
@@ -289,13 +290,15 @@ def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dic
     order = {"direct": 0, "evidence": 1, "audio": 2}
     ordered = sorted(prepared, key=lambda c: order.get(c["kind"], 3))
     if not any(c["kind"] == "direct" for c in prepared):
-        # `partial`: solo los 2–3 fragmentos más cercanos; el resto no se cita.
+        # `partial`: en modo normal solo los 2–3 fragmentos más cercanos; en
+        # análisis exhaustivo se muestran todos los que quepan en el presupuesto.
         related_count = 0
         trimmed: list[dict] = []
+        limit = 12 if deep else 3
         for candidate in ordered:
             if candidate["kind"] == "evidence":
                 related_count += 1
-                if related_count > 3:
+                if related_count > limit:
                     continue
             trimmed.append(candidate)
         ordered = trimmed
@@ -327,7 +330,9 @@ def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dic
         question_numbers = set(text_terms.numbers(question))
         missing_question_numbers = sorted(question_numbers - set(text_terms.numbers(evidence_text)))
         low_coverage = coverage is not None and coverage < settings.COMPOSE_MIN_COVERAGE
-        if low_coverage or missing_question_numbers:
+        # En análisis exhaustivo, la cobertura léxica baja no autoriza a tirar el
+        # análisis: hay material relacionado y el usuario quiere saber qué dice.
+        if (low_coverage or missing_question_numbers) and not deep:
             return ComposeResult(
                 answer_kind=INSUFFICIENT,
                 answer=t("messages.insufficient_evidence", locale),
@@ -348,7 +353,8 @@ def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dic
         header = t("messages.compose_partial_header", locale)
         sections["direct"] = [header]
         blocks.append(header)
-        related = related[:3]
+        if not deep:
+            related = related[:3]
 
     if related:
         bullets = [

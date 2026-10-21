@@ -236,6 +236,18 @@ class Settings(BaseSettings):
     # Presupuesto de latencia de un turno. Al agotarse se degrada la respuesta
     # (sin juez, sin rerank o con la mejor evidencia disponible) en vez de colgar.
     REQUEST_DEADLINE_MS: int = Field(default=12000, gt=0)
+    # Análisis exhaustivo (contradicciones, cruces, "todas las..."): recupera y
+    # razona mucho más. Es un presupuesto aparte porque 12 s solo alcanzan para
+    # una respuesta superficial y el usuario percibe que "no investiga".
+    ANALYSIS_DEADLINE_MS: int = Field(default=90000, gt=0)
+    DEEP_RETRIEVAL_FINAL_K: int = Field(default=30, gt=0, le=50)
+    DEEP_RETRIEVAL_CANDIDATE_K: int = Field(default=240, gt=0, le=500)
+    DEEP_MAX_PER_FILE: int = Field(default=6, gt=0, le=20)
+    DEEP_MAX_PER_PAGE: int = Field(default=3, gt=0, le=20)
+    DEEP_MAX_STEPS: int = Field(default=8, gt=0, le=16)
+    DEEP_MAX_CLAIMS: int = Field(default=20, gt=0, le=40)
+    DEEP_MAX_VISIBLE_CITATIONS: int = Field(default=20, gt=0, le=40)
+    DEEP_MAX_CITATIONS_PER_FILE: int = Field(default=6, gt=0, le=20)
     # Presupuesto de citas visibles del compositor.
     MAX_VISIBLE_CITATIONS: int = Field(default=4, gt=0, le=20)
     MAX_CITATIONS_PER_FILE: int = Field(default=2, gt=0, le=20)

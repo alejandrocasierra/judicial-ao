@@ -47,13 +47,25 @@ def _history_text(turns: list[dict[str, Any]]) -> str:
 
 
 def _system_prompt(agent_prompt: str | None = None,
-                   parameters: dict[str, Any] | None = None) -> str:
+                   parameters: dict[str, Any] | None = None,
+                   deep: bool = False) -> str:
     base = _read_prompt("agent_system.v8.md", "agent_system.v7.md")
     # El system prompt del agente configurado (+ sus skills) se antepone al contrato de tools/formato.
     parts = [agent_prompt.strip()] if agent_prompt else []
     if parameters:
         lines = "\n".join(f"- {key}: {value}" for key, value in parameters.items())
         parts.append(f"<skill_parameters>\n{html.escape(lines, quote=False)}\n</skill_parameters>")
+    if deep:
+        parts.append(
+            "<deep_analysis>\n"
+            "This turn asks for an exhaustive analysis (all contradictions, a cross-check, or a complete "
+            "inventory). Do NOT stop after the first search. Run several distinct searches with "
+            "search_case using k=20: by party, by person, by document, by date and by topic. Use the graph "
+            "and claims tools when they help. Cover every relevant fragment, including audio/video "
+            "testimony, and only then write the final synthesis. If the evidence is related but does not "
+            "fully answer, return a detailed partial analysis instead of refusing.\n"
+            "</deep_analysis>"
+        )
     parts.append(base)
     return "\n\n".join(parts)
 
@@ -93,7 +105,8 @@ def _parse_turn(raw: str) -> dict[str, Any]:
     return {}
 
 
-def _format_tool_result(tool: str, result: list[dict[str, Any]]) -> str:
+def _format_tool_result(tool: str, result: list[dict[str, Any]],
+                        max_chars: int | None = None) -> str:
     """Resultado de tool delimitado y escapado (anti prompt-injection).
 
     El texto del expediente es datos, no instrucciones: cualquier `<tool_result>`
@@ -103,15 +116,15 @@ def _format_tool_result(tool: str, result: list[dict[str, Any]]) -> str:
     for it in result:
         handle = html.escape(str(it.get("handle", "")), quote=False)
         source = html.escape(str(it.get("source_type", "")), quote=False)
-        hint = html.escape(_evidence_hint(it), quote=False)
+        hint = html.escape(_evidence_hint(it, max_chars=max_chars), quote=False)
         lines.append(f"- {handle} ({source}): {hint}")
     return "<tool_result>\n" + "\n".join(lines) + "\n</tool_result>"
 
 
-def _evidence_hint(it: dict[str, Any]) -> str:
+def _evidence_hint(it: dict[str, Any], max_chars: int | None = None) -> str:
     """Describe una evidencia de forma que el modelo vea minuto/hablante/página/filename.
     Sin esto, el modelo no sabía en qué minuto ni quién lo dijo aunque la cita sí lo mostraba."""
-    max_chars = get_settings().AGENT_TOOL_RESULT_MAX_CHARS
+    max_chars = max_chars or get_settings().AGENT_TOOL_RESULT_MAX_CHARS
     text = str(it.get("text", ""))[:max_chars]
     person = ""
     if it.get("person_name"):
@@ -158,7 +171,8 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                     ocr_mode: str | None = None, asr_mode: str | None = None,
                     emit=None, allowed_tools: set[str] | None = None,
                     verify: bool = True, max_steps: int = MAX_STEPS,
-                    parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+                    parameters: dict[str, Any] | None = None,
+                    deep: bool = False) -> dict[str, Any]:
     """Ejecuta el agente: tool loop → síntesis → (opcional) verificación semántica.
 
     `agent_prompt` permite que un agente configurado en el panel dirija la consulta
@@ -185,7 +199,7 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
     # ctx.post_commit; se devuelve en el resultado ("post_commit") y el llamador la
     # ejecuta con case_tools.drain_actions() DESPUÉS de confirmar su transacción.
     try:
-        system = _system_prompt(agent_prompt, parameters)
+        system = _system_prompt(agent_prompt, parameters, deep=deep)
         history = ""
         if hints:
             block = "\n".join(f"- {h}" for h in hints)
@@ -207,6 +221,8 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
         llm = llm or get_llm()
 
         steps = max(1, int(max_steps or MAX_STEPS))
+        steps_exhausted = False
+        tool_errors = 0
         for step in range(steps):
             user = history + "\nWhat do you do next?"
             try:
@@ -230,7 +246,7 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
             allowed, reason = skills.validate_tool(str(tool), allowed_tools)
             if not allowed:
                 result_items = [{"handle": "ERR", "source_type": "error", "text": reason or "tool not allowed"}]
-                degraded = True
+                tool_errors += 1
                 tool_calls.append({"name": str(tool), "arguments": args, "allowed": False})
             else:
                 tool_calls.append({"name": str(tool), "arguments": args, "allowed": True})
@@ -240,7 +256,7 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                 except Exception as exc:  # noqa: BLE001
                     result_items = [{"handle": "ERR", "source_type": "error",
                                      "text": f"Error ejecutando {tool}: {exc}"}]
-                    degraded = True
+                    tool_errors += 1
             # Correcciones: guardamos tool+argumentos exactos para que el servidor
             # pueda aplicarlas de forma determinista cuando el usuario confirme.
             for it in result_items:
@@ -252,10 +268,14 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                     corrections_done.append({"tool": tool, "arguments": args, "text": it.get("text", "")})
             evidence.extend(result_items)
             history += f"\nACTION: {tool}({json.dumps(args, ensure_ascii=False)})\n"
-            history += _format_tool_result(tool, result_items) + "\n"
+            history += _format_tool_result(
+                tool, result_items,
+                max_chars=(get_settings().AGENT_TOOL_RESULT_MAX_CHARS * 3 if deep else None)) + "\n"
         else:
-            # Se agotaron los pasos sin un turno `done`: el resultado es parcial.
-            degraded = True
+            # Se agotaron los pasos sin un turno `done`: el bucle no terminó, pero
+            # puede haber evidencia suficiente. Solo se degrada si la síntesis
+            # tampoco produce claims (más abajo).
+            steps_exhausted = True
 
         evidence = _dedupe_evidence(evidence)
         # Tarjetas de archivo (get_file/list_case_files): no son evidencia citable;
@@ -272,9 +292,9 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                     "evidence_count": 0}
         evidence = primary_evidence
 
-        # Síntesis final con el prompt de respuesta RAG existente
-        system, prompt_id, prompt_version = answering.system_prompt(locale)
-        user = answering.build_user_prompt(question, evidence)
+        # Síntesis final con el prompt de respuesta RAG existente (v3 en modo profundo)
+        system, prompt_id, prompt_version = answering.system_prompt(locale, deep=deep)
+        user = answering.build_user_prompt(question, evidence, history=history_turns, deep=deep)
         try:
             result = llm.complete(system, user)
         except Exception as exc:  # noqa: BLE001
@@ -288,6 +308,8 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                     "corrections_done": corrections_done, "tool_calls": tool_calls,
                     "degraded": True, "evidence_count": len(evidence)}
         validated = answering.parse_and_validate(result.text, evidence, get_settings().ANSWER_MIN_GROUNDING_OVERLAP)
+        if (steps_exhausted or tool_errors) and not validated["claims"]:
+            degraded = True
 
         # Verificación semántica LLM-juez sobre claims con citación válida.
         # El router puede desactivarla para aplicarla él mismo (sync/async/off).
@@ -307,6 +329,9 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
             elif v.get("status") == "needs_review":
                 validated["uncertainties"].append(f"Revisión humana sugerida: {v.get('claim', '')} ({v.get('reason', '')})")
 
+        if validated["claims"]:
+            # Un fallo de tool/parseo no invalida una síntesis con claims citables.
+            degraded = False
         return {
             "claims": validated["claims"],
             "unsupported_claims": unsupported,

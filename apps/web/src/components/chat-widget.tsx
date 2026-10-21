@@ -117,6 +117,7 @@ const STAGE_LABELS: Record<string, string> = {
   accepted: "Preparando la consulta…",
   routing: "Analizando la pregunta…",
   retrieving: "Buscando evidencia…",
+  tool: "Consultando el expediente…",
   reranking: "Ordenando la evidencia…",
   synthesizing: "Redactando…",
   validating: "Verificando citas…",

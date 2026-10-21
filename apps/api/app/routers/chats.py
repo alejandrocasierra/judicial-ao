@@ -425,6 +425,13 @@ def _prepare_turn(case_id: UUID, session_id: UUID, body: ChatMessageIn, p: Princ
         # El agente/modelo del mensaje tiene prioridad; si cambian, la sesión los recuerda.
         agent_id = body.agent_id if body.agent_id is not None else session.get("agent_id")
         model_id = body.model_id if body.model_id is not None else session.get("model_id")
+        if model_id is None:
+            # Sesiones antiguas sin modelo: usar el default de la organización en
+            # vez de caer al LLM global (que en dev es `fake`).
+            default_model = one(c, """SELECT id FROM ai_models
+                                       WHERE organization_id = :o AND is_default = true
+                                       ORDER BY created_at LIMIT 1""", o=p.org_id)
+            model_id = default_model["id"] if default_model else None
         session_changed = (str(agent_id or "") != str(session.get("agent_id") or "")
                            or str(model_id or "") != str(session.get("model_id") or ""))
         if body.ocr_mode is not None or body.asr_mode is not None or session_changed:
@@ -442,6 +449,21 @@ def _prepare_turn(case_id: UUID, session_id: UUID, body: ChatMessageIn, p: Princ
     return session, history, user_msg, ocr_mode, asr_mode, agent_id, model_id
 
 
+def _default_chat_agent(p: Principal) -> str | None:
+    """Agente de chat del sistema para cuando el usuario no elige uno.
+
+    Sin esto, el camino de análisis corre sin prompt de agente ni skills: usa el
+    contrato genérico y pierde las herramientas especializadas (contradicciones,
+    cronología, personas). El usuario no debería tener que seleccionarlo a mano.
+    """
+    with tx(p.org_id, p.user_id) as c:
+        row = one(c, """SELECT id FROM agents
+                         WHERE kind = 'chat' AND is_system = true
+                         ORDER BY (name = 'Asistente del expediente') DESC, name
+                         LIMIT 1""")
+    return str(row["id"]) if row else None
+
+
 def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Request,
                p: Principal, locale: str, case: dict, s, *, emit=None, deadline=None,
                background: BackgroundTasks | None = None) -> dict:
@@ -449,6 +471,8 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     deadline = deadline or deadline_mod.Deadline(s.REQUEST_DEADLINE_MS)
     session, history, user_msg, ocr_mode, asr_mode, agent_id, model_id = _prepare_turn(
         case_id, session_id, body, p)
+    if agent_id is None:
+        agent_id = _default_chat_agent(p)
 
     # Flujo de corrección DETERMINISTA (Fase 6): si el usuario confirma o cancela y
     # hay una corrección pendiente en esta sesión, se aplica/descarta aquí mismo.
@@ -489,6 +513,9 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     decision = intent_profile.refine(decision, body.content,
                                      org_id=p.org_id, user_id=p.user_id)
     intent_value = str(getattr(decision.intent, "value", decision.intent))
+    if decision.intent is intent_service.Intent.ANALYSIS and deadline.budget_ms < s.ANALYSIS_DEADLINE_MS:
+        # El análisis exhaustivo no cabe en el presupuesto de un turno normal.
+        deadline = deadline_mod.Deadline(s.ANALYSIS_DEADLINE_MS)
     _safe_emit(emit, "routing", {"intent": intent_value})
 
     def _query(strategy: str, seed: list[dict] | None = None) -> dict:

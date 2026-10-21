@@ -8,12 +8,13 @@ from __future__ import annotations
 import uuid as _uuid_mod
 import re
 from collections import Counter
+from dataclasses import replace
 from typing import Any
 
 from sqlalchemy.engine import Connection
 
 from app.core.db import one, rows
-from app.services import answering, graph, markdown
+from app.services import answering, graph, intent, markdown, retrieval_plan
 from app.services.case_tools import ToolContext, evidence_item, register
 
 
@@ -159,15 +160,24 @@ def _content_term(query: str) -> str | None:
           "BÃºsqueda hÃ­brida (texto completo + vectores pgvector) en TODO el expediente: "
           "pÃ¡ginas OCR y transcripciones. Puede acotarse a archivos adjuntos con document_ids/media_ids.",
           {"query": {"type": "string", "description": "Pregunta o tÃ©rminos en lenguaje natural"},
-           "k": {"type": "integer", "default": 8, "description": "MÃ¡ximo de resultados"},
+           "k": {"type": "integer", "default": 8, "description": "MÃ¡ximo de resultados (usa 20 para anÃ¡lisis exhaustivo)"},
            "document_ids": {"type": "array", "items": {"type": "string"}, "description": "Opcional: limitar a estos documentos"},
            "media_ids": {"type": "array", "items": {"type": "string"}, "description": "Opcional: limitar a estos audios/videos"}})
 def search_case(conn: Connection, case_id: str, ctx: ToolContext, query: str, k: int = 8,
                 document_ids: list[str] | None = None, media_ids: list[str] | None = None) -> list[dict[str, Any]]:
     doc_ids = [u for u in (_uuid(x) for x in (document_ids or [])) if u] or None
     med_ids = [u for u in (_uuid(x) for x in (media_ids or [])) if u] or None
+    # El agente pide `k` pero `answering.retrieve` usaba su plan por defecto
+    # (top_k global): una búsqueda exhaustiva seguía viendo solo 8 fragmentos.
+    decision = intent.classify(query)
+    plan = retrieval_plan.build(query, decision)
+    target = min(max(1, int(k or plan.final_k)), 40)
+    if target > plan.final_k:
+        plan = replace(plan, final_k=target, candidate_k=max(plan.candidate_k, 4 * target),
+                       max_per_file=max(plan.max_per_file, 4))
     items = answering.retrieve(conn, case_id, query, document_ids=doc_ids, media_ids=med_ids,
-                               ocr_mode=ctx.ocr_mode, asr_mode=ctx.asr_mode)
+                               ocr_mode=ctx.ocr_mode, asr_mode=ctx.asr_mode,
+                               plan=plan, intent=decision.intent)
     # BÃºsqueda AMPLIA (todas las fuentes): ademÃ¡s del hÃ­brido, cubre
     #  (1) transcripciones por TEXTO y por NOMBRE DE HABLANTE, y
     #  (2) coincidencias EXACTAS del tÃ©rmino (insensible a tildes/mayÃºsculas), para que

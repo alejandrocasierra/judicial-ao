@@ -15,7 +15,7 @@ from app.services import query_rewrite, text_terms
 from app.services.intent import Intent, IntentDecision
 
 # Tope de variantes de búsqueda que viajan al SQL / al grafo.
-MAX_QUERIES = 8
+MAX_QUERIES = 12
 
 
 @dataclass(frozen=True)
@@ -56,9 +56,17 @@ def build(question: str, decision: IntentDecision, *,
           settings: Settings | None = None,
           history: list[dict] | None = None) -> RetrievalPlan:
     s = settings or get_settings()
-    final_k = int(s.RETRIEVAL_FINAL_K)
-    candidate_k = max(int(s.RETRIEVAL_CANDIDATE_K), 4 * final_k)
     intent = decision.intent
+    # «Todas las contradicciones», cruces y comparaciones: un top_k de 10 y 2
+    # páginas por archivo solo alcanza para una muestra. El modo profundo amplía
+    # el embudo, reparte menos por archivo y deja que el agente razone más.
+    deep = intent is Intent.ANALYSIS
+    final_k = int(s.DEEP_RETRIEVAL_FINAL_K if deep else s.RETRIEVAL_FINAL_K)
+    candidate_k = max(int(s.DEEP_RETRIEVAL_CANDIDATE_K if deep else s.RETRIEVAL_CANDIDATE_K),
+                      4 * final_k)
+    max_per_file = int(s.DEEP_MAX_PER_FILE if deep else s.RETRIEVAL_MAX_PER_FILE)
+    max_per_page = int(s.DEEP_MAX_PER_PAGE if deep else s.RETRIEVAL_MAX_PER_PAGE)
+    doc_quota = 0.4 if deep else float(s.RETRIEVAL_DOC_QUOTA)
 
     rewritten = query_rewrite.rewrite(question, history=history)
     queries = _merge_queries(question, rewritten)
@@ -72,9 +80,9 @@ def build(question: str, decision: IntentDecision, *,
         queries=queries,
         candidate_k=candidate_k,
         final_k=final_k,
-        doc_quota=float(s.RETRIEVAL_DOC_QUOTA),
-        max_per_file=int(s.RETRIEVAL_MAX_PER_FILE),
-        max_per_page=int(s.RETRIEVAL_MAX_PER_PAGE),
+        doc_quota=doc_quota,
+        max_per_file=max_per_file,
+        max_per_page=max_per_page,
         enable_rerank=True,
         expand_neighbors=intent in (Intent.LOOKUP, Intent.ANALYSIS, Intent.READ),
         use_graph=intent in (Intent.LOOKUP, Intent.ANALYSIS),

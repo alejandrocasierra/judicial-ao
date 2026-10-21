@@ -418,14 +418,73 @@ Backfill e inspección manual:
 
 ---
 
+### 1.18 Análisis profundo, continuidad y calidad del chat
+
+**Síntoma**: «haga una búsqueda exhaustiva sobre todas las contradicciones…» respondía
+«No se encontró evidencia» o una respuesta parcial de 1 cita; cerrar el navegador
+parecía perder el hilo; el agente no usaba skills y solo miraba una muestra.
+
+**Causas medidas** (no supuestas):
+
+1. El modelo por defecto era `gemini-flash-lite-latest`; `gemini-2.5-flash` y
+   `gemini-2.5-pro` devuelven **404** con la clave configurada. Los que responden
+   son `gemini-flash-lite-latest`, `gemini-flash-latest` y `gemini-3.8-flash`.
+2. El prompt `answer_question.v2` limita a **4 afirmaciones / ~120 palabras**; el
+   compositor recorta a **3 fragmentos** y 4 citas; `RETRIEVAL_FINAL_K=10` y 2
+   páginas por archivo; el agente hacía **3 pasos** en análisis y `search_case`
+   ignoraba el `k` (siempre 8).
+3. `abstention` y `_fts_query` usaban `content_terms`, que descarta palabras de
+   dominio («expediente», «audiencia», «dice»). «¿Qué dice el expediente sobre la
+   audiencia?» daba cobertura 0, retornaba `[]` y quedaba **cacheado vacío** 10 min.
+4. La síntesis no recibía el historial (de ahí «no queda claro a qué “lo anterior”
+   se refiere») y la reescritura solo detectaba deícticos al inicio.
+5. Sin agente seleccionado no se cargaban skills; un nombre de archivo en la
+   pregunta no se resolvía a `document_id`; `chat_sessions.updated_at` no se tocaba
+   al insertar mensajes (la sesión más reciente no era la primera al recargar).
+
+**Cambios**:
+
+| Pieza | Regla |
+|---|---|
+| Modo profundo | `intent=analisis`: presupuesto `ANALYSIS_DEADLINE_MS=90 s`; `DEEP_RETRIEVAL_FINAL_K=30`, candidatos 240, 6 por archivo, 3 por página |
+| Prompt | `answer_question.v3.md`: hasta 20 afirmaciones / 900 palabras, enumera contradicciones con versión A/B y citas, y devuelve `partial` con inventario y límites en vez de `insufficient` si hay material relacionado |
+| Compositor | modo profundo: 20 citas, 6 por archivo, 12 fragmentos; no aborta por cobertura léxica baja |
+| Agente | agente de chat del sistema automático (skills/tools), 8 pasos, `search_case` respeta `k` (hasta 40) y resultados 3× más largos |
+| Continuidad | historial en el prompt de síntesis; reescritura detecta «lo anterior/eso/esto» en preguntas cortas; `0054` toca la sesión en cada mensaje |
+| Recuperación | `text_terms.search_terms` para FTS y abstención (conserva palabras de dominio); `RETRIEVAL_CACHE_VERSION` invalida vacíos cacheados |
+| Archivos | un nombre de archivo en la pregunta se resuelve a `document_id` y acota la recuperación |
+| Modelo | por defecto `gemini-3.8-flash`; `REQUEST_DEADLINE_MS=30 s`, `ANALYSIS_DEADLINE_MS=90 s` |
+
+**Antes / después** (mismo expediente, misma pregunta):
+
+| Caso | Antes | Después |
+|---|---|---|
+| Contradicciones exhaustivas | `insufficient`, 0 citas, 71 caracteres | `direct`, 6–10 citas, 2.900–3.600 caracteres |
+| «¿Qué dice el expediente sobre la audiencia?» | `insufficient` en 0,1 s | `direct`, 3 citas, ~500 caracteres |
+| Seguimiento «qué dice Jorge Rojas sobre lo anterior» | «no queda claro a qué se refiere» | responde con el pagaré y el interrogatorio, con citas |
+| Documento nombrado (`0015 EscritoContestación…`) | `insufficient` | `direct`, 2 citas, 9 s |
+| Lote de 21 preguntas | — | temas 8/8, contradicciones 4/4, exhaustiva 1/1, entidades 3/4 |
+
+**Banco de pruebas**: `scripts/eval_chat_quality.py` genera preguntas de entidades,
+documentos, contradicciones, temas y la pregunta exhaustiva desde la propia base,
+las ejecuta contra la API y guarda JSONL + resumen (abstención, citas, degradación,
+longitud, p50/p95). `--limit`, `--per-type`, `--types`, `--model-id`.
+
+**Límite conocido**: la respuesta profunda tarda 30–60 s con `gemini-3.8-flash`
+(la UI muestra «Consultando el expediente…»); el modo normal sigue en ~10–20 s.
+El corpus de preguntas se puede escalar a miles con `--per-type` alto; el coste y
+la latencia son del proveedor, no del pipeline.
+
+---
+
 ## 2. Propiedad de archivos
 
 | Workstream | Archivos |
 |---|---|
 | **A — Retrieval** | `services/intent.py`, `services/retrieval_plan.py`, `services/retrieval_rank.py`, `services/query_rewrite.py`, `services/graph_expand.py`, `services/retrieval_crossencoder.py`, `services/answering.py`, `services/abstention.py`, `services/indexing.py`, tests unitarios de esos módulos |
 | **B — Chat/velocidad** | `services/compose.py`, `services/occurrences.py`, `services/deadline.py`, `services/cache.py`, `services/memory.py`, `services/skills.py`, `routers/query.py`, `routers/chats.py`, `services/agent.py`, `services/verification.py`, `services/case_tools/read.py`, `services/case_tools/__init__.py`, `services/role_answer.py`, `packages/i18n/*.json`, tests unitarios/integración de esos módulos |
-| **C — UI/prompts** | `apps/web/src/lib/api.ts`, `apps/web/src/components/chat-widget.tsx`, `apps/web/src/components/markdown.tsx` (si hace falta), `packages/prompts/answer_question.v2.md`, `agent_system.v8.md`, `verify_answer.v2.md` |
-| **D — Evals/tests** | `evals/**`, `scripts/run_evals.py`, `scripts/eval_matrix.py`, `scripts/bench_chat.py`, `scripts/load_chat.py`, `app/providers/recording.py`, `tests/behavior/test_chat_pagos.py`, `tests/unit/test_eval_*.py`, `tests/unit/test_judge.py`, `tests/unit/test_recording.py`, `.github/workflows/ci.yml` (solo añadir paso) |
+| **C — UI/prompts** | `apps/web/src/lib/api.ts`, `apps/web/src/components/chat-widget.tsx`, `apps/web/src/components/markdown.tsx` (si hace falta), `packages/prompts/answer_question.v2.md`, `packages/prompts/answer_question.v3.md`, `agent_system.v8.md`, `verify_answer.v2.md` |
+| **D — Evals/tests** | `evals/**`, `scripts/run_evals.py`, `scripts/eval_matrix.py`, `scripts/bench_chat.py`, `scripts/load_chat.py`, `scripts/eval_chat_quality.py`, `app/providers/recording.py`, `tests/behavior/test_chat_pagos.py`, `tests/unit/test_eval_*.py`, `tests/unit/test_judge.py`, `tests/unit/test_recording.py`, `.github/workflows/ci.yml` (solo añadir paso) |
 | **Integrador** | `services/text_terms.py`, `core/config.py`, `schemas.py`, migraciones `0047`, contrato, integración final |
 
 ---

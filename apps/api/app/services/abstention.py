@@ -32,21 +32,30 @@ _STOPWORDS = {
 def _extract_terms(question: str) -> list[str]:
     """Extrae términos significativos de la pregunta (sin stopwords).
 
-    Devuelve RAÍCES: "pagos" -> "pago", para que el ILIKE encuentre también
-    "pago" y no se abstenga por una diferencia morfológica.
+    No usa `content_terms` porque ese filtro está pensado para el *grounding* de
+    afirmaciones y descarta palabras de reporte como «dice» o «expediente». En una
+    pregunta esas palabras sí identifican el tema: «¿qué dice el expediente sobre
+    la audiencia?» se abstenía con cobertura 0 aunque hubiera 403 fragmentos.
+    Devuelve RAÍCES: "pagos" -> "pago", para que el ILIKE encuentre también "pago".
     """
     from app.services import text_terms
 
-    # Los números no se usan para abstención: el mismo monto puede aparecer como
-    # "$80.000.000" o "80000000". El grounding del claim sí los exige después.
-    return [text_terms.stem(t) for t in text_terms.content_terms(question)
-            if not t[0].isdigit()]
+    out: list[str] = []
+    seen: set[str] = set()
+    for token in text_terms.search_terms(question):
+        if token[0].isdigit() or token in seen:
+            continue
+        seen.add(token)
+        out.append(text_terms.stem(token))
+    return out
 
 
 def term_coverage(conn: Connection, case_id: str, question: str) -> float:
     terms = _extract_terms(question)
     if not terms:
-        return 0.0
+        # Sin términos temáticos no hay evidencia para abstenerse: que decida el
+        # retrieval. Devolver 0 aquí convertía preguntas válidas en «no hay nada».
+        return 1.0
     present = rows(conn, """
         SELECT term FROM unnest(CAST(:terms AS text[])) AS term
         WHERE EXISTS (

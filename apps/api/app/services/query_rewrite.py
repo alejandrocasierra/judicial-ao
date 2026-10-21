@@ -33,6 +33,14 @@ _ELLIPTICAL = (
     "lo mismo", "lo anterior", "tambien", "ademas", "entonces",
     "y sobre", "y del", "y de la",
 )
+# Deícticos que pueden aparecer en medio de una pregunta corta: «qué dijo X
+# sobre lo anterior». Antes solo se miraba el arranque y estos seguimientos se
+# quedaban sin contexto.
+_DEICTIC_ANY = (
+    "lo anterior", "sobre eso", "de eso", "sobre esto", "de esto",
+    "lo mismo", "dicho", "al respecto", "esa misma", "ese mismo",
+    "el mismo tema", "en ese punto",
+)
 
 # Pronombres personales: se comprueban sobre el texto original porque `norm`
 # elimina la tilde y «él» quedaría indistinguible del artículo «el».
@@ -47,7 +55,10 @@ def _is_elliptical(question: str) -> bool:
     folded = _fold(question)
     if _PRONOUN_START.match((question or "").lower().lstrip("¿¡ ")):
         return True
-    return any(folded.startswith(prefix) for prefix in _ELLIPTICAL)
+    if any(folded.startswith(prefix) for prefix in _ELLIPTICAL):
+        return True
+    # Pregunta corta que contiene un deíctico: «qué dice Jorge Rojas sobre lo anterior».
+    return len(folded.split()) <= 14 and any(marker in folded for marker in _DEICTIC_ANY)
 
 
 def _history_text(turn: Any) -> str:

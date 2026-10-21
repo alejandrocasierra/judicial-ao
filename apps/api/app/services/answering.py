@@ -21,6 +21,11 @@ from app.services.retrieval_plan import RetrievalPlan, build as build_plan, repl
 
 log = logging.getLogger(__name__)
 
+# Súbelo cuando cambie la lógica de recuperación/abstención. Sin esto, un
+# resultado vacío cacheado sobrevive 10 minutos al arreglo y el usuario sigue
+# viendo «no hay evidencia» aunque el bug ya esté corregido.
+RETRIEVAL_CACHE_VERSION = "r3-2026.10.21"
+
 
 def _cache_namespace(case_id: str) -> str:
     return f"retrieval:{case_id}"
@@ -37,6 +42,7 @@ def _cache_key(case_id: str, question: str, plan: RetrievalPlan,
         ",".join(sorted(media_ids or [])),
     ])
     raw = "|".join([
+        RETRIEVAL_CACHE_VERSION,
         str(case_id),
         text_terms.norm(question).strip(),
         modes,
@@ -101,7 +107,7 @@ def _fts_query(queries: list[str] | tuple[str, ...]) -> str:
     parts: list[str] = []
     seen: set[str] = set()
     for query in list(queries)[:4]:
-        for term in text_terms.content_terms(query):
+        for term in text_terms.search_terms(query):
             if term[0].isdigit():
                 # Identificadores enteros (599, 2834, 001) sÃ­ son tÃ©rminos FTS;
                 # los montos con puntos/coma se dejan al vector/legacy.
@@ -512,25 +518,56 @@ def _source_label(it: dict) -> str:
             f"speaker:{it.get('speaker') or 'unknown'}")
 
 
-def build_user_prompt(question: str, items: list[dict]) -> str:
+def build_user_prompt(question: str, items: list[dict], history: list[dict] | None = None,
+                      deep: bool = False) -> str:
     """El contenido del expediente se escapa (html.escape) para que un texto malicioso
     no pueda cerrar la etiqueta <evidence> ni inyectar etiquetas de control."""
     blocks = [f'<evidence id="{it["handle"]}" source="{html.escape(_source_label(it), quote=True)}">\n'
               f'{html.escape(it["text"], quote=False)}\n</evidence>' for it in items]
-    return ("<question>\n" + html.escape(question, quote=False) + "\n</question>\n\n" + "\n".join(blocks))
+    parts: list[str] = []
+    convo = _history_block(history)
+    if convo:
+        parts.append(f"<conversation_history>\n{html.escape(convo, quote=False)}\n</conversation_history>")
+    if deep:
+        parts.append("<analysis_mode>exhaustive</analysis_mode>")
+    parts.append("<question>\n" + html.escape(question, quote=False) + "\n</question>")
+    parts.append("\n".join(blocks))
+    return "\n\n".join(parts)
 
 
-def system_prompt(locale: str) -> tuple[str, str, str]:
+def _history_block(history: list[dict] | None, max_turns: int = 6,
+                   max_chars: int = 2400) -> str:
+    """Últimos turnos en texto plano, acotados: resuelven «lo anterior» sin inflar el prompt."""
+    lines: list[str] = []
+    for turn in (history or [])[-max_turns:]:
+        if not isinstance(turn, dict):
+            continue
+        role = str(turn.get("role") or "")
+        content = " ".join(str(turn.get("content") or "").split())
+        if not content:
+            continue
+        lines.append(f"{'USUARIO' if role == 'user' else 'ASISTENTE'}: {content[:600]}")
+    text = "\n".join(lines)
+    return text[-max_chars:]
+
+
+def system_prompt(locale: str, deep: bool = False) -> tuple[str, str, str]:
     s = get_settings()
     path = s.path(s.PROMPTS_DIR)
     target = path / "answer_question.v2.md"
+    if deep and (path / "answer_question.v3.md").exists():
+        target = path / "answer_question.v3.md"
     if not target.exists():
         target = path / "answer_question.v1.md"
     raw = target.read_text(encoding="utf-8")
     meta, body = raw.split("---", 2)[1], raw.split("---", 2)[2]
     pid = re.search(r"prompt_id:\s*(\S+)", meta).group(1)
     ver = re.search(r"version:\s*(\S+)", meta).group(1)
-    return body.strip().replace("{{LOCALE}}", locale), pid, ver
+    rendered = body.strip().replace("{{LOCALE}}", locale)
+    if deep:
+        rendered = (rendered.replace("{{MAX_CLAIMS}}", str(s.DEEP_MAX_CLAIMS))
+                    .replace("{{MAX_WORDS}}", "900"))
+    return rendered, pid, ver
 
 
 _WORD = re.compile(r"[0-9]+(?:[.,][0-9]+)*|[^\W\d_]{3,}", re.U)

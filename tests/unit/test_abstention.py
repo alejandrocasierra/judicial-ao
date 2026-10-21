@@ -31,3 +31,14 @@ def test_ut_abs_03_should_not_abstain_with_high_coverage():
     monkeypatch.setattr(abstention, "term_coverage", lambda _c, _case, _q: 0.8)
     assert abstention.should_abstain(MagicMock(), "case", "pago contrato", min_coverage=0.6) is False
     monkeypatch.undo()
+
+
+def test_ut_abs_04_domain_words_count_for_coverage():
+    """«expediente» y «audiencia» identifican el tema: no son ruido de reporte."""
+    terms = abstention._extract_terms("¿Qué dice el expediente sobre la audiencia?")
+    assert "expediente" in terms and "audiencia" in terms
+
+
+def test_ut_abs_05_sin_terminos_no_se_abstiene():
+    """Sin términos temáticos decide el retrieval, no una abstención automática."""
+    assert abstention.term_coverage(MagicMock(), "case", "¿qué?") == 1.0
