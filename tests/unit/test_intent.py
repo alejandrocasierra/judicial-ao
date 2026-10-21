@@ -272,3 +272,24 @@ def test_int_29_los_guardarrailes_de_precision_siguen_en_pie():
     assert not intent.has_location_signal("Localiza el nombre del perito")
     assert intent.has_location_signal("¿Dónde aparece el pagaré 001?")
     assert intent.classify("Estabas equivocado: el pago fue en mayo.").intent is INT.CORRECTION
+
+
+class _SlowLLM:
+    def complete(self, system: str, user: str):
+        import time
+
+        time.sleep(0.3)
+        return '{"intent": "analisis", "confidence": 0.8}'
+
+
+def test_int_30_el_l2_tiene_corte_duro_y_no_bloquea_el_turno(monkeypatch):
+    from concurrent.futures import TimeoutError as FuturesTimeout
+
+    with pytest.raises(FuturesTimeout):
+        intent._call_with_timeout(_SlowLLM(), "s", "u", 0.05)
+
+    monkeypatch.setattr(intent, "_call_with_timeout",
+                        lambda *a, **k: (_ for _ in ()).throw(FuturesTimeout()))
+    decision = intent.classify("háblame del pagaré", llm=_SlowLLM())
+    assert decision.intent is INT.LOOKUP
+    assert decision.source == "rules"

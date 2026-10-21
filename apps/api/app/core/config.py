@@ -267,6 +267,7 @@ class Settings(BaseSettings):
     # Perfil de intención (0052). `INTENT_LLM_ENABLED` solo tiene efecto si
     # LLM_ROUTING define "intent" o "summary"; sin routing el router es 100 % reglas.
     INTENT_LLM_ENABLED: bool = True
+    INTENT_LLM_TIMEOUT_S: float = Field(default=2.5, gt=0)
     INTENT_PROFILE_RETENTION_DAYS: int = Field(default=365, ge=0)
     INTENT_ALERT_WEBHOOK: str = ""
     # Espacio vectorial PROPIO del perfil: no se mezcla con el índice de chunks.

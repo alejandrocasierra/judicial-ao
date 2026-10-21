@@ -15,6 +15,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -221,6 +224,35 @@ def _llm_text(llm: Any, system: str, user: str) -> str:
     return str(getattr(result, "text", "") or "")
 
 
+def _call_with_timeout(llm: Any, system: str, user: str, timeout: float) -> str:
+    """El LLM no puede comerse el deadline del turno: se corta a los N segundos.
+
+    `LLM_TIMEOUT_SECONDS` (60 s en producción) es para redactar respuestas, no
+    para clasificar. Si el proveedor se cuelga, decide la regla.
+    """
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
+        return pool.submit(_llm_text, llm, system, user).result(timeout=timeout)
+    finally:
+        pool.shutdown(wait=False)
+
+
+# Cortacircuitos: tras 3 timeouts seguidos, el L2 queda apagado 5 minutos. Evita
+# acumular hilos colgados y latencia durante una caída del proveedor.
+_LLM_TRIP = {"failures": 0, "until": 0.0}
+
+
+def _llm_available() -> bool:
+    return time.monotonic() >= _LLM_TRIP["until"]
+
+
+def _trip_llm() -> None:
+    _LLM_TRIP["failures"] += 1
+    if _LLM_TRIP["failures"] >= 3:
+        _LLM_TRIP["until"] = time.monotonic() + 300.0
+        _LLM_TRIP["failures"] = 0
+
+
 def _parse_json_object(raw: str) -> dict | None:
     txt = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.M).strip()
     try:
@@ -333,10 +365,22 @@ def _ask_llm(question: str, llm: Any, history: list[dict] | None = None) -> Inte
     context = f"Intención del turno anterior: {previous.value}.\n" if previous else ""
     user = f"{context}Pregunta: {question}"
     try:
-        raw = _llm_text(llm, system, user)
+        from app.core.config import get_settings
+
+        timeout = float(getattr(get_settings(), "INTENT_LLM_TIMEOUT_S", 2.5))
+    except Exception:  # noqa: BLE001 — sin settings no hay L2
+        timeout = 2.5
+    try:
+        raw = _call_with_timeout(llm, system, user, timeout)
+    except FuturesTimeout:
+        log.warning("intent llm timeout after %.1fs: decide la regla", timeout)
+        _trip_llm()
+        return None
     except Exception as exc:  # noqa: BLE001 — el LLM es opcional
         log.warning("intent llm failed: %s", exc)
+        _trip_llm()
         return None
+    _LLM_TRIP["failures"] = 0
     data = _parse_json_object(raw)
     if not data:
         return None
@@ -411,6 +455,8 @@ def intent_llm():
 
 
 def _should_ask_llm(decision: IntentDecision) -> bool:
+    if not _llm_available():
+        return False
     if decision.confidence >= LLM_REVIEW_MAX:
         return False
     return decision.reason not in GUARDED_REASONS and decision.reason != "followup_inherit"
