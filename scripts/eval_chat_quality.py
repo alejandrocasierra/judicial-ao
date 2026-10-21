@@ -199,6 +199,7 @@ def _run_one(api: str, headers: dict, case_id: str, model_id: str | None,
         "citations_detail": body.get("citations") or [],
         "model_run_id": body.get("model_run_id"),
         "uncertainties": body.get("uncertainties") or [],
+        "cached": bool(body.get("cached")),
         "answer": answer,
     }
 

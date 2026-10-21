@@ -233,6 +233,10 @@ class Settings(BaseSettings):
     # conscientemente que los vectores antiguos son compatibles.
     RETRIEVAL_ALLOW_EMBEDDING_FALLBACK: bool = False
     RETRIEVAL_CACHE_TTL_SECONDS: int = Field(default=600, ge=0)
+    # Respuesta completa reutilizable para una pregunta repetida del mismo
+    # usuario/expediente/modelo, con la misma versión de pipeline y evidencia.
+    # 0 desactiva. Ahorra la llamada al LLM y el retrieval.
+    ANSWER_CACHE_TTL_SECONDS: int = Field(default=86400, ge=0)
     # Presupuesto de latencia de un turno. Al agotarse se degrada la respuesta
     # (sin juez, sin rerank o con la mejor evidencia disponible) en vez de colgar.
     REQUEST_DEADLINE_MS: int = Field(default=12000, gt=0)

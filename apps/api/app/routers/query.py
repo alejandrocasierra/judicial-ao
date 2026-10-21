@@ -6,6 +6,8 @@ Markdown. El router solo orquesta (routing → retrieval → síntesis → valid
 """
 from __future__ import annotations
 
+import hashlib
+import html
 import json
 import logging
 import re
@@ -23,10 +25,10 @@ from app.core.i18n import negotiate, t
 from app.providers.llm import get_llm
 from app.schemas import QueryIn
 from app.security.deps import Principal, case_access, current_principal
-from app.services import (agent, answering, audit, case_tools, compose, deadline as deadline_mod,
-                          intent as intent_service, intent_profile, metrics, query_hints,
-                          ratelimit, role_answer,
-                          skills, text_terms, verification)
+from app.services import (agent, answering, audit, cache, case_tools, compose,
+                          deadline as deadline_mod, intent as intent_service, intent_profile,
+                          metrics, query_hints, ratelimit, role_answer, skills, text_terms,
+                          verification)
 from app.services.compose import ComposeResult
 
 router = APIRouter(prefix="/cases/{case_id}", tags=["ai"])
@@ -137,6 +139,84 @@ def _normalize_seed_items(items: list[dict] | None) -> list[dict]:
 
 def _pg_array(values: list[object]) -> str:
     return "{" + ",".join(str(v) for v in values) + "}"
+
+
+ANSWER_CACHE_VERSION = "r1-2026.10.22"
+_CONTEXTUAL_QUESTION = re.compile(
+    r"\b(lo anterior|eso|esto|el mismo|la misma|dich[oa]|anterior|sigue|entonces|"
+    r"y el|y la|tambi[eé]n|aquel|aquella)\b", re.I)
+
+
+def _answer_cache_key(conn, case_id: str, body, p: Principal, s,
+                      history: list[dict] | None, locale: str,
+                      ocr_mode: str | None, asr_mode: str | None) -> str | None:
+    """Clave conservadora para reutilizar una respuesta ya calculada.
+
+    Incluye usuario, expediente, modelo, agente, estrategia, versión de pipeline,
+    evidencia y (solo si la pregunta es dependiente del contexto) los últimos
+    turnos. Un expediente recién subido/reprocesado cambia la clave.
+    """
+    if body.attachments or not getattr(s, "ANSWER_CACHE_TTL_SECONDS", 0):
+        return None
+    try:
+        evidence = one(conn, """
+            SELECT
+              (SELECT count(*) FROM documents WHERE case_id = :c) AS docs,
+              coalesce((SELECT max(created_at)::text FROM documents WHERE case_id = :c), '') AS docs_at,
+              (SELECT count(*) FROM media WHERE case_id = :c) AS media,
+              coalesce((SELECT max(created_at)::text FROM media WHERE case_id = :c), '') AS media_at,
+              (SELECT count(*) FROM document_pages dp
+                 JOIN documents d ON d.id = dp.document_id WHERE d.case_id = :c) AS pages,
+              (SELECT count(*) FROM transcript_segments ts
+                 JOIN media m ON m.id = ts.media_id WHERE m.case_id = :c) AS segments,
+              (SELECT count(*) FROM claims WHERE case_id = :c) AS claims,
+              (SELECT count(*) FROM contradictions WHERE case_id = :c) AS contradictions
+        """, c=str(case_id))
+    except Exception:  # noqa: BLE001 — sin versión de evidencia no se cachea
+        return None
+    history_hash = ""
+    if _CONTEXTUAL_QUESTION.search(body.question or ""):
+        history_hash = hashlib.sha256(json.dumps(
+            [{"role": str(turn.get("role") or ""),
+              "content": str(turn.get("content") or "")[:500]}
+             for turn in (history or [])[-4:]],
+            ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+    raw = "|".join([
+        ANSWER_CACHE_VERSION,
+        str(s.PIPELINE_VERSION),
+        str(p.user_id),
+        str(case_id),
+        str(body.model_id or ""),
+        str(body.agent_id or ""),
+        str(body.strategy or ""),
+        text_terms.norm(body.question),
+        locale,
+        ocr_mode or "",
+        asr_mode or "",
+        json.dumps(evidence, ensure_ascii=False, sort_keys=True, default=str),
+        history_hash,
+    ])
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _clean_ocr_context(llm, snippet: str) -> str:
+    """Reescribe el fragmento OCR sucio en una frase jurídica, sin añadir hechos."""
+    if not snippet:
+        return ""
+    system = (
+        "Eres editor jurídico. Reescribe el fragmento OCR en UNA sola oración "
+        "clara y fiel. No añadas hechos, cifras, nombres ni atribuciones que no "
+        "estén en el fragmento. Si empieza o termina a mitad de palabra, ignora "
+        "esa parte; no uses corchetes, puntos suspensivos ni marcas de corte. "
+        "No expliques el proceso. Devuelve solo la oración."
+    )
+    try:
+        result = llm.complete(system, f"<fragmento>{html.escape(snippet, quote=False)}</fragmento>")
+        text = str(getattr(result, "text", result) or "").strip()
+        text = re.sub(r"^```.*?```$", "", text, flags=re.S).strip()
+        return " ".join(text.split())[:600]
+    except Exception:  # noqa: BLE001 — si falla, se usa el fragmento original
+        return ""
 
 
 def _seed_handle(seed: dict, items: list[dict]) -> str | None:
@@ -302,6 +382,25 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     corrections_done: list[dict] = []
     coverage: float | None = None
     tool_calls: list[dict] = []
+
+    # Pregunta repetida del mismo usuario/expediente/modelo: reutilizar la
+    # respuesta completa ahorra retrieval, agente y tokens. La clave incluye la
+    # versión de evidencia y de pipeline, así que un expediente nuevo no la usa.
+    answer_key = None
+    try:
+        with tx(p.org_id, p.user_id) as c:
+            answer_key = _answer_cache_key(c, str(case_id), body, p, s, history,
+                                           locale, ocr_mode, asr_mode)
+        if answer_key:
+            cached = cache.get_json("answer", answer_key)
+            if isinstance(cached, dict) and cached.get("answer"):
+                cached = dict(cached)
+                cached["cached"] = True
+                _safe_emit(emit, "done", {"answer_kind": cached.get("answer_kind"),
+                                          "cached": True})
+                return cached
+    except Exception:  # noqa: BLE001 — la caché nunca rompe el turno
+        log.debug("answer cache read failed", exc_info=True)
 
     deadline = deadline or deadline_mod.Deadline(s.REQUEST_DEADLINE_MS)
     decision = intent_decision
@@ -546,6 +645,14 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             # registradas, sin inventar cifras ni atribuciones.
             first = str(seeded_claims[0]["text"]).rstrip(".")
             second = str(seeded_claims[1]["text"]).rstrip(".")
+            for article in ("El ", "La ", "Los ", "Las ", "Un ", "Una "):
+                if first.startswith(article):
+                    first = article.lower() + first[len(article):]
+                    break
+            for article in ("El ", "La ", "Los ", "Las ", "Un ", "Una "):
+                if second.startswith(article):
+                    second = article.lower() + second[len(article):]
+                    break
             summary = f"La contradicción consiste en que {first}, mientras que {second}."
             seeded_claims.insert(0, {"text": summary,
                                      "citations": [seeded_claims[0]["citations"][0]]})
@@ -555,8 +662,10 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         if context_seed is not None:
             context_handle = _seed_handle(context_seed, items)
             if context_handle:
+                raw_context = str(context_seed["context_text"])[:600]
+                cleaned_context = _clean_ocr_context(llm, raw_context)
                 seeded_claims.append({
-                    "text": str(context_seed["context_text"])[:600],
+                    "text": cleaned_context or raw_context,
                     "citations": [context_handle],
                 })
         if seeded_claims:
@@ -745,16 +854,25 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
 
     _safe_emit(emit, "done", {"answer_kind": composed.answer_kind, "degraded": degraded,
                               "intent": intent_value, "citations": len(citations)})
-    return {"answer": composed.answer, "answer_kind": composed.answer_kind, "intent": intent_value,
-            "degraded": degraded, "claims": claims, "citations": citations,
-            "citations_used": [c["citation_id"] for c in citations],
-            "unsupported_claims": [u["text"] for u in validated["unsupported_claims"]],
-            "uncertainties": uncertainties,
-            "related_contradictions": related, "knowledge_type": "case", "file_cards": file_cards,
-            "corrections_pending": corrections_pending, "corrections_done": corrections_done,
-            "pending_correction": corrections_pending[0] if corrections_pending else None,
-            "model_run_id": str(run["id"]), "evidence_count": len(items),
-            "occurrences": [], "occurrences_term": term, "occurrences_note": note}
+    response = {"answer": composed.answer, "answer_kind": composed.answer_kind,
+                "intent": intent_value, "degraded": degraded, "claims": claims,
+                "citations": citations,
+                "citations_used": [c["citation_id"] for c in citations],
+                "unsupported_claims": [u["text"] for u in validated["unsupported_claims"]],
+                "uncertainties": uncertainties,
+                "related_contradictions": related, "knowledge_type": "case",
+                "file_cards": file_cards,
+                "corrections_pending": corrections_pending,
+                "corrections_done": corrections_done,
+                "pending_correction": corrections_pending[0] if corrections_pending else None,
+                "model_run_id": str(run["id"]), "evidence_count": len(items),
+                "occurrences": [], "occurrences_term": term, "occurrences_note": note}
+    if answer_key and not degraded and not body.attachments:
+        try:
+            cache.set_json("answer", answer_key, response, s.ANSWER_CACHE_TTL_SECONDS)
+        except Exception:  # noqa: BLE001 — la caché nunca rompe el turno
+            log.debug("answer cache write failed", exc_info=True)
+    return response
 
 
 def _should_locate(decision, answer_kind: str, question: str) -> bool:

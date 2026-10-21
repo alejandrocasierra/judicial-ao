@@ -89,8 +89,15 @@ def _context_snippet(text: str) -> str:
     folded = text.lower()
     for term in ("1,35", "1.35", "capital debido", "capitalizaci", "en blanco", "interes"):
         index = folded.find(term)
-        if index >= 0:
-            return " ".join(text[max(0, index - 240):index + 480].split())
+        if index < 0:
+            continue
+        start = max(0, index - 320)
+        boundary = text.rfind(". ", max(0, index - 380), index)
+        if boundary >= 0:
+            start = boundary + 2
+        end = text.find(". ", index)
+        end = len(text) if end < 0 else end + 2
+        return " ".join(text[start:end].split())[:700]
     return ""
 
 

@@ -479,11 +479,21 @@ texto citado (términos y números), comprueba el tipo de pregunta contra
 distinto audita cada claim. No basta con que la respuesta cite: se mide si lo
 citado sostiene lo afirmado. El cierre de los cuatro casos (Administraciones,
 título valor, 0013 y diligencia) dio 4/4 fieles, 0 números fuera de fuente, 100 %
-de citas resueltas, 100 % de claims respaldadas y ambas versiones de la
-contradicción, con `worst: []`. La muestra amplia de 20 quedó en 95 % de
-respuestas totalmente fieles y 0 % de números fuera de fuente; las 3 abstenciones
-restantes son preguntas sin evidencia y dos contradicciones quedan parciales por
-cobertura, no por afirmaciones inventadas.
+de citas resueltas, 100 % de claims respaldadas (chequeo léxico y juez) y ambas
+versiones de la contradicción, con `worst: []`. La muestra amplia de 20 quedó en 95 % de respuestas totalmente
+fieles y 0 % de números fuera de fuente; las 3 abstenciones restantes son
+preguntas sin evidencia y dos contradicciones quedan parciales por cobertura, no
+por afirmaciones inventadas.
+
+**Memoria y reutilización**: los turnos incluyen los últimos 2 intercambios del
+mismo usuario/expediente en sesiones anteriores; una pregunta repetida del mismo
+usuario, expediente, modelo, agente, estrategia, pipeline y versión de evidencia
+se sirve desde `cache` (`cached: true`) sin retrieval ni LLM. Las preguntas
+contextuales incluyen el hash de los últimos turnos; con adjuntos no se cachea.
+**Agentes**: contradicción/análisis usan el «Cronista probatorio» y el resto el
+«Asistente del expediente»; se cargan prompt y skills sin que el usuario los
+mencione. **Partes**: las preguntas de rol/partes usan la tabla `parties`
+(demandados=2, partes=24), no menciones sueltas de páginas.
 
 **Límite conocido**: la respuesta profunda tarda 30–60 s con `gemini-3.8-flash`
 (la UI muestra «Consultando el expediente…»); el modo normal sigue en ~10–20 s.

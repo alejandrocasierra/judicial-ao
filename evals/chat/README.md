@@ -114,11 +114,11 @@ inventadas; el `título valor` de los cuatro casos da 100 %.
 | Caso | Resultado |
 |---|---|
 | **Administraciones Judiciales Ltda.** (entidad) | 1 claim, 3 citas; el certificado incluye la gerente (p. 107). Sin “Tribunal” inventado. `supported`. |
-| **Título valor base** (contradicción) | 4 claims, 1 cita (p. 69); Versión A ($1.815.000.000), Versión B ($1.528.030.000), frase de contraste y el fragmento de la contestación con la tasa del 1,35 %. Todas `supported`. |
+| **Título valor base** (contradicción) | 6 claims, 2 citas; Versión A ($1.815.000.000), Versión B ($1.528.030.000), frase de contraste y el fragmento de la contestación **limpiado por el modelo** con la tasa del 1,35 % y $209.722.117. Todas `supported`. |
 | **0013 AnexoContestación** (documento) | 1 claim, 1 cita; sin la página 51 que no estaba en la evidencia. `partial` pero fiel. |
 | **Diligencia “se da por terminada”** (claim) | 1 claim, 1 cita al acta del 12 de mayo; ya no atribuye la frase a la grabación. `supported`. |
 
-Resumen JSON de esa corrida (`var/chat_eval/fix4_final7.verify.summary.json`):
+Resumen JSON de esa corrida (`var/chat_eval/fix4_final9.verify.summary.json`):
 
 ```json
 {"n": 4, "insufficient_rate": 0.0, "citation_integrity": 1.0,
@@ -139,6 +139,29 @@ presupuesto no alcanza para **todas** sus fuentes, validar cargos y nombres
 propios (con alias de OCR), forzar las dos versiones de una contradicción
 registrada, semilla literal/números para claims sin cita, eliminar límites meta
 («no se recuperó…») y juez síncrono para agente/claim.
+
+### Memoria, caché, agentes y partes
+
+- **Memoria entre sesiones**: al preparar un turno se añaden los últimos 2
+  intercambios del mismo usuario y expediente en sesiones anteriores (máx. 4
+  mensajes), además del historial de la sesión actual. Sirve para «lo anterior»
+  sin arrastrar todo el historial.
+- **Caché de respuestas**: una pregunta repetida del mismo usuario/expediente,
+  modelo, agente, estrategia, versión de pipeline y versión de evidencia
+  devuelve la respuesta completa (`cached: true`) sin retrieval ni LLM. TTL
+  `ANSWER_CACHE_TTL_SECONDS` (24 h por defecto). Las preguntas dependientes del
+  contexto incluyen el hash de los últimos turnos; con adjuntos no se cachea.
+  Prueba local: 8,8 s → 0,3 s en la segunda llamada.
+- **Agentes automáticos**: contradicciones/análisis usan **Cronista probatorio**
+  (Cazador de contradicciones + Cronologista); el resto usa **Asistente del
+  expediente** (Relacionador de personas + Analista de documento). Se cargan su
+  prompt y skills con `skills.load_config`; si el usuario elige un agente, ese
+  manda.
+- **Partes del proceso**: las preguntas de rol/partes se responden con la tabla
+  `parties` (juez, demandante, demandado, apoderados, terceros), no con menciones
+  sueltas. «¿Quiénes son los demandados?» devuelve exactamente los 2 demandados;
+  «¿Quiénes son las partes?» agrupa los 24 registros. La respuesta indica
+  «Fuente: ficha de partes del proceso».
 
 ### Muestra amplia (20) con el mismo juez
 

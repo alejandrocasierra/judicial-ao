@@ -34,8 +34,8 @@ from app.schemas import ChatMessageIn, ChatSessionIn, IntentFeedbackIn, QueryIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import (audit, case_tools, claim_seed, contradiction_seed, correction,
                           deadline as deadline_mod, entity_seed, intent as intent_service,
-                          intent_profile, memory, occurrences, query_hints, ratelimit,
-                          role_answer, text_terms)
+                          intent_profile, memory, occurrences, party_answer, query_hints,
+                          ratelimit, role_answer, text_terms)
 from app.services.case_tools import ToolContext
 from app.routers.query import _attachment_file_cards, _run_query, _safe_emit
 
@@ -226,6 +226,21 @@ def _persist_deterministic(p: Principal, case_id: UUID, items: list[dict], *, ta
 
 
 def _aggregation_result(p: Principal, case_id: UUID, content: str, locale: str) -> dict | None:
+    # Las partes del proceso viven en `parties` con su rol canónico. Para una
+    # pregunta de rol/partes, esa ficha es la fuente; las menciones sueltas de
+    # páginas producían listas falsas («Sujetos Procesales» como demandado).
+    with tx(p.org_id, p.user_id) as c:
+        party_text = party_answer.render_for_question(c, str(case_id), content)
+    if party_text:
+        run_id, citations = _persist_deterministic(
+            p, case_id, [], task="party_answer",
+            output={"answer_kind": "direct", "intent": "agregacion",
+                    "source": "parties"})
+        return {"answer": party_text, "answer_kind": "direct", "intent": "agregacion",
+                "degraded": False, "claims": [], "citations": [], "citations_used": [],
+                "unsupported_claims": [], "uncertainties": [], "file_cards": [],
+                "model_run_id": run_id, "evidence_count": 0,
+                "occurrences": [], "occurrences_term": None, "occurrences_note": None}
     role = query_hints.role_from_text(content)
     if not role:
         return None
@@ -402,6 +417,19 @@ def _prepare_turn(case_id: UUID, session_id: UUID, body: ChatMessageIn, p: Princ
         history = rows(c, """SELECT role, content, intent FROM chat_messages WHERE session_id = :s
             ORDER BY created_at DESC, id DESC LIMIT :k""", s=str(session_id), k=s.CHAT_HISTORY_TURNS)
         history.reverse()
+        # Memoria entre sesiones del MISMO usuario y expediente: los últimos
+        # 2 intercambios de sesiones anteriores dan continuidad a «lo anterior»
+        # sin arrastrar todo el historial ni gastar tokens en él.
+        previous = rows(c, """SELECT m.role, m.content FROM chat_messages m
+                                JOIN chat_sessions cs ON cs.id = m.session_id
+                               WHERE cs.case_id = :c AND cs.created_by = :u
+                                 AND cs.id <> :sid AND cs.archived_at IS NULL
+                               ORDER BY m.created_at DESC, m.id DESC LIMIT 4""",
+                       c=str(case_id), u=str(p.user_id), sid=str(session_id))
+        previous.reverse()
+        history = ([{"role": str(turn.get("role") or ""),
+                     "content": str(turn.get("content") or "")[:800]}
+                    for turn in previous] + history)
         attachments_json = json.dumps([{"kind": a.kind, "id": str(a.id), "name": a.name}
                                        for a in body.attachments])
         # Idempotencia del fallback SSE: si el último mensaje es el MISMO usuario
@@ -452,18 +480,23 @@ def _prepare_turn(case_id: UUID, session_id: UUID, body: ChatMessageIn, p: Princ
     return session, history, user_msg, ocr_mode, asr_mode, agent_id, model_id
 
 
-def _default_chat_agent(p: Principal) -> str | None:
-    """Agente de chat del sistema para cuando el usuario no elige uno.
+def _default_chat_agent(p: Principal, preferred: str = "Asistente del expediente") -> str | None:
+    """Agente de chat del sistema elegido automáticamente según la pregunta.
 
-    Sin esto, el camino de análisis corre sin prompt de agente ni skills: usa el
-    contrato genérico y pierde las herramientas especializadas (contradicciones,
-    cronología, personas). El usuario no debería tener que seleccionarlo a mano.
+    Las preguntas de contradicción/análisis usan el «Cronista probatorio»
+    (Cazador de contradicciones + Cronologista); las de personas/documentos usan
+    el «Asistente del expediente» (Relacionador de personas + Analista de
+    documento). El usuario no tiene que mencionar el agente ni la skill.
     """
     with tx(p.org_id, p.user_id) as c:
         row = one(c, """SELECT id FROM agents
-                         WHERE kind = 'chat' AND is_system = true
-                         ORDER BY (name = 'Asistente del expediente') DESC, name
-                         LIMIT 1""")
+                         WHERE kind = 'chat' AND is_system = true AND name = :n
+                         ORDER BY name LIMIT 1""", n=preferred)
+        if not row:
+            row = one(c, """SELECT id FROM agents
+                             WHERE kind = 'chat' AND is_system = true
+                             ORDER BY (name = 'Asistente del expediente') DESC, name
+                             LIMIT 1""")
     return str(row["id"]) if row else None
 
 
@@ -527,8 +560,6 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     deadline = deadline or deadline_mod.Deadline(s.REQUEST_DEADLINE_MS)
     session, history, user_msg, ocr_mode, asr_mode, agent_id, model_id = _prepare_turn(
         case_id, session_id, body, p)
-    if agent_id is None:
-        agent_id = _default_chat_agent(p)
 
     # Flujo de corrección DETERMINISTA (Fase 6): si el usuario confirma o cancela y
     # hay una corrección pendiente en esta sesión, se aplica/descarta aquí mismo.
@@ -577,7 +608,14 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
         # El análisis exhaustivo, la contradicción concreta y el camino de
         # entidad/grafo no caben en 30 s.
         deadline = deadline_mod.Deadline(s.ANALYSIS_DEADLINE_MS)
-    _safe_emit(emit, "routing", {"intent": intent_value})
+    selected_agent = None
+    if agent_id is None:
+        selected_agent = ("Cronista probatorio"
+                          if contradiction_items or decision.intent is intent_service.Intent.ANALYSIS
+                          else "Asistente del expediente")
+        agent_id = _default_chat_agent(p, preferred=selected_agent)
+    _safe_emit(emit, "routing", {"intent": intent_value,
+                                 "agent": selected_agent or session.get("agent_id")})
 
     def _query(strategy: str, seed: list[dict] | None = None) -> dict:
         query_body = QueryIn(question=body.content, strategy=strategy,
