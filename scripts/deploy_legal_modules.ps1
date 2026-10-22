@@ -11,7 +11,7 @@
   Secuencia:
     1. Preflight (target, env, docker, revisión actual)
     2. Backup pg_dump -Fc + verificación pg_restore -l
-    3. Migración Alembic (0054 -> 0063 por defecto; -ToHead para el head actual)
+    3. Migración Alembic (0054 -> 0064 por defecto; -ToHead para el head actual)
     4. Importación opcional del corpus (-ImportCorpus)
     5. Backfill de hechos
     6. Reindex de chunks estructurados
@@ -35,7 +35,7 @@
   Sin este switch el script solo simula.
 
 .PARAMETER TargetRevision
-  Revisión destino de Alembic. Default: 0063_legal_gate_semantics (head actual).
+  Revisión destino de Alembic. Default: 0064_legal_hold_release (head actual).
 
 .PARAMETER ToHead
   Usa `head` en vez de TargetRevision. Puede incluir migraciones P1 posteriores.
@@ -75,7 +75,7 @@ param(
   [switch]$AuthorizeProduction,
   [string]$ConfirmProduction = "",
 
-  [string]$TargetRevision = "0063_legal_gate_semantics",
+  [string]$TargetRevision = "0064_legal_hold_release",
   [switch]$ToHead,
 
   [switch]$ImportCorpus,

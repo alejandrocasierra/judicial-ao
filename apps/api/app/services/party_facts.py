@@ -200,6 +200,7 @@ def _serialize(conn: Connection, fact: dict[str, Any]) -> dict[str, Any]:
 def list_facts(conn: Connection, case_id: str, *, proof: str = "proven",
                side: str | None = None, party_id: str | None = None,
                issue_id: str | None = None, q: str | None = None,
+               position: str | None = None,
                limit: int = 200) -> list[dict[str, Any]]:
     where = ["f.case_id = :c"]
     params: dict[str, Any] = {"c": case_id, "limit": max(1, min(int(limit or 200), 500))}
@@ -218,6 +219,9 @@ def list_facts(conn: Connection, case_id: str, *, proof: str = "proven",
     if party_id:
         where.append("EXISTS (SELECT 1 FROM fact_positions fp WHERE fp.fact_id=f.id AND fp.party_id=:pid)")
         params["pid"] = party_id
+    if position:
+        where.append("EXISTS (SELECT 1 FROM fact_positions fp WHERE fp.fact_id=f.id AND fp.position=:position)")
+        params["position"] = position.upper()
     if issue_id:
         where.append("f.issue_id = :iid")
         params["iid"] = issue_id

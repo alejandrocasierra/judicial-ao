@@ -392,7 +392,7 @@ def available_models(body: ModelCatalogIn, p: Principal = Depends(require_org("u
 def list_models(p: Principal = Depends(require_org("user.manage"))):
     with tx(p.org_id, p.user_id) as c:
         return rows(c, """SELECT id, provider, model_name, api_base_url, is_default, ocr_enabled, asr_enabled,
-                          created_at, updated_at,
+                          input_price_per_mtok, output_price_per_mtok, created_at, updated_at,
                           (encrypted_api_key IS NOT NULL) AS has_api_key
                           FROM ai_models ORDER BY is_default DESC, provider, model_name""")
 
@@ -415,12 +415,15 @@ def create_model(body: AiModelIn, request: Request, p: Principal = Depends(requi
             c.execute(text("UPDATE ai_models SET is_default = false WHERE organization_id = :o"), {"o": p.org_id})
         _exclusive_flags(c, p.org_id, None, ocr=body.ocr_enabled, asr=body.asr_enabled)
         m = one(c, """INSERT INTO ai_models (organization_id, provider, model_name, api_key_ref, encrypted_api_key,
-                      api_base_url, is_default, ocr_enabled, asr_enabled, created_by)
-                      VALUES (:o, :pr, :mn, 'org', :key, :base, :d, :ocr, :asr, :u)
-                      RETURNING id, provider, model_name, api_base_url, is_default, ocr_enabled, asr_enabled, created_at""",
+                      api_base_url, is_default, ocr_enabled, asr_enabled,
+                      input_price_per_mtok, output_price_per_mtok, created_by)
+                      VALUES (:o, :pr, :mn, 'org', :key, :base, :d, :ocr, :asr, :pi, :po, :u)
+                      RETURNING id, provider, model_name, api_base_url, is_default, ocr_enabled, asr_enabled,
+                                input_price_per_mtok, output_price_per_mtok, created_at""",
                 o=p.org_id, pr=body.provider, mn=body.model_name,
                 key=secret_store.encrypt(body.api_key) or None, base=(body.api_base_url or None),
-                d=body.is_default, ocr=body.ocr_enabled, asr=body.asr_enabled, u=p.user_id)
+                d=body.is_default, ocr=body.ocr_enabled, asr=body.asr_enabled,
+                pi=body.input_price_per_mtok, po=body.output_price_per_mtok, u=p.user_id)
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="admin.model_created",
                      entity_type="ai_model", entity_id=str(m["id"]),
                      after={"provider": body.provider, "model": body.model_name,
@@ -459,7 +462,13 @@ def update_model(model_id: UUID, body: AiModelPatch, request: Request, p: Princi
         if body.asr_enabled is not None:
             sets.append("asr_enabled = :asr")
             params["asr"] = body.asr_enabled
-        m = one(c, f"UPDATE ai_models SET {', '.join(sets)} WHERE id = :i RETURNING id, provider, model_name, api_base_url, is_default, ocr_enabled, asr_enabled, updated_at", **params)
+        if body.input_price_per_mtok is not None:
+            sets.append("input_price_per_mtok = :pi")
+            params["pi"] = body.input_price_per_mtok
+        if body.output_price_per_mtok is not None:
+            sets.append("output_price_per_mtok = :po")
+            params["po"] = body.output_price_per_mtok
+        m = one(c, f"UPDATE ai_models SET {', '.join(sets)} WHERE id = :i RETURNING id, provider, model_name, api_base_url, is_default, ocr_enabled, asr_enabled, input_price_per_mtok, output_price_per_mtok, updated_at", **params)
         audit.record(c, org_id=p.org_id, actor_id=p.user_id, action="admin.model_updated",
                      entity_type="ai_model", entity_id=str(model_id), request=request)
     return m

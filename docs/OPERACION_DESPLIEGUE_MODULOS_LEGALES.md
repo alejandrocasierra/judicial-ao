@@ -58,7 +58,7 @@ powershell -ExecutionPolicy Bypass -File scripts/deploy_legal_modules.ps1 `
   -CaseId 38865959-8d5f-44e4-bbc8-1226bd345b00
 ```
 
-Salida esperada: backup simulado, `alembic upgrade 0063_legal_gate_semantics`,
+Salida esperada: backup simulado, `alembic upgrade 0064_legal_hold_release`,
 backfill, reindex, grafo, smoke y `=== Despliegue terminado (local-test) ===`.
 No toca la base.
 
@@ -80,10 +80,10 @@ powershell -ExecutionPolicy Bypass -File scripts/deploy_legal_modules.ps1 `
 Notas:
 
 - `-ToHead` usa el head actual de Alembic. En la auditoría P0 el head era
-  `0061_second_opinion_worker`; el repo actual incluye `0062` y `0063` de P1.
+  `0061_second_opinion_worker`; el repo actual incluye `0062` y `0064` de P1.
   Si se quiere congelar el alcance P0, usar
-  `-TargetRevision 0063_legal_gate_semantics`.
-- `-ImportCorpus` carga las 135 normas en todas las organizaciones. Si el corpus
+  `-TargetRevision 0064_legal_hold_release`.
+- `-ImportCorpus` carga las 143 normas en todas las organizaciones. Si el corpus
   ya está cargado, es idempotente por `(organization_id, jurisdiction, source,
   identifier, version_date)`.
 - `-CaseId` limita backfill/reindex/grafo al proceso piloto. Para todos, omitirlo
@@ -184,7 +184,7 @@ Abortar y restaurar si:
 ```text
 Target=local-test Execute=False EnvFile=.env Compose=docker-compose.yml
 Backup pg_dump -Fc (judicial) -> ... (simulado)
-Alembic upgrade 0063_legal_gate_semantics -> ... (simulado)
+Alembic upgrade 0064_legal_hold_release -> ... (simulado)
 Backfill del ledger de hechos -> ... --case-id 38865959-...
 Reindexar chunks estructurados -> ...
 Reconstruir grafo -> ...
@@ -201,7 +201,7 @@ ejecutó y se eliminó:
 alembic upgrade 0054_chat_session_touch   -> OK
 alembic upgrade 0061_second_opinion_worker -> OK   (current = 0061)
 alembic downgrade 0054_chat_session_touch -> OK   (current = 0054)
-alembic upgrade head                      -> OK   (current = 0063_legal_gate_semantics)
+alembic upgrade head                      -> OK   (current = 0064_legal_hold_release)
 DROP DATABASE judicial_p0_migration_test  -> OK
 ```
 
@@ -214,7 +214,7 @@ Esto prueba el tramo `0054 -> 0061`, el downgrade y el upgrade al head actual.
 
 | Riesgo | Mitigación |
 |---|---|
-| Migración `0062`/`0063` de P1 incluidas por `head` | Usar `-TargetRevision 0063_legal_gate_semantics` si el alcance es solo P0. |
+| Migración `0062`–`0064` de P1/P0 incluidas por `head` | Usar `-TargetRevision 0064_legal_hold_release` si el alcance es solo P0. |
 | Corpus incompleto (faltan leyes citadas) | El gate falla cerrado; ampliar corpus con revisión legal. |
 | Sin firma jurídica | No declarar “corpus oficial definitivo”; ver acta. |
 | Backfill/reindex/grafo costosos | Ventana y `-CaseId` para el piloto; monitorear worker. |

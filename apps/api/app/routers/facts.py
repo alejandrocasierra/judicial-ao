@@ -18,7 +18,8 @@ router = APIRouter(prefix="/cases/{case_id}", tags=["facts"])
 @router.get("/facts")
 def list_facts(case_id: UUID, proof: str = "all", side: str | None = None,
                party_id: UUID | None = None, issue_id: UUID | None = None,
-               q: str | None = None, limit: int = 200, envelope: bool = False,
+               q: str | None = None, position: str | None = None,
+               limit: int = 200, envelope: bool = False,
                p: Principal = Depends(current_principal)):
     """Lista hechos. El contrato histórico es una lista; `envelope=true` permite
     a la UI pedir `{facts: [...]}` sin romper clientes anteriores."""
@@ -27,7 +28,8 @@ def list_facts(case_id: UUID, proof: str = "all", side: str | None = None,
         facts = party_facts.list_facts(
             conn, str(case_id), proof=proof, side=side,
             party_id=str(party_id) if party_id else None,
-            issue_id=str(issue_id) if issue_id else None, q=q, limit=limit)
+            issue_id=str(issue_id) if issue_id else None, q=q,
+            position=position, limit=limit)
         return {"facts": facts} if envelope else facts
 
 

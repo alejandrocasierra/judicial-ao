@@ -2,8 +2,8 @@
   "schema": "judicial-ai/legal-corpus-manifest/v1",
   "jurisdiction": "co",
   "generated_at": "2026-10-22T15:25:41.434418+00:00",
-  "rules_count": 135,
-  "sources_count": 21,
+  "rules_count": 143,
+  "sources_count": 29,
   "sources": [
     {
       "source": "Código Civil - Ley 57 de 1887",
@@ -18,7 +18,23 @@
       "rules": 1
     },
     {
+      "source": "Decreto 1074 de 2015 - Decreto Único Reglamentario del Sector Comercio, Industria y Turismo",
+      "rules": 1
+    },
+    {
+      "source": "Decreto 1469 de 2010 - Licencias urbanísticas",
+      "rules": 1
+    },
+    {
+      "source": "Decreto 196 de 1971 - Estatuto del ejercicio de la abogacía",
+      "rules": 1
+    },
+    {
       "source": "Decreto 2150 de 1995 - Supresión de Trámites y Firma Mecánica",
+      "rules": 1
+    },
+    {
+      "source": "Decreto 2364 de 2012 - Firma electrónica",
       "rules": 1
     },
     {
@@ -50,6 +66,10 @@
       "rules": 4
     },
     {
+      "source": "Ley 1285 de 2009",
+      "rules": 1
+    },
+    {
       "source": "Ley 1394 de 2010 - Arancel Judicial",
       "rules": 3
     },
@@ -74,6 +94,14 @@
       "rules": 3
     },
     {
+      "source": "Ley 2220 de 2022",
+      "rules": 1
+    },
+    {
+      "source": "Ley 223 de 1995",
+      "rules": 1
+    },
+    {
       "source": "Ley 270 de 1996 - Administración de Justicia",
       "rules": 1
     },
@@ -86,11 +114,15 @@
       "rules": 2
     },
     {
+      "source": "Ley 6 de 1992",
+      "rules": 1
+    },
+    {
       "source": "Ley 962 de 2005 - Racionalización de Trámites",
       "rules": 1
     }
   ],
-  "corpus_sha256": "5c6a16c236c68af97f17407c189c3cd99489cc2a0c0d3b29eb560120d9271739",
+  "corpus_sha256": "82e6c72d2548e694ae5f04ee881a4b5a07592b2fd0797778d8464d6543b91688",
   "rules": [
     {
       "path": "data/legal_rules/co/cgp.json",
@@ -1305,6 +1337,78 @@
       "version_date": "2026-10-15",
       "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0962_2005.html",
       "checksum": "202965a52bee9d1764d182894178d79b1dfe0bff264e270411f2341a77f81bd1",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/normas_citadas.json",
+      "source": "Decreto 1074 de 2015 - Decreto Único Reglamentario del Sector Comercio, Industria y Turismo",
+      "identifier": "1074 de 2015",
+      "version_date": "2015-05-26",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=76608",
+      "checksum": null,
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/normas_citadas.json",
+      "source": "Decreto 1469 de 2010 - Licencias urbanísticas",
+      "identifier": "1469 de 2010",
+      "version_date": "2010-04-30",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=39477",
+      "checksum": null,
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/normas_citadas.json",
+      "source": "Decreto 196 de 1971 - Estatuto del ejercicio de la abogacía",
+      "identifier": "196 de 1971",
+      "version_date": "1971-02-12",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=92330",
+      "checksum": null,
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/normas_citadas.json",
+      "source": "Decreto 2364 de 2012 - Firma electrónica",
+      "identifier": "2364 de 2012",
+      "version_date": "2012-11-22",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=50583",
+      "checksum": null,
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/normas_citadas.json",
+      "source": "Ley 1285 de 2009",
+      "identifier": "1285 de 2009",
+      "version_date": "2009-01-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1285_2009.html",
+      "checksum": null,
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/normas_citadas.json",
+      "source": "Ley 2220 de 2022",
+      "identifier": "2220 de 2022",
+      "version_date": "2022-07-06",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_2220_2022.html",
+      "checksum": null,
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/normas_citadas.json",
+      "source": "Ley 223 de 1995",
+      "identifier": "223 de 1995",
+      "version_date": "1995-12-20",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0223_1995.html",
+      "checksum": null,
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/normas_citadas.json",
+      "source": "Ley 6 de 1992",
+      "identifier": "6 de 1992",
+      "version_date": "1992-01-30",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0006_1992.html",
+      "checksum": null,
       "generated_at": "2026-10-22T15:25:41.434418+00:00"
     }
   ]

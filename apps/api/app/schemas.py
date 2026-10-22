@@ -300,6 +300,12 @@ class VerificationPolicyIn(Strict):
     min_asr_confidence: float | None = Field(default=None, ge=0, le=1)
 
 
+class MessageReleaseIn(Strict):
+    """Liberación humana de una respuesta retenida por segunda opinión."""
+    reason: str = Field(min_length=3, max_length=1000)
+    force: bool = False
+
+
 class SecondOpinionReviewIn(Strict):
     action: Literal["ACCEPT", "EDIT", "REJECT", "FLAG"]
     reason: str = Field(min_length=3, max_length=1000)
@@ -422,6 +428,8 @@ class AiModelIn(Strict):
     is_default: bool = False
     ocr_enabled: bool = False  # único modelo con OCR activo por organización
     asr_enabled: bool = False  # único modelo con ASR activo por organización
+    input_price_per_mtok: float | None = Field(default=None, ge=0)
+    output_price_per_mtok: float | None = Field(default=None, ge=0)
 
     _m = field_validator("model_name")(_no_control)
     _u = field_validator("api_base_url")(_no_control)
@@ -435,6 +443,8 @@ class AiModelPatch(Strict):
     is_default: bool | None = None
     ocr_enabled: bool | None = None
     asr_enabled: bool | None = None
+    input_price_per_mtok: float | None = Field(default=None, ge=0)
+    output_price_per_mtok: float | None = Field(default=None, ge=0)
 
     _m = field_validator("model_name")(_no_control)
     _u = field_validator("api_base_url")(_no_control)

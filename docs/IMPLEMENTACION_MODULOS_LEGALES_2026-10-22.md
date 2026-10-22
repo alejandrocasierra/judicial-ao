@@ -85,7 +85,7 @@ Derivados del proceso local:
 - `1079` revisiones.
 - `826` chunks `fact` con embeddings.
 - `19.641` aristas de grafo, incluidas `POSITION_ON` y `DECISION_PROVES_FACT`.
-- `135` normas activas por organización (`270` filas en las dos organizaciones locales), con URL oficial y checksum por fila.
+- `143` normas activas por organización (`286` filas en las dos organizaciones locales), con URL oficial y checksum por fila.
 - El agregado `data/legal_rules/co/checksums.json` existe y está validado;
   los checksums viajan en cada JSON y los verifica el importador.
 
@@ -136,8 +136,8 @@ está en `packages/schemas/validate_schemas.py`.
 | Migraciones `0055` a `0061` | upgrade/downgrade probados en BD de test |
 | Build web | Next.js compila y genera las rutas nuevas |
 | Salud local | API, web, worker, worker-media y MCP healthy |
-| Segunda opinión real | Gemini 3.8 Flash como respondedor y DeepSeek Chat como verificador: `COMPLETED`, `PARTIAL`, 4 s, 9.095 tokens de entrada, 444 de salida, costo `0.005213` |
-| Corpus | **135 normas por organización, 270 filas**, 21 fuentes, 0 filas sin checksum/URL |
+| Segunda opinión real (histórica) | Gemini 3.8 Flash como respondedor y DeepSeek Chat como verificador: `COMPLETED`, `PARTIAL`, 4 s, 9.095 tokens de entrada, 444 de salida, costo `0.005213` |
+| Corpus | **143 normas por organización, 286 filas**, 29 fuentes, 0 filas sin checksum/URL |
 | E2E | **24/24** en 360/768/1024/1440 |
 | Golden set legal | **7/7** |
 
@@ -237,7 +237,7 @@ y la política por proceso ya están implementados.
 
 El núcleo de los tres módulos está implementado y probado. La segunda opinión real
 ya se ejecutó y el corpus piloto está cargado. La cobertura legal todavía no es
-completa: el corpus tiene 135 normas por organización, E2E y golden set ya están
+completa: el corpus tiene 143 normas por organización, E2E y golden set ya están
 verificados; falta la firma jurídica humana y el despliegue de producción. Los gaps concretos, con prioridad y acción, están en
 [`AUDITORIA_MODULOS_LEGALES_2026-10-22.md`](AUDITORIA_MODULOS_LEGALES_2026-10-22.md).
 
@@ -273,7 +273,7 @@ eso la integración se ejecutó con `SKIP_DB_RESET=1` sobre la base ya migrada a
 
 | Área | Evidencia |
 |---|---|
-| P0 | 135 normas/org, 270 filas, 21 fuentes, `checksums.json` reproducible, E2E 24/24, golden 7/7, migración desechable 0054→0063 |
+| P0 | 143 normas/org, 286 filas, 29 fuentes, `checksums.json` reproducible, E2E 24/24, golden 7/7, migración desechable 0054→0064 |
 | P1 | Gate semántico, quote_hash, contradicciones, juez `JUDGE`, comparador LLM, auto second opinion, costo/política, posiciones explícitas, invariante de evidencia, AuditBadge/diff |
 | P2 | Archify 6/6, prompts/schemas, flags off por defecto, documentación |
 | Validación | `1308 passed`; build web OK; Docker API/web healthy; E2E 24/24; golden 7/7 |

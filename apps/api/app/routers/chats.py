@@ -812,9 +812,12 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
         assistant_msg = one(c, """INSERT INTO chat_messages (organization_id, session_id, role, content,
                                      attachments, citations, occurrences, uncertainties, occurrences_term,
                                      occurrences_note, answer_kind, intent, degraded, model_run_id,
-                                     intent_confidence, intent_reason, intent_source, router_version)
+                                     intent_confidence, intent_reason, intent_source, router_version,
+                                     publication_blocked, publication_block_reason,
+                                     held_answer, held_citations, held_occurrences)
             VALUES (:o, :s, 'assistant', :t, CAST(:fc AS jsonb), CAST(:ci AS jsonb), CAST(:oc AS jsonb),
-                    CAST(:unc AS jsonb), :ot, :on, :ak, :intent, :dg, :mr, :ic, :ir, :isrc, :rv)
+                    CAST(:unc AS jsonb), :ot, :on, :ak, :intent, :dg, :mr, :ic, :ir, :isrc, :rv,
+                    :pb, :pbr, :ha, CAST(:hc AS jsonb), CAST(:ho AS jsonb))
             RETURNING id, created_at, answer_kind, intent, degraded""",
                             o=p.org_id, s=str(session_id), t=publish_answer,
                             fc=json.dumps(result.get("file_cards", [])),
@@ -825,7 +828,12 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
                             ak=answer_kind, intent=intent_out, dg=degraded,
                             mr=result.get("model_run_id"),
                             ic=float(decision.confidence), ir=decision.reason,
-                            isrc=decision.source, rv=intent_service.ROUTER_VERSION)
+                            isrc=decision.source, rv=intent_service.ROUTER_VERSION,
+                            pb=requires_second,
+                            pbr="SECOND_OPINION_REQUIRED" if requires_second else None,
+                            ha=original_answer if requires_second else None,
+                            hc=json.dumps(result.get("citations", []) if requires_second else []),
+                            ho=json.dumps((result.get("occurrences") or []) if requires_second else []))
         # Título automático de la primera pregunta y actividad de la sesión.
         title = session["title"] or body.content[:80]
         c.execute(text("UPDATE chat_sessions SET title = :t, updated_at = now() WHERE id = :s"),

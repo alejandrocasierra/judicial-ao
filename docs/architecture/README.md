@@ -68,7 +68,7 @@ ajena.
   instalada de Archify (3.0.1) no incluye el modo `erd`. Se dibujan claves y
   estados, no todas las columnas; las columnas secundarias están en las tarjetas
   y en las migraciones.
-- **04** cubre las migraciones `0055` a `0063`, incluido el gate semántico, los
+- **04** cubre las migraciones `0055` a `0064`, incluido el gate semántico, los
   precios de modelo y la evidencia de `EVIDENCE_SUPPORTED`.
 - **05** refleja la UI implementada al 2026-10-22: sidebar plana, cuatro pestañas
   (`Expediente`, `Hechos`, `Auditoría`, `Verificación`), `AuditBadge` por respuesta
@@ -80,7 +80,7 @@ ajena.
 
 ## Fuente de verdad
 
-- Código y migraciones `0055` a `0063`.
+- Código y migraciones `0055` a `0064`.
 - Plan: [`../PLAN_MODULOS_LEGALES_2026-10-22.md`](../PLAN_MODULOS_LEGALES_2026-10-22.md)
 - Contratos: [`../CONTRATOS_HARNESS_MODULOS_LEGALES.md`](../CONTRATOS_HARNESS_MODULOS_LEGALES.md)
 - Diseño: [`../GUIA_DISENO_MODULOS_LEGALES.md`](../GUIA_DISENO_MODULOS_LEGALES.md)

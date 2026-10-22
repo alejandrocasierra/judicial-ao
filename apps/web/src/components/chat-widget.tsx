@@ -73,6 +73,7 @@ interface ChatMessage {
   audit_id?: string | null;
   /** La política exige segunda opinión antes de publicar. */
   publication_blocked?: boolean;
+  publication_block_reason?: string | null;
 }
 interface HistoryMessage {
   role: "user" | "assistant";
@@ -91,6 +92,8 @@ interface HistoryMessage {
   corrected_intent?: string | null;
   audit_status?: string | null;
   audit_id?: string | null;
+  publication_blocked?: boolean | null;
+  publication_block_reason?: string | null;
 }
 type Verdict = "accepted" | "rejected" | "wrong_intent";
 interface FeedbackState { verdict: Verdict; corrected?: string }
@@ -330,6 +333,8 @@ function mapHistory(m: HistoryMessage): ChatMessage {
       occurrences_term: m.occurrences_term || undefined,
       audit_status: m.audit_status || undefined,
       audit_id: m.audit_id || undefined,
+      publication_blocked: m.publication_blocked || undefined,
+      publication_block_reason: m.publication_block_reason || undefined,
     };
   }
   return {
@@ -370,6 +375,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [releasingId, setReleasingId] = useState<string | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -563,6 +569,22 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
       // Conserva el veredicto optimista del turno recién enviado y suma los persistidos.
       setFeedback((prev) => ({ ...prev, ...feedbackFromHistory(r.messages) }));
     } catch { /* se conserva lo que haya en pantalla */ }
+  }
+
+  async function releaseMessage(id: string) {
+    if (!id || releasingId) return;
+    setReleasingId(id);
+    try {
+      await api.post(`/cases/${caseId}/messages/${id}/release`, {
+        reason: "Liberación humana desde el chat",
+      });
+      if (sessionId) await loadMessages(sessionId);
+      toast.success("Respuesta original liberada.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo liberar la respuesta.");
+    } finally {
+      setReleasingId(null);
+    }
   }
 
   async function send() {
@@ -1018,9 +1040,22 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                       blocked={m.publication_blocked}
                     />
                     {m.publication_blocked && (
-                      <span className="text-[11px] text-muted-foreground">
-                        Respuesta original retenida en la auditoría hasta la segunda opinión.
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground">
+                          Respuesta original retenida en la auditoría hasta la segunda opinión.
+                        </span>
+                        {m.id && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={releasingId === m.id}
+                            onClick={() => void releaseMessage(m.id!)}
+                          >
+                            {releasingId === m.id ? "Liberando…" : "Liberar respuesta"}
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

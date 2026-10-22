@@ -5,8 +5,8 @@ es el punto de entrada para cargar el corpus desde fuentes oficiales.
 
 ## Estado actual
 
-- **135 normas** por organización (`270` filas en las dos organizaciones locales).
-- **21 fuentes**: CGP/Ley 1564, Código Civil/Ley 57, Código de Comercio/Decreto
+- **143 normas** por organización (`286` filas en las dos organizaciones locales).
+- **29 fuentes**: CGP/Ley 1564, Código Civil/Ley 57, Código de Comercio/Decreto
   410, Ley 1579 de 2012, Decreto 2723 de 2014, Estatuto Tributario/Decreto 624,
   Ley 527/1999, Ley 2213/2022, Ley 1437/2011 (CPACA), Ley 1394/2010, Ley
   962/2005, Ley 590/2000, Ley 1581/2012, Ley 270/1996, Decreto Ley 019/2012,
@@ -68,6 +68,7 @@ Cada archivo `.json` contiene una lista de objetos o `{ "rules": [...] }`:
 | `decreto_2150_1995.json` | Decreto 2150/1995: artículo 12 (firma mecánica). |
 | `decreto_806_2020.json` | Decreto 806/2020: artículo 8 (notificaciones). |
 | `decreto_960_1970.json` | Decreto 960/1970: artículos 68, 80 y 81. |
+| `normas_citadas.json` | Cobertura a nivel de norma para citas sin artículo verificable (8 normas). |
 | `checksums.json` | Manifiesto agregado (no se importa como norma). |
 
 ## Fuentes y extracción

@@ -1,0 +1,106 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Decreto 196 de 1971 - Estatuto del ejercicio de la abogacía",
+    "identifier": "196 de 1971",
+    "title": "Decreto 196 de 1971 - Estatuto del ejercicio de la abogacía",
+    "text": "Decreto 196 de 1971 - Por el cual se dicta el estatuto del ejercicio de la abogacía.",
+    "version_date": "1971-02-12",
+    "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=92330",
+    "metadata": {
+      "law_level_only": true,
+      "coverage_note": "El expediente cita la norma sin un artículo específico verificable."
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Decreto 2364 de 2012 - Firma electrónica",
+    "identifier": "2364 de 2012",
+    "title": "Decreto 2364 de 2012 - Firma electrónica",
+    "text": "Decreto 2364 de 2012 - Por medio del cual se reglamenta el artículo 7 de la Ley 527 de 1999, sobre la firma electrónica.",
+    "version_date": "2012-11-22",
+    "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=50583",
+    "metadata": {
+      "law_level_only": true,
+      "coverage_note": "El expediente cita la norma sin un artículo específico verificable."
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Decreto 1074 de 2015 - Decreto Único Reglamentario del Sector Comercio, Industria y Turismo",
+    "identifier": "1074 de 2015",
+    "title": "Decreto 1074 de 2015 - Sector Comercio, Industria y Turismo",
+    "text": "Decreto 1074 de 2015 - Por medio del cual se expide el Decreto Único Reglamentario del Sector Comercio, Industria y Turismo.",
+    "version_date": "2015-05-26",
+    "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=76608",
+    "metadata": {
+      "law_level_only": true,
+      "coverage_note": "El expediente cita la norma sin un artículo específico verificable."
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Decreto 1469 de 2010 - Licencias urbanísticas",
+    "identifier": "1469 de 2010",
+    "title": "Decreto 1469 de 2010 - Licencias urbanísticas",
+    "text": "Decreto 1469 de 2010 - Por el cual se reglamentan las disposiciones relativas a las licencias urbanísticas y al reconocimiento de edificaciones.",
+    "version_date": "2010-04-30",
+    "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=39477",
+    "metadata": {
+      "law_level_only": true,
+      "coverage_note": "El expediente cita la norma sin un artículo específico verificable."
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1285 de 2009",
+    "identifier": "1285 de 2009",
+    "title": "Ley 1285 de 2009",
+    "text": "Ley 1285 de 2009.",
+    "version_date": "2009-01-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1285_2009.html",
+    "metadata": {
+      "law_level_only": true,
+      "coverage_note": "El expediente la cita como modificatoria, sin artículo específico verificable."
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 223 de 1995",
+    "identifier": "223 de 1995",
+    "title": "Ley 223 de 1995",
+    "text": "Ley 223 de 1995.",
+    "version_date": "1995-12-20",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0223_1995.html",
+    "metadata": {
+      "law_level_only": true,
+      "coverage_note": "El expediente la cita sin artículo específico verificable."
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 2220 de 2022",
+    "identifier": "2220 de 2022",
+    "title": "Ley 2220 de 2022",
+    "text": "Ley 2220 de 2022.",
+    "version_date": "2022-07-06",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_2220_2022.html",
+    "metadata": {
+      "law_level_only": true,
+      "coverage_note": "El expediente la cita sin artículo específico verificable."
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 6 de 1992",
+    "identifier": "6 de 1992",
+    "title": "Ley 6 de 1992",
+    "text": "Ley 6 de 1992.",
+    "version_date": "1992-01-30",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0006_1992.html",
+    "metadata": {
+      "law_level_only": true,
+      "coverage_note": "El expediente la cita sin artículo específico verificable."
+    }
+  }
+]

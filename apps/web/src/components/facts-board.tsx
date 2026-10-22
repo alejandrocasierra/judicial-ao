@@ -78,6 +78,7 @@ export function FactsBoard({ caseId }: { caseId: string }) {
   const qc = useQueryClient();
   const [proof, setProof] = useState("proven");
   const [side, setSide] = useState<string>("");
+  const [position, setPosition] = useState<string>("");
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Fact | null>(null);
   const [editStatus, setEditStatus] = useState("ALLEGED");
@@ -88,9 +89,10 @@ export function FactsBoard({ caseId }: { caseId: string }) {
   const params = useMemo(() => {
     const p: Record<string, string> = { proof, envelope: "true" };
     if (side) p.side = side;
+    if (position) p.position = position;
     if (q.trim().length >= 2) p.q = q.trim();
     return p;
-  }, [proof, side, q]);
+  }, [proof, side, position, q]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["facts", caseId, params],
@@ -176,6 +178,18 @@ export function FactsBoard({ caseId }: { caseId: string }) {
               </button>
             ))}
           </div>
+          <select
+            aria-label="Filtrar por posición"
+            value={position}
+            onChange={(e) => setPosition(e.target.value)}
+            className="h-8 rounded-md border bg-background px-2 text-xs"
+          >
+            <option value="">Todas</option>
+            <option value="UNKNOWN">Sin posición</option>
+            <option value="ALLEGES">Alega</option>
+            <option value="DENIES">Niega</option>
+            <option value="ADMITS">Admite</option>
+          </select>
           <div className="relative">
             <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input

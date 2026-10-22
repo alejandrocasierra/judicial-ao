@@ -12,14 +12,14 @@
 
 | Punto | Evidencia |
 |---|---|
-| Corpus | **135 normas por organización**, **270 filas** en Alfa y Beta, **21 fuentes**. Cero filas sin `checksum` o `official_url`. |
+| Corpus | **143 normas por organización**, **286 filas** en Alfa y Beta, **29 fuentes**. Cero filas sin `checksum` o `official_url`. |
 | Normas añadidas | Ley 1579/2012, Decreto 2723/2014, Estatuto Tributario, Código Civil adicional, 28 disposiciones del CGP, Ley 527/1999, Ley 2213/2022, CPACA, Ley 1394/2010, Ley 962/2005, Ley 590/2000, Ley 1581/2012, Ley 270/1996, Decretos 019/2012, 525/2009, 1069/2015, 650/1996, 2150/1995, 806/2020 y 960/1970. |
 | Alias | `839-01` → `839-1` y `784-5` → artículo 784, numeral 5, con el mismo texto oficial y metadata `alias_of`. No se inventó una norma nueva. |
-| `checksums.json` | `rules_count=135`, `sources_count=21`, `corpus_sha256=5c6a16c236c68af97f17407c189c3cd99489cc2a0c0d3b29eb560120d9271739`. `build_checksums.py --check` pasa e es idempotente. |
+| `checksums.json` | `rules_count=143`, `sources_count=29`, `corpus_sha256=82e6c72d2548e694ae5f04ee881a4b5a07592b2fd0797778d8464d6543b91688`. `build_checksums.py --check` pasa e es idempotente. |
 | Acta | `docs/ACTA_REVISION_CORPUS_LEGALES.md` separa trazabilidad técnica de firma jurídica humana. La firma sigue **pendiente**. |
 | E2E | **24/24** Playwright en 360/768/1024/1440: pestañas, hechos, auditoría, segunda opinión interceptada, responsive y manifiesto. |
 | Golden set | **7/7**: norma existente, inexistente, cifra, fecha, parte, cita válida y segunda opinión. |
-| Migraciones | `0054 → 0063` en base desechable; downgrade `0063 → 0054` OK. Head local: `0063_legal_gate_semantics`. |
+| Migraciones | `0054 → 0064` en base desechable; downgrade `0064 → 0054` OK. Head local: `0064_legal_hold_release`. |
 | Despliegue | `scripts/deploy_legal_modules.ps1` con dry-run por defecto, backup, migración, corpus, backfill, reindex, grafo, smoke y rollback. **Producción no fue desplegada**: falta target/credenciales/backup verificables; el script aborta sin `-AuthorizeProduction`. |
 
 ### P1 — gate, segunda opinión, hechos y UI
@@ -45,7 +45,7 @@
 | Archify | **6/6**: contexto, gate, segunda opinión, hechos, modelo de datos y navegación UX. `validate`, `deliver`, `check --require-provenance` y `browser-check` pasan. |
 | Prompts/schemas | Nombres del plan creados; `validate_schemas.py` PASS (20 metaschemas y 11 casos). Los prompts v4/v3 son contratos de versión, no prompts activos duplicados. |
 | Flags | `LEGAL_GUARD_ENABLED`, `SECOND_OPINION_ENABLED` y `FACTS_PROOF_ENABLED` tienen default `false`; `.env`/`.env.test` locales los activan explícitamente. `.env.example` documenta las 15 variables que faltaban. |
-| Documentación | Plan, implementación, guía de diseño, contratos, Archify e índice alineados con el estado real y el rango `0059–0063`. |
+| Documentación | Plan, implementación, guía de diseño, contratos, Archify e índice alineados con el estado real y el rango `0059–0064`. |
 
 ---
 
@@ -60,7 +60,7 @@
 | `npm test` en `tests/e2e` | **24/24 passed** |
 | `npm run build` en `apps/web` | Correcto |
 | Docker local | API/web healthy; worker, worker-media y MCP healthy |
-| Corpus SQL | 270 filas activas, 135 por organización, 21 fuentes, 0 sin checksum/URL |
+| Corpus SQL | 286 filas activas, 143 por organización, 29 fuentes, 0 sin checksum/URL |
 
 La suite completa también verificó los contratos legacy: `/facts` sigue devolviendo lista por defecto (`envelope=true` es opt-in para la UI), el cache de test está desactivado y las auditorías de sistema llevan actor.
 
@@ -79,6 +79,6 @@ La suite completa también verificó los contratos legacy: `/facts` sigue devolv
 
 ## 4. Veredicto
 
-Los tres módulos quedaron implementados, integrados y probados en local: antialucinación con gate determinista y juez, segunda opinión real con modelo distinto, hechos con invariantes y UI de auditoría/diff. El corpus pasó de 38 a **135 normas por organización** y hay E2E/golden set verificados.
+Los tres módulos quedaron implementados, integrados y probados en local: antialucinación con gate determinista y juez, segunda opinión real con modelo distinto, hechos con invariantes y UI de auditoría/diff. El corpus pasó de 38 a **143 normas por organización** y hay E2E/golden set verificados.
 
 La afirmación correcta es: **listo para revisión legal y despliegue controlado**, no “producción legal completa”. Los bloqueantes restantes son externos al código: firma jurídica, credenciales/backup de producción y ampliación de las normas que el expediente cita sin artículo verificable.

@@ -9,9 +9,9 @@ from sqlalchemy import text
 
 from app.core.db import one, rows, tx
 from app.core.errors import AppError
-from app.schemas import AuditReviewIn, VerificationPolicyIn
+from app.schemas import AuditReviewIn, MessageReleaseIn, VerificationPolicyIn
 from app.security.deps import Principal, case_access, current_principal
-from app.services import audit, legal_guard
+from app.services import audit, legal_guard, legal_release
 
 router = APIRouter(prefix="/cases/{case_id}", tags=["audits"])
 
@@ -120,6 +120,34 @@ def review_audit(case_id: UUID, audit_id: UUID, body: AuditReviewIn, request: Re
                      entity_type="answer_audit", entity_id=str(audit_id),
                      after={"action": body.action, "reason": body.reason}, request=request)
         return {"ok": True, "audit_id": str(audit_id), "action": body.action}
+
+
+@router.post("/messages/{message_id}/release")
+def release_message(case_id: UUID, message_id: UUID, body: MessageReleaseIn,
+                    request: Request, p: Principal = Depends(current_principal)):
+    """Libera una respuesta retenida después de una segunda opinión completada.
+
+    No es automático: la decisión humana queda en `audit_logs` y la respuesta
+    original se copia a `chat_messages`. Si el veredicto es DISAGREE, requiere
+    `force=true`.
+    """
+    case_access(p, case_id, "audit.review")
+    with tx(p.org_id, p.user_id) as conn:
+        try:
+            result = legal_release.release_held_message(
+                conn, org_id=str(p.org_id), case_id=str(case_id),
+                message_id=str(message_id), reason=body.reason, force=body.force)
+        except legal_release.ReleaseError as exc:
+            raise AppError(exc.code, 409, {"detail": exc.detail}) from exc
+        audit.record(conn, org_id=p.org_id, actor_id=p.user_id,
+                     action="answer.released", entity_type="chat_message",
+                     entity_id=str(message_id),
+                     after={"run_id": str(result["run"]["id"]),
+                            "verdict": result["run"].get("verdict"),
+                            "reason": body.reason}, request=request)
+        return {"released": True, "message": result["message"],
+                "run_id": str(result["run"]["id"]),
+                "verdict": result["run"].get("verdict")}
 
 
 @router.get("/verification-policy")

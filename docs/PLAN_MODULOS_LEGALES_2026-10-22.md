@@ -334,7 +334,7 @@ Nuevo `apps/api/app/services/legal_guard.py`:
 - Índice único por `(organization_id, jurisdiction, source, identifier, version_date)`.
 - No se permite afirmar una norma sin fila activa.
 
-**Corpus inicial del piloto:** `data/legal_rules/co/` con un JSON por norma y `checksums.json`. El agregado `checksums.json` existe y está validado (135 normas, 21 fuentes); los checksums por fila siguen siendo la fuente primaria. Incluye, como mínimo, las normas que ya citan los casos piloto: Código Civil, Código General del Proceso (Ley 1564 de 2012) y las normas sustantivas/procesales que aparezcan en los escritos. Cada fila lleva `source` oficial, `identifier`, `version_date`, `official_url`, `checksum` y `text`. El importador `scripts/import_legal_rules.py` valida checksum, hace `--dry-run` y no descarga nada en runtime. Si una norma no está en el corpus, el guard bloquea la conclusión jurídica; no se completa con memoria del modelo. El corpus se amplía por proceso con revisión legal, no por scraping automático.
+**Corpus inicial del piloto:** `data/legal_rules/co/` con un JSON por norma y `checksums.json`. El agregado `checksums.json` existe y está validado (143 normas, 29 fuentes); los checksums por fila siguen siendo la fuente primaria. Incluye, como mínimo, las normas que ya citan los casos piloto: Código Civil, Código General del Proceso (Ley 1564 de 2012) y las normas sustantivas/procesales que aparezcan en los escritos. Cada fila lleva `source` oficial, `identifier`, `version_date`, `official_url`, `checksum` y `text`. El importador `scripts/import_legal_rules.py` valida checksum, hace `--dry-run` y no descarga nada en runtime. Si una norma no está en el corpus, el guard bloquea la conclusión jurídica; no se completa con memoria del modelo. El corpus se amplía por proceso con revisión legal, no por scraping automático.
 
 ### 4.7 Política de publicación
 
@@ -372,7 +372,7 @@ Permitir que, por proceso y bajo demanda, otro modelo audite una respuesta con u
 - `legal_guard_policies.require_second_opinion`: obliga a solicitarla antes de publicar en modo `STRICT`.
 - Validación: el modelo debe existir, estar activo, pertenecer a la organización y ser distinto del `model_id` del mensaje. Si no, `SECOND_OPINION_MODEL_REQUIRED` o `SECOND_OPINION_MODEL_MUST_DIFFER`.
 - Si no hay modelo configurado, la UI muestra “Configura un modelo de segunda opinión” y no hay fallback al mismo modelo.
-- **Default del seed:** `data/modelos/segunda_opinion.json` declara pares elegibles `deepseek/deepseek-chat` y `google/gemini-3.8-flash`. El seed activa el primero cuyo proveedor y modelo sean distintos del respondedor. Si ninguno está disponible, la función queda deshabilitada con CTA; no se ejecuta una segunda opinión con el mismo modelo.
+- **Default del seed:** `data/modelos/segunda_opinion.json` declara pares elegibles `gemini/gemini-flash-latest` y `gemini/gemini-flash-lite-latest`. El seed activa el primero cuyo proveedor y modelo sean distintos del respondedor. Si ninguno está disponible, la función queda deshabilitada con CTA; no se ejecuta una segunda opinión con el mismo modelo.
 - **Prerrequisito:** `POST /second-opinion` exige una `answer_audit` de la respuesta; si no existe, ejecuta primero el gate legal y solo luego encola. Si el gate falla por configuración, devuelve 422 con el código.
 
 ### 5.3 Flujo

@@ -1,7 +1,7 @@
 {
-  "description": "Pares elegibles para la segunda opinion. El runtime exige que el modelo sea distinto del respondedor. No contiene claves.",
+  "description": "Pares elegibles para la verificacion. El runtime exige que el modelo sea distinto del respondedor. No contiene claves.",
   "models": [
-    { "provider": "deepseek", "model": "deepseek-chat" },
-    { "provider": "google", "model": "gemini-3.8-flash" }
+    { "provider": "gemini", "model": "gemini-flash-latest" },
+    { "provider": "gemini", "model": "gemini-flash-lite-latest" }
   ]
 }

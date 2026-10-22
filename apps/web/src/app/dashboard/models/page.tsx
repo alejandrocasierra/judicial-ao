@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Cpu, Plus, Trash2, Pencil, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 
-interface Model { id: string; provider: string; model_name: string; api_base_url?: string | null; is_default: boolean; ocr_enabled: boolean; asr_enabled: boolean; has_api_key: boolean; created_at: string; }
+interface Model { id: string; provider: string; model_name: string; api_base_url?: string | null; is_default: boolean; ocr_enabled: boolean; asr_enabled: boolean; has_api_key: boolean; input_price_per_mtok?: number | null; output_price_per_mtok?: number | null; created_at: string; }
 interface Provider { id: string; models: string[]; }
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -32,6 +32,8 @@ export default function ModelsPage() {
   const [isDefault, setIsDefault] = useState(false);
   const [ocrEnabled, setOcrEnabled] = useState(false);
   const [asrEnabled, setAsrEnabled] = useState(false);
+  const [inputPrice, setInputPrice] = useState("");
+  const [outputPrice, setOutputPrice] = useState("");
 
   const { data: models = [], isLoading } = useQuery({ queryKey: ["models"], queryFn: () => api.get<Model[]>("/admin/models") });
   const { data: providers = [] } = useQuery({ queryKey: ["model-providers"], queryFn: () => api.get<{ providers: Provider[] }>("/admin/models/providers").then((r) => r.providers) });
@@ -53,8 +55,8 @@ export default function ModelsPage() {
 
   const save = useMutation({
     mutationFn: () => editing
-      ? api.patch(`/admin/models/${editing.id}`, { provider, model_name: modelName, api_key: apiKey || undefined, api_base_url: apiBaseUrl || null, is_default: isDefault, ocr_enabled: ocrEnabled, asr_enabled: asrEnabled })
-      : api.post("/admin/models", { provider, model_name: modelName, api_key: apiKey, api_base_url: apiBaseUrl || null, is_default: isDefault, ocr_enabled: ocrEnabled, asr_enabled: asrEnabled }),
+      ? api.patch(`/admin/models/${editing.id}`, { provider, model_name: modelName, api_key: apiKey || undefined, api_base_url: apiBaseUrl || null, is_default: isDefault, ocr_enabled: ocrEnabled, asr_enabled: asrEnabled, input_price_per_mtok: inputPrice ? Number(inputPrice) : null, output_price_per_mtok: outputPrice ? Number(outputPrice) : null })
+      : api.post("/admin/models", { provider, model_name: modelName, api_key: apiKey, api_base_url: apiBaseUrl || null, is_default: isDefault, ocr_enabled: ocrEnabled, asr_enabled: asrEnabled, input_price_per_mtok: inputPrice ? Number(inputPrice) : null, output_price_per_mtok: outputPrice ? Number(outputPrice) : null }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["models"] });
       setOpen(false);
@@ -68,8 +70,8 @@ export default function ModelsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["models"] }); toast.success("Modelo eliminado"); },
   });
 
-  function openNew() { setEditing(null); setProvider("anthropic"); setModelName(""); setApiKey(""); setApiBaseUrl(""); setIsDefault(false); setOcrEnabled(false); setAsrEnabled(false); setOpen(true); }
-  function openEdit(m: Model) { setEditing(m); setProvider(m.provider); setModelName(m.model_name); setApiKey(""); setApiBaseUrl(m.api_base_url || ""); setIsDefault(m.is_default); setOcrEnabled(m.ocr_enabled); setAsrEnabled(m.asr_enabled); setOpen(true); }
+  function openNew() { setEditing(null); setProvider("anthropic"); setModelName(""); setApiKey(""); setApiBaseUrl(""); setIsDefault(false); setOcrEnabled(false); setAsrEnabled(false); setInputPrice(""); setOutputPrice(""); setOpen(true); }
+  function openEdit(m: Model) { setEditing(m); setProvider(m.provider); setModelName(m.model_name); setApiKey(""); setApiBaseUrl(m.api_base_url || ""); setIsDefault(m.is_default); setOcrEnabled(m.ocr_enabled); setAsrEnabled(m.asr_enabled); setInputPrice(m.input_price_per_mtok == null ? "" : String(m.input_price_per_mtok)); setOutputPrice(m.output_price_per_mtok == null ? "" : String(m.output_price_per_mtok)); setOpen(true); }
 
   return (
     <div className="space-y-6">
@@ -168,6 +170,11 @@ export default function ModelsPage() {
                 </div>
                 {m.api_base_url && (
                   <p className="truncate text-xs text-muted-foreground" title={m.api_base_url}>{m.api_base_url}</p>
+                )}
+                {(m.input_price_per_mtok != null || m.output_price_per_mtok != null) && (
+                  <p className="text-xs text-muted-foreground">
+                    Precio: {m.input_price_per_mtok ?? "—"} / {m.output_price_per_mtok ?? "—"} USD por 1M tokens
+                  </p>
                 )}
                 <div className="flex gap-1 pt-1">
                   <Button variant="ghost" size="sm" onClick={() => openEdit(m)}><Pencil className="mr-1 h-4 w-4" />Editar</Button>

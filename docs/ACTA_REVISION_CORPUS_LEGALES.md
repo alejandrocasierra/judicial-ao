@@ -23,7 +23,7 @@
 
 ## 2. Composición del corpus
 
-El corpus pasó de **38 a 135 normas por organización** (`270` filas en las dos
+El corpus pasó de **38 a 143 normas por organización** (`286` filas en las dos
 organizaciones locales), en dos pasadas:
 
 **Primera pasada (38 → 97):** 59 normas nuevas.
@@ -105,7 +105,7 @@ python scripts/build_legal_corpus.py
 ```
 
 Resultado: `58` artículos en la primera pasada + `1` alias, y `37` artículos en
-la segunda pasada; total **135 filas**.
+la segunda pasada; total **143 filas**.
 
 ### 3.2 Checksums
 
@@ -118,20 +118,20 @@ la segunda pasada; total **135 filas**.
 Evidencia:
 
 ```text
-Escrito data\legal_rules\co\checksums.json: 135 normas, 21 fuentes,
+Escrito data\legal_rules\co\checksums.json: 143 normas, 29 fuentes,
 generated_at=2026-10-22T15:25:41.434418+00:00
 IDEMPOTENT=YES
-OK: data\legal_rules\co\checksums.json coincide (135 normas)
+OK: data\legal_rules\co\checksums.json coincide (143 normas)
 ```
 
 Valores del manifiesto:
 
 | Campo | Valor |
 |---|---|
-| `rules_count` | 135 |
-| `sources_count` | 21 |
-| `corpus_sha256` | `5c6a16c236c68af97f17407c189c3cd99489cc2a0c0d3b29eb560120d9271739` |
-| SHA-256 del archivo `checksums.json` | `411450A3BE2B5701B5A6447767B55C8249185D8CFE9D9448FC7D32A700F3B342` |
+| `rules_count` | 143 |
+| `sources_count` | 29 |
+| `corpus_sha256` | `82e6c72d2548e694ae5f04ee881a4b5a07592b2fd0797778d8464d6543b91688` |
+| SHA-256 del archivo `checksums.json` | `ED788B0A858FDBEBA0611177ED57EDE447EC117240B1BCEC7E3D84ECF13AD0EF` |
 
 ### 3.3 Importación
 
@@ -144,10 +144,10 @@ python scripts/import_legal_rules.py --dir data/legal_rules/co --all
 
 Resultado:
 
-- Dry-run: `270` normas simuladas (135 reglas × 2 organizaciones).
-- Importación final: `270` normas (135 × 2 organizaciones).
+- Dry-run: `286` normas simuladas (143 reglas × 2 organizaciones).
+- Importación final: `286` normas (143 × 2 organizaciones).
 - Organizaciones locales: Alfa `b4e6d687-…` y Beta `9830ee40-…`.
-- Verificación SQL: `270` filas activas, `135` por organización, `21` fuentes;
+- Verificación SQL: `286` filas activas, `143` por organización, `29` fuentes;
   **0 filas** con `checksum` o `official_url` vacíos.
 - El importador omite `checksums.json` para no tratarlo como norma.
 
@@ -223,7 +223,7 @@ alias están cargados; la resolución requiere ajuste en
 ## 5. Evidencia reproducible (resumen)
 
 ```text
-build_legal_corpus.py       -> 37 filas nuevas (segunda pasada), 21 fuentes
+build_legal_corpus.py       -> 37 filas nuevas (segunda pasada), 29 fuentes
 build_checksums.py          -> 135 normas, idempotente, --check OK
 import_legal_rules.py       -> 268 filas en 2 organizaciones
 legal_modules_runner.py     -> 7/7 PASS
@@ -283,11 +283,28 @@ Declaración sugerida (no firmada por este agente):
 
 ## 6. Cierre técnico final (2026-10-22)
 
-- Corpus final: **135 normas por organización**, **270 filas** en Alfa y Beta.
-- Fuentes: **21**. Filas sin `checksum` o `official_url`: **0**.
-- `checksums.json`: `rules_count=135`, `sources_count=21`.
-- `corpus_sha256`: `5c6a16c236c68af97f17407c189c3cd99489cc2a0c0d3b29eb560120d9271739`.
-- SHA-256 del archivo: `411450a3be2b5701b5a6447767b55c8249185d8cfe9d9448fc7d32a700f3b342`.
+- Corpus final: **143 normas por organización**, **286 filas** en Alfa y Beta.
+- Fuentes: **29**. Filas sin `checksum` o `official_url`: **0**.
+- `checksums.json`: `rules_count=143`, `sources_count=29`.
+- `corpus_sha256`: `82e6c72d2548e694ae5f04ee881a4b5a07592b2fd0797778d8464d6543b91688`.
+- SHA-256 del archivo: `ed788b0a858fdbeba0611177ed57ede447ec117240b1bcec7e3d84ecf13ad0ef`.
 - Se añadió el alias `784-5` con el texto oficial del artículo 784, numeral 5, metadata `alias_of: "784"`. No es una norma nueva ni texto inventado.
 - Gate: resuelve `839-01`, `784-5`, rangos `10-16` y el artículo punteado `2.2.6.1.2.4.1`.
 - La **firma jurídica humana sigue pendiente**: este acta solo acredita trazabilidad técnica.
+
+
+## 7. Normas sin artículo verificable
+
+Se añadió `normas_citadas.json` con 8 normas que el expediente menciona sin artículo concreto. La cobertura es **a nivel de norma** (`metadata.law_level_only=true`), no de artículo; el gate no debe presentar una consecuencia jurídica específica de esas filas. La revisión legal puede sustituirlas por artículos concretos cuando los identifique.
+
+
+## 8. Registro de firma
+
+La atestación se registra con un abogado identificable; no se autogenera:
+
+```bash
+python scripts/sign_legal_corpus.py --signer "Nombre completo" --license "TP-..." --confirm
+python scripts/sign_legal_corpus.py --verify
+```
+
+El comando exige nombre y licencia, y falla si el hash del corpus no coincide. El archivo resultante es `data/legal_rules/co/signoff.json`. No sustituye una firma electrónica certificada si la organización la exige.
