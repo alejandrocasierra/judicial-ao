@@ -11,6 +11,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 os.environ.setdefault("ENV_FILE", str(ROOT / ".env.test"))
+os.environ.setdefault("ANSWER_CACHE_TTL_SECONDS", "0")
 os.environ["ENV_FILE"] = str((ROOT / os.environ["ENV_FILE"]).resolve()) if not Path(os.environ["ENV_FILE"]).is_absolute() else os.environ["ENV_FILE"]
 sys.path.insert(0, str(ROOT / "scripts"))
 import envload  # noqa: E402

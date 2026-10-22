@@ -366,6 +366,23 @@ def _mentioned_document_ids(conn, case_id: str, question: str) -> list[str]:
     return found
 
 
+def _publication_claims(guard_result: dict) -> list[dict]:
+    """Claims publicables: aprobados y los que solo requieren revisión.
+
+    `NEEDS_REVIEW` no es una afirmación falsa: se muestra con su cita y una
+    advertencia, pero nunca se convierte en `SUPPORTED`. Los `UNSUPPORTED` no
+    salen. Así una contradicción abierta no borra toda la respuesta.
+    """
+    approved = list(guard_result.get("approved_claims") or [])
+    review = [
+        {"text": c.get("text") or "", "citations": c.get("citations") or [],
+         **({"claim_type": c["claim_type"]} if c.get("claim_type") else {})}
+        for c in guard_result.get("claims") or []
+        if c.get("status") == "NEEDS_REVIEW"
+    ]
+    return approved + review
+
+
 def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, locale: str, case: dict, s,
                history: list[dict] | None = None, hints: list[str] | None = None,
                ocr_mode: str | None = None, asr_mode: str | None = None,
@@ -398,6 +415,15 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             if isinstance(cached, dict) and cached.get("answer"):
                 cached = dict(cached)
                 cached["cached"] = True
+                try:
+                    with tx(p.org_id, p.user_id) as ac:
+                        audit.record(ac, org_id=p.org_id, actor_id=p.user_id,
+                                     action="ai.query", entity_type="case",
+                                     entity_id=str(case_id),
+                                     after={"mode": body.mode, "strategy": body.strategy,
+                                            "cached": True}, request=request)
+                except Exception:  # noqa: BLE001 - la caché nunca rompe la trazabilidad
+                    log.debug("cached query audit failed", exc_info=True)
                 _safe_emit(emit, "done", {"answer_kind": cached.get("answer_kind"),
                                           "cached": True})
                 return cached
@@ -631,7 +657,7 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                     question=body.question, answer=raw_text or "",
                     claims=validated.get("claims") or [], items=items)
             if guard_result.get("claims"):
-                validated["claims"] = guard_result.get("approved_claims") or []
+                validated["claims"] = _publication_claims(guard_result)
                 blocked = [c for c in guard_result["claims"] if c.get("status") == "UNSUPPORTED"]
                 if blocked:
                     validated["uncertainties"] = list(validated.get("uncertainties") or []) + [
@@ -643,6 +669,34 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         except Exception as exc:  # noqa: BLE001 - el gate es defensivo
             log.warning("legal guard unavailable: %s", exc)
             guard_result = None
+
+    # JUEZ SEMÁNTICO DE NORMAS: el determinista ya verificó que el artículo
+    # exista y que su texto no contradiga la consecuencia. El juez evalúa la
+    # proposición completa. Solo puede degradar: `apply_judge` impide aprobar lo
+    # que el determinista rechazó.
+    legal_judge_verdicts: list[dict] = []
+    if guard_result and any(c.get("legal_rules") for c in guard_result.get("claims") or []):
+        try:
+            from app.providers.llm import get_llm_for_model, get_llm_for_task
+            judge_llm = None
+            if s.VERIFY_MODEL_ID:
+                try:
+                    judge_llm = get_llm_for_model(s.VERIFY_MODEL_ID, p.org_id, p.user_id)
+                except Exception:  # noqa: BLE001 — cae al routing de verificación
+                    judge_llm = None
+            if judge_llm is None:
+                judge_llm = get_llm_for_task("verification")
+            legal_judge_verdicts = legal_guard.judge_legal_claims(guard_result, judge_llm)
+            if legal_judge_verdicts:
+                legal_guard.apply_judge(guard_result, legal_judge_verdicts)
+                validated["claims"] = _publication_claims(guard_result)
+                if any(v.get("status") in {"UNSUPPORTED", "CONTRADICTED", "NOT_SUPPORTED"}
+                       for v in legal_judge_verdicts):
+                    note = "El juez jurídico no respaldó una afirmación sobre la norma citada; se omitió."
+                    if note not in (validated.get("uncertainties") or []):
+                        validated["uncertainties"] = list(validated.get("uncertainties") or []) + [note]
+        except Exception as exc:  # noqa: BLE001 — el juez no rompe el turno
+            log.warning("legal semantic judge unavailable: %s", exc)
 
     mode = verify_mode or s.VERIFY_MODE
     if verify_mode is None and mode == "sync" and body.strategy != "agent":
@@ -666,7 +720,8 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             verification.apply_verdicts(validated, semantic_verdicts)
         except Exception as exc:  # noqa: BLE001 — el juez no bloquea la respuesta
             log.warning("sync verification failed: %s", exc)
-        if not validated.get("claims") and body.strategy == "agent":
+        if not validated.get("claims") and (body.strategy == "agent"
+                                             or bool(guard_result and guard_result.get("approved_claims"))):
             # Un juez demasiado estricto no puede convertir una respuesta con
             # evidencia en una abstención. Se conservan las afirmaciones que ya
             # pasaron grounding/números/nombres y se marcan para revisión.
@@ -774,7 +829,10 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             evidence=items, uncertainties=validated["uncertainties"], locale=locale,
             max_citations=(s.DEEP_MAX_VISIBLE_CITATIONS if deep else s.MAX_VISIBLE_CITATIONS),
             max_per_file=(s.DEEP_MAX_CITATIONS_PER_FILE if deep else s.MAX_CITATIONS_PER_FILE),
-            coverage=coverage, deep=deep)
+            # En una consulta explícita de testimonio se muestra el material
+            # recuperado aunque la cobertura léxica global sea baja: el usuario
+            # pidió específicamente lo que dijo el testigo, no una abstención.
+            coverage=None if body.mode == "testimony" else coverage, deep=deep)
 
     # Preguntas de rol sin claims del modelo: lista determinista como respuesta.
     if composed.answer_kind == compose.INSUFFICIENT:
@@ -821,6 +879,8 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                           "legal_audit": (guard_result or {}).get("status")}
     if semantic_verdicts:
         validation_payload["semantic_verdicts"] = semantic_verdicts
+    if legal_judge_verdicts:
+        validation_payload["legal_judge_verdicts"] = legal_judge_verdicts
 
     with tx(p.org_id, p.user_id) as c:
         run = one(c, """INSERT INTO model_runs (organization_id, case_id, task, provider, model, prompt_id, prompt_version,

@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/party_fact.schema.json",
+  "title": "party_fact",
+  "description": "Hecho del ledger por parte (GET /v1/cases/{case_id}/facts/{fact_id}). proof_status es el estado de publicacion; status sigue siendo el estado epistemico heredado. Solo ADMITTED y JUDICIALLY_PROVEN son is_proven.",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "required": [
+    "id",
+    "organization_id",
+    "case_id",
+    "proposition",
+    "proof_status",
+    "proof_basis",
+    "is_proven",
+    "version",
+    "positions"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "organization_id": { "type": "string", "format": "uuid" },
+    "case_id": { "type": "string", "format": "uuid" },
+    "proposition": { "type": "string", "minLength": 1 },
+    "proof_status": {
+      "enum": ["ALLEGED", "ADMITTED", "EVIDENCE_SUPPORTED", "JUDICIALLY_PROVEN", "DISPUTED", "REJECTED", "UNRESOLVED"]
+    },
+    "proof_basis": { "enum": ["NONE", "ADMISSION", "EVIDENCE", "JUDICIAL_DECISION"] },
+    "is_proven": { "type": "boolean" },
+    "status": {
+      "enum": ["ALLEGED", "DISPUTED", "SUPPORTED", "CONTRADICTED", "JUDICIALLY_DETERMINED", "UNRESOLVED"]
+    },
+    "determined_by_decision_id": { "type": ["string", "null"], "format": "uuid" },
+    "proven_by_decision_id": { "type": ["string", "null"], "format": "uuid" },
+    "proven_at": { "type": ["string", "null"], "format": "date-time" },
+    "proven_by": { "type": ["string", "null"], "format": "uuid" },
+    "issue_id": { "type": ["string", "null"], "format": "uuid" },
+    "fact_code": { "type": ["string", "null"] },
+    "version": { "type": "integer", "minimum": 1 },
+    "positions": { "type": "array", "items": { "$ref": "#/$defs/position" } },
+    "evidence": { "type": "array", "items": { "$ref": "#/$defs/evidenceLink" } },
+    "evidence_ids": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+    "citations": { "type": "array", "items": { "type": "object" } },
+    "decision": {
+      "type": ["object", "null"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "source_document_id": { "type": ["string", "null"], "format": "uuid" },
+        "decision_date": { "type": ["string", "null"], "format": "date" },
+        "outcome": { "type": ["string", "null"] },
+        "reasoning": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "revisions": { "type": "array", "items": { "$ref": "#/$defs/revision" } }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": { "properties": { "proof_status": { "enum": ["ADMITTED", "JUDICIALLY_PROVEN"] } }, "required": ["proof_status"] },
+      "then": { "properties": { "is_proven": { "const": true } } },
+      "else": { "properties": { "is_proven": { "const": false } } }
+    },
+    {
+      "if": { "properties": { "proof_status": { "const": "JUDICIALLY_PROVEN" } }, "required": ["proof_status"] },
+      "then": {
+        "required": ["decision"],
+        "properties": {
+          "proof_basis": { "const": "JUDICIAL_DECISION" },
+          "decision": {
+            "type": "object",
+            "required": ["source_document_id"],
+            "properties": { "source_document_id": { "type": "string", "format": "uuid" } }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "proof_status": { "const": "ADMITTED" } }, "required": ["proof_status"] },
+      "then": {
+        "properties": {
+          "positions": { "contains": { "type": "object", "properties": { "position": { "const": "ADMITS" } }, "required": ["position"] } }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "position": {
+      "type": "object",
+      "required": ["side", "position"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "fact_id": { "type": "string", "format": "uuid" },
+        "party_id": { "type": ["string", "null"], "format": "uuid" },
+        "party_name": { "type": ["string", "null"] },
+        "party_role": { "type": ["string", "null"] },
+        "side": { "enum": ["DEMANDANTE", "DEMANDADO", "TERCERO", "NO_ATRIBUIDO"] },
+        "position": { "enum": ["ALLEGES", "DENIES", "ADMITS", "UNKNOWN"] },
+        "source_claim_id": { "type": ["string", "null"], "format": "uuid" },
+        "source_citation_id": { "type": ["string", "null"], "format": "uuid" },
+        "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": true
+    },
+    "evidenceLink": {
+      "type": "object",
+      "required": ["evidence_id", "stance"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "evidence_id": { "type": "string", "format": "uuid" },
+        "evidence_type": { "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] },
+        "stance": { "enum": ["supports", "refutes", "neutral"] },
+        "admissibility_status": { "type": ["string", "null"], "enum": ["admitted", "rejected", "unknown", null] },
+        "citation_id": { "type": ["string", "null"], "format": "uuid" },
+        "added_by": { "type": ["string", "null"], "format": "uuid" },
+        "added_at": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "revision": {
+      "type": "object",
+      "required": ["version", "proposition", "proof_status", "reason"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "version": { "type": "integer", "minimum": 1 },
+        "proposition": { "type": "string", "minLength": 1 },
+        "proof_status": { "enum": ["ALLEGED", "ADMITTED", "EVIDENCE_SUPPORTED", "JUDICIALLY_PROVEN", "DISPUTED", "REJECTED", "UNRESOLVED"] },
+        "proof_basis": { "enum": ["NONE", "ADMISSION", "EVIDENCE", "JUDICIAL_DECISION"] },
+        "proven_by_decision_id": { "type": ["string", "null"], "format": "uuid" },
+        "positions": { "type": "array", "items": { "type": "object" } },
+        "evidence_ids": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+        "citations": { "type": "array", "items": { "type": "object" } },
+        "changed_by": { "type": ["string", "null"], "format": "uuid" },
+        "reason": { "type": "string", "minLength": 1 },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "proof_review": {
+      "title": "fact_proof_review",
+      "description": "Salida de packages/prompts/fact_proof_review.v1.md. Es una recomendacion para revision humana: nunca escribe ADMITTED ni JUDICIALLY_PROVEN.",
+      "type": "object",
+      "required": ["fact_id", "recommendation", "proof_status_suggested", "reasons", "requires_human"],
+      "properties": {
+        "fact_id": { "type": "string", "format": "uuid" },
+        "recommendation": { "enum": ["KEEP", "NEEDS_REVIEW", "REJECT"] },
+        "proof_status_suggested": {
+          "enum": ["ALLEGED", "EVIDENCE_SUPPORTED", "DISPUTED", "REJECTED", "UNRESOLVED"],
+          "description": "Nunca ADMITTED ni JUDICIALLY_PROVEN: esos estados exigen posicion de parte o decision judicial."
+        },
+        "reasons": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "citation_handles": { "type": "array", "items": { "type": "string" } },
+        "requires_human": { "const": true }
+      },
+      "additionalProperties": false
+    }
+  }
+}

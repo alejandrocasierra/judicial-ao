@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Modelo de datos de los modulos legales",
+    "subtitle": "Tablas nuevas y anclas existentes - migraciones 0055 a 0061",
+    "output": "docs/architecture/04-data-model.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "documents", "type": "database", "label": "documents", "sublabel": "case_id - cuaderno", "tag": "ancla", "pos": [40, 40], "size": [170, 56] },
+    { "id": "doc_pages", "type": "database", "label": "document_pages", "sublabel": "texto OCR", "tag": "ancla", "pos": [270, 40], "size": [170, 56] },
+    { "id": "chunks", "type": "database", "label": "chunks", "sublabel": "pgvector - chunk_type=fact", "tag": "ancla", "pos": [500, 40], "size": [180, 56] },
+    { "id": "fact_positions", "type": "database", "label": "fact_positions", "sublabel": "side - position", "tag": "0057", "pos": [740, 40], "size": [180, 56] },
+    { "id": "cases", "type": "database", "label": "cases", "sublabel": "proceso / demanda - RLS", "tag": "ancla", "pos": [40, 160], "size": [170, 64] },
+    { "id": "claims", "type": "database", "label": "claims", "sublabel": "claimant_party_id", "tag": "ancla", "pos": [270, 160], "size": [170, 56] },
+    { "id": "facts", "type": "database", "label": "facts", "sublabel": "proof_status - is_proven", "tag": "0057", "pos": [500, 160], "size": [180, 56] },
+    { "id": "fact_revisions", "type": "database", "label": "fact_revisions", "sublabel": "version - append-only", "tag": "0057", "pos": [740, 160], "size": [190, 56] },
+    { "id": "decisions", "type": "database", "label": "decisions", "sublabel": "source_document_id", "tag": "ancla", "pos": [270, 280], "size": [180, 56] },
+    { "id": "citations", "type": "database", "label": "citations", "sublabel": "target_type - quote_hash", "tag": "ancla", "pos": [500, 280], "size": [180, 56] },
+    { "id": "legal_rules", "type": "database", "label": "legal_rules", "sublabel": "norma - checksum - is_active", "tag": "0055", "pos": [740, 280], "size": [180, 56] },
+    { "id": "legal_rule_citations", "type": "database", "label": "legal_rule_citations", "sublabel": "target claim - fact - answer", "tag": "0055", "pos": [980, 280], "size": [190, 56] },
+    { "id": "au_claims", "type": "database", "label": "answer_audit_claims", "sublabel": "auditor - status", "tag": "0055", "pos": [300, 380], "size": [200, 56] },
+    { "id": "answer_audits", "type": "database", "label": "answer_audits", "sublabel": "status - append-only", "tag": "0055", "pos": [40, 430], "size": [190, 96] },
+    { "id": "au_findings", "type": "database", "label": "answer_audit_findings", "sublabel": "code - severity", "tag": "0055", "pos": [300, 460], "size": [200, 56] },
+    { "id": "au_citations", "type": "database", "label": "answer_audit_citations", "sublabel": "valid - quote_hash", "tag": "0055", "pos": [300, 540], "size": [200, 56] },
+    { "id": "policies", "type": "database", "label": "legal_guard_policies", "sublabel": "mode - version - is_default", "tag": "0055", "pos": [40, 610], "size": [190, 56] },
+    { "id": "case_settings", "type": "database", "label": "case_verification_settings", "sublabel": "auto_second_opinion", "tag": "0055", "pos": [300, 620], "size": [200, 56] },
+    { "id": "so_runs", "type": "database", "label": "second_opinion_runs", "sublabel": "status - verdict - cost", "tag": "0056", "pos": [540, 660], "size": [190, 60] },
+    { "id": "so_claims", "type": "database", "label": "second_opinion_claims", "sublabel": "comparison", "tag": "0056", "pos": [790, 660], "size": [190, 56] },
+    { "id": "so_findings", "type": "database", "label": "second_opinion_findings", "sublabel": "code - severity", "tag": "0056", "pos": [790, 750], "size": [190, 56] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Expediente, conocimiento y normas", "wraps": ["cases", "documents", "doc_pages", "chunks", "claims", "facts", "fact_positions", "fact_revisions", "decisions", "citations", "legal_rules", "legal_rule_citations"], "pad": 14 },
+    { "kind": "region", "label": "Auditoria y segunda opinion", "wraps": ["policies", "case_settings", "answer_audits", "au_claims", "au_findings", "au_citations", "so_runs", "so_claims", "so_findings"], "pad": 14 }
+  ],
+  "connections": [
+    { "id": "c-doc", "from": "cases", "to": "documents", "label": "1:N case_id" },
+    { "id": "doc-pages", "from": "documents", "to": "doc_pages", "label": "1:N" },
+    { "id": "pages-chunks", "from": "doc_pages", "to": "chunks", "label": "1:N" },
+    { "id": "c-claims", "from": "cases", "to": "claims", "label": "1:N" },
+    { "id": "claims-facts", "from": "claims", "to": "facts", "label": "1:N" },
+    { "id": "facts-pos", "from": "facts", "to": "fact_positions", "label": "1:N" },
+    { "id": "facts-rev", "from": "facts", "to": "fact_revisions", "label": "1:N" },
+    { "id": "dec-facts", "from": "decisions", "to": "facts", "label": "1:N proven_by" },
+    { "id": "facts-cit", "from": "facts", "to": "citations", "label": "1:N target" },
+    { "id": "claims-cit", "from": "claims", "to": "citations", "label": "1:N" },
+    { "id": "facts-chunks", "from": "facts", "to": "chunks", "label": "reindex", "variant": "dashed" },
+    { "id": "rules-lrc", "from": "legal_rules", "to": "legal_rule_citations", "label": "1:N" },
+    { "id": "c-audits", "from": "cases", "to": "answer_audits", "label": "1:N case_id" },
+    { "id": "pol-audits", "from": "policies", "to": "answer_audits", "label": "1:N" },
+    { "id": "pol-settings", "from": "policies", "to": "case_settings", "label": "1:1" },
+    { "id": "audits-ac", "from": "answer_audits", "to": "au_claims", "label": "1:N" },
+    { "id": "audits-af", "from": "answer_audits", "to": "au_findings", "label": "1:N" },
+    { "id": "audits-auc", "from": "answer_audits", "to": "au_citations", "label": "1:N" },
+    { "id": "audits-so", "from": "answer_audits", "to": "so_runs", "label": "1:N audit_id" },
+    { "id": "so-claims", "from": "so_runs", "to": "so_claims", "label": "1:N" },
+    { "id": "so-find", "from": "so_runs", "to": "so_findings", "label": "1:N" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Solo dos estados publican", "items": ["is_proven se genera con ADMITTED y JUDICIALLY_PROVEN", "JUDICIALLY_PROVEN exige decision con documento fuente", "ADMITTED exige fact_positions.position = ADMITS"] },
+    { "dot": "cyan", "title": "Alcance y aislamiento", "items": ["Toda tabla nueva lleva organization_id y case_id", "RLS y trigger enforce_same_org en 0058", "0059 solo agrega DELETE para purge_case"] },
+    { "dot": "amber", "title": "Append-only", "items": ["answer_audit_* y second_opinion_* son inmutables", "fact_revisions guarda una fila por version", "La revision humana vive en reviews"] },
+    { "dot": "rose", "title": "Derivados y enlaces", "items": ["chunks.metadata con GIN jsonb_path_ops", "0060 agrega POSITION_ON, DECISION_PROVES_FACT y FACT_ABOUT_ISSUE", "legal_rule_citations enlaza norma, caso y target"] }
+  ]
+}

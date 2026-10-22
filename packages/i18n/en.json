@@ -60,6 +60,7 @@
     "FACT_NOT_FOUND": "Fact not found.",
     "FACT_REVIEW_ERROR": "The fact could not be reviewed.",
     "FACT_VALIDATION_ERROR": "The fact does not meet the proof rules.",
+    "FACTS_PROOF_DISABLED": "Promotion to a proven status is disabled.",
     "MESSAGE_NOT_FOUND": "Message not found.",
     "SECOND_OPINION_DISABLED": "Second opinion is disabled.",
     "SECOND_OPINION_NOT_FOUND": "Second opinion not found.",

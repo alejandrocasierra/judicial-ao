@@ -1,0 +1,38 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1581 de 2012 - Protección de Datos Personales",
+    "identifier": "4",
+    "title": "ARTÍCULO 4 - Ley 1581 de 2012",
+    "text": "ARTÍCULO 4o. PRINCIPIOS PARA EL TRATAMIENTO DE DATOS PERSONALES. En el desarrollo, interpretación y aplicación de la presente ley, se aplicarán, de manera armónica e integral, los siguientes principios: a) Principio de legalidad en materia de Tratamiento de datos: El Tratamiento a que se refiere la presente ley es una actividad reglada que debe sujetarse a lo establecido en ella y en las demás disposiciones que la desarrollen; b) Principio de finalidad: El Tratamiento debe obedecer a una finalidad legítima de acuerdo con la Constitución y la Ley, la cual debe ser informada al Titular; c) Principio de libertad: El Tratamiento sólo puede ejercerse con el consentimiento, previo, expreso e informado del Titular. Los datos personales no podrán ser obtenidos o divulgados sin previa autorización, o en ausencia de mandato legal o judicial que releve el consentimiento; d) Principio de veracidad o calidad: La información sujeta a Tratamiento debe ser veraz, completa, exacta, actualizada, comprobable y comprensible. Se prohíbe el Tratamiento de datos parciales, incompletos, fraccionados o que induzcan a error; e) Principio de transparencia: En el Tratamiento debe garantizarse el derecho del Titular a obtener del Responsable del Tratamiento o del Encargado del Tratamiento, en cualquier momento y sin restricciones, información acerca de la existencia de datos que le conciernan; f) Principio de acceso y circulación restringida: El Tratamiento se sujeta a los límites que se derivan de la naturaleza de los datos personales, de las disposiciones de la presente ley y la Constitución. En este sentido, el Tratamiento sólo podrá hacerse por personas autorizadas por el Titular y/o por las personas previstas en la presente ley; Los datos personales, salvo la información pública, no podrán estar disponibles en Internet u otros medios de divulgación o comunicación masiva, salvo que el acceso sea técnicamente controlable para brindar un conocimiento restringido sólo a los Titulares o terceros autorizados conforme a la presente ley; g) Principio de seguridad: La información sujeta a Tratamiento por el Responsable del Tratamiento o Encargado del Tratamiento a que se refiere la presente ley, se deberá manejar con las medidas técnicas, humanas y administrativas que sean necesarias para otorgar seguridad a los registros evitando su adulteración, pérdida, consulta, uso o acceso no autorizado o fraudulento; h) Principio de confidencialidad: Todas las personas que intervengan en el Tratamiento de datos personales que no tengan la naturaleza de públicos están obligadas a garantizar la reserva de la información, inclusive después de finalizada su relación con alguna de las labores que comprende el Tratamiento, pudiendo sólo realizar suministro o comunicación de datos personales cuando ello corresponda al desarrollo de las actividades autorizadas en la presente ley y en los términos de la misma. TÍTULO III. CATEGORÍAS ESPECIALES DE DATOS.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1581_2012.html",
+    "checksum": "b5626675f536a7e7a764106d40d5f1ac25660fb48ef33f62c545f87e2fb9f1b2",
+    "metadata": {
+      "source_label": "Ley 1581 de 2012",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-4",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1581 de 2012 - Protección de Datos Personales",
+    "identifier": "9",
+    "title": "ARTÍCULO 9 - Ley 1581 de 2012",
+    "text": "ARTÍCULO 9o. AUTORIZACIÓN DEL TITULAR. Sin perjuicio de las excepciones previstas en la ley, en el Tratamiento se requiere la autorización previa e informada del Titular, la cual deberá ser obtenida por cualquier medio que pueda ser objeto de consulta posterior.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1581_2012.html",
+    "checksum": "f0d30b138feb7cb1fcedcbd2dea4e4bbf315d5e5c299ea666afd7a15afa770bd",
+    "metadata": {
+      "source_label": "Ley 1581 de 2012",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-9",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

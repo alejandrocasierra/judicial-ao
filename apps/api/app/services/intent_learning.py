@@ -359,7 +359,7 @@ def _save_profile(org_id: str, user_id: str, *, status: str, reason: str,
         # mismo valor: para el estado persistente está `health()`/el healthcheck.
         fp_alert = (fp_now > prev_fp and fp_now > 0) or (degraded and fp_now > fp_rules)
         if degraded or fp_alert:
-            audit.record(conn, org_id=org_id, actor_id=None,
+            audit.record(conn, org_id=org_id, actor_id=user_id,
                          action="intent_profile.degraded", entity_type="intent_profile",
                          entity_id=user_id, before={"status": old_status, "navegar_fp": prev_fp},
                          after={"status": status, "reason": reason,

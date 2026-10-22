@@ -56,8 +56,12 @@ def _orgs(engine):
 def _rules(directory: Path) -> list[dict]:
     out: list[dict] = []
     for path in sorted(directory.glob("*.json")):
+        if path.name == "checksums.json":
+            continue  # manifiesto agregado, no es una norma
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
+            if data.get("schema") == "judicial-ai/legal-corpus-manifest/v1":
+                continue
             data = data.get("rules") or [data]
         if not isinstance(data, list):
             raise ValueError(f"{path}: se esperaba una lista o {{rules: []}}")

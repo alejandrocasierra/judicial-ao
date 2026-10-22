@@ -1,91 +1,84 @@
 # Auditoría de estado: módulos legales
 
-**Fecha:** 2026-10-22  
-**Alcance:** revisión de `PLAN_MODULOS_LEGALES_2026-10-22.md`, `CONTRATOS_HARNESS_MODULOS_LEGALES.md`, `GUIA_DISENO_MODULOS_LEGALES.md`, `ARCHIFY_MODULOS_LEGALES.md`, código y base local.  
-**Commit revisado:** `9f1da7d` + cambios de esta pasada.
+**Fecha de cierre:** 2026-10-22  
+**Alcance:** revisión de `PLAN_MODULOS_LEGALES_2026-10-22.md`, `CONTRATOS_HARNESS_MODULOS_LEGALES.md`, `GUIA_DISENO_MODULOS_LEGALES.md`, `ARCHIFY_MODULOS_LEGALES.md`, código, corpus y base local.  
+**Base:** commit `0059960` más el cierre coordinado P0/P1/P2 de esta pasada.
 
 ---
 
-## 1. Cerrado en esta pasada
+## 1. Cerrado y verificado
+
+### P0 — corpus, checksums, E2E/golden y despliegue
 
 | Punto | Evidencia |
 |---|---|
-| **Corpus oficial piloto cargado** | `38` normas por organización (`76` filas en dos organizaciones), con `official_url`, `checksum`, `version_date` y texto. Fuentes: CGP/Ley 1564, Código Civil/Ley 57 y Código de Comercio/Decreto 410. |
-| **Importación reproducible** | `scripts/import_legal_rules.py --dir data/legal_rules/co --all`; dry-run y checksums validados. |
-| **Segunda opinión real** | Respondedor **Gemini 3.8 Flash**; verificador **DeepSeek Chat**; auditoría `PASSED`; run `COMPLETED`, veredicto `PARTIAL`, 2 claims originales frente a 5 del verificador, 4 s, 9.095 tokens de entrada, 444 de salida, costo registrado `0.005213`. |
-| **Citas de normas persistidas** | `legal_guard.persist` ahora inserta `legal_rule_citations` para cada claim con `legal_rule_ids`. Verificado con el artículo 422 del CGP: `PASSED`, una cita de norma persistida y luego datos de prueba eliminados. |
-| **Pruebas de los cambios** | `10 passed` en `tests/unit/test_legal_modules.py` y `tests/integration/test_legal_modules_api.py`. La suite completa sigue en `693` unitarias y `152` de integración. |
+| Corpus | **135 normas por organización**, **270 filas** en Alfa y Beta, **21 fuentes**. Cero filas sin `checksum` o `official_url`. |
+| Normas añadidas | Ley 1579/2012, Decreto 2723/2014, Estatuto Tributario, Código Civil adicional, 28 disposiciones del CGP, Ley 527/1999, Ley 2213/2022, CPACA, Ley 1394/2010, Ley 962/2005, Ley 590/2000, Ley 1581/2012, Ley 270/1996, Decretos 019/2012, 525/2009, 1069/2015, 650/1996, 2150/1995, 806/2020 y 960/1970. |
+| Alias | `839-01` → `839-1` y `784-5` → artículo 784, numeral 5, con el mismo texto oficial y metadata `alias_of`. No se inventó una norma nueva. |
+| `checksums.json` | `rules_count=135`, `sources_count=21`, `corpus_sha256=5c6a16c236c68af97f17407c189c3cd99489cc2a0c0d3b29eb560120d9271739`. `build_checksums.py --check` pasa e es idempotente. |
+| Acta | `docs/ACTA_REVISION_CORPUS_LEGALES.md` separa trazabilidad técnica de firma jurídica humana. La firma sigue **pendiente**. |
+| E2E | **24/24** Playwright en 360/768/1024/1440: pestañas, hechos, auditoría, segunda opinión interceptada, responsive y manifiesto. |
+| Golden set | **7/7**: norma existente, inexistente, cifra, fecha, parte, cita válida y segunda opinión. |
+| Migraciones | `0054 → 0063` en base desechable; downgrade `0063 → 0054` OK. Head local: `0063_legal_gate_semantics`. |
+| Despliegue | `scripts/deploy_legal_modules.ps1` con dry-run por defecto, backup, migración, corpus, backfill, reindex, grafo, smoke y rollback. **Producción no fue desplegada**: falta target/credenciales/backup verificables; el script aborta sin `-AuthorizeProduction`. |
 
-La sesión de segunda opinión quedó en la base local con el título `Segunda opinión real`, para que pueda revisarse en la UI. No se borró.
+### P1 — gate, segunda opinión, hechos y UI
 
----
+| Punto | Evidencia |
+|---|---|
+| Artículo exacto | El lookup no confunde el 422 con el 1422 y prioriza el cuerpo normativo citado. |
+| Semántica | `check_article_supports_claim` detecta consecuencia no respaldada, solapamiento bajo, artículo de otro código y texto insuficiente. Juez LLM por claim que solo puede degradar. |
+| Identificadores | `839-01`, `784-5`, rangos `10-16`, `10 a 16`, listas `10 y 16` y artículo punteado `2.2.6.1.2.4.1` resueltos. Rango con artículo faltante falla cerrado. |
+| `quote_hash` | `QUOTE_MISMATCH` crítico; hash sin texto verificable queda en revisión, no se aprueba a ciegas. |
+| Contradicciones | Una contradicción abierta omitida marca el claim `NEEDS_REVIEW`; no se elige la versión verdadera. La respuesta publica el claim con advertencia en vez de borrar toda la respuesta. |
+| Juez persistido | `answer_audit_claims` guarda la fila `auditor='JUDGE'` por claim, con hallazgos asociados. |
+| Segunda opinión | Comparador LLM con el prompt `second_opinion_compare.v1.md`, fallback determinista, modo LLM persistido, `auto_should_run`/`request_auto`, presupuesto `SECOND_OPINION_MAX_COST` y `require_second_opinion`. |
+| Costo | Usa precios del modelo si existen; si no, queda explícitamente `cost_source='ESTIMATED'`. |
+| Hechos | `extract_positions_from_claims` exige hablante atribuible y verbo explícito; no convierte `UNKNOWN` en `ADMITS`. En el caso local no cambió posiciones porque no hay claims con hablante resuelto; no se forzó atribución. |
+| Evidencia | Trigger de `EVIDENCE_SUPPORTED`/`ADMITTED`/`JUDICIALLY_PROVEN` en migración `0062`; el flag `FACTS_PROOF_ENABLED=false` impide transiciones probatorias por API. |
+| UI | `AuditBadge` en cada respuesta del chat y `SecondOpinionDiff` lado a lado por claim, con estados vacío/error/cancelado. |
 
-## 2. Gaps y bloqueantes
+### P2 — Archify y documentación
 
-### P0: bloquean una afirmación de “producción legal completa”
-
-| Gap | Estado | Impacto | Acción |
-|---|---|---|---|
-| **El corpus es piloto, no completo** | `38` normas por organización; cubre CGP, Código Civil y Código de Comercio, pero no todas las normas citadas por el expediente. Faltan, entre otras, Ley 1579 de 2012 (arts. 10-16 y 31), Decreto 2723 de 2014 (art. 22), Estatuto Tributario (arts. 630 y 839-01), Código Civil art. 769 y varias disposiciones del CGP. | El gate falla cerrado y bloqueará conclusiones que citen esas normas. No es una fuga de seguridad; es cobertura incompleta. | Completar `data/legal_rules/co/` con revisión legal y ejecutar el importador. No inventar texto ni aceptar artículos sin fuente. |
-| **No hay firma/aceptación legal del corpus** | El texto se extrajo de páginas oficiales, pero no existe un acta de revisión jurídica por artículo ni un `checksums.json` agregado. | No se puede afirmar que el corpus sea el corpus oficial definitivo del piloto. | Revisión legal artículo por artículo; congelar checksums; registrar versión. |
-| **Despliegue de producción no ejecutado** | Solo se migró y verificó local/test. No hay backup, migración, backfill ni rollback en producción. | El código está listo, pero producción no está actualizada. | Ventana con backup, `alembic upgrade`, backfill, reindex, rebuild de grafo y smoke test. |
-| **E2E y golden set de los módulos legales ausentes** | Hay unitarias e integración; no hay Playwright 360/768/1024/1440 ni golden set específico de claims/normas/hechos. | No se puede declarar aceptación visual/legal completa; el plan exige G4/G5. | Añadir `tests/e2e` y un golden set con normas cargadas, casos de cifra/fecha/parte/norma y segunda opinión. |
-
-### P1: gaps funcionales que afectan calidad, no la seguridad básica
-
-| Gap | Evidencia / impacto | Acción |
-|---|---|---|
-| **El gate comprueba que la norma exista, pero no que el artículo diga lo que el claim afirma** | `_lookup_legal_rule` busca por identificador; no compara la proposición jurídica con el texto normativo. Un claim puede citar el artículo correcto y atribuirle una consecuencia falsa. | Añadir validación semántica de la norma contra el texto cargado y un juez específico; persistir veredicto `JUDGE`. |
-| **No se valida `quote_hash` en la cita primaria** | `legal_guard` valida página/segmento y texto, pero no exige que el hash de la cita coincida con el texto fuente. | Exigir `quote_hash` cuando esté disponible y marcar `QUOTE_MISMATCH`. |
-| **No se consultan `contradictions` en el gate** | El plan promete contradicciones; el código actual valida números/fechas/partes/normas/decisiones, no el catálogo de contradicciones. | Incorporar contradicciones abiertas al claim y exigir ambas versiones. |
-| **El juez semántico no se persiste por claim con `auditor='JUDGE'`** | Se ejecuta la verificación existente, pero la auditoría persistida principal es determinista. | Persistir veredictos del juez y sus hallazgos, sin permitir que apruebe lo que el determinista rechazó. |
-| **La fase 2 de segunda opinión es comparación determinista, no un comparador LLM** | `second_opinion.compare` usa solapamiento de términos y cifras. Es reproducible y barato, pero no interpreta diferencias semánticas. | Si se exige el comparador del plan, llamar al prompt `second_opinion_compare.v1.md` con modelo distinto y persistir su salida. |
-| **`auto_second_opinion` no se ejecuta** | La columna existe, pero el pipeline no dispara automáticamente `ANALYSIS`/`ALL`/`STRICT_ONLY`. | Implementar el hook por intención y política, con idempotencia y límite de costo. |
-| **`SECOND_OPINION_MAX_COST` y `require_second_opinion` no se aplican en el flujo** | Son configuración declarada, pero no hay guard de costo ni bloqueo de publicación. | Aplicar presupuesto antes de encolar y bloquear/avisar según política. |
-| **Costo de segunda opinión es una fórmula fija** | `_cost()` usa una tarifa conservadora fija; no lee precio del modelo. | Añadir precios por modelo o marcar el costo como estimado. |
-| **Posiciones de hechos inferidas quedan `UNKNOWN`** | Las `585` posiciones del proceso local se infirieron por mención de parte; no hay extracción de “alega/niega/admite” desde claims. | Ejecutar el Analista de hechos con citas y revisión humana; no convertir `UNKNOWN` en `ADMITS`. |
-| **`EVIDENCE_SUPPORTED` no tiene invariante en BD** | El trigger solo exige decisión para `JUDICIALLY_PROVEN` y admisión para `ADMITTED`. | Añadir validación de evidencia admisible para `EVIDENCE_SUPPORTED` o dejarlo explícitamente como estado de revisión. |
-| **UI de segunda opinión incompleta** | Hay panel de auditoría y botón, pero no `SecondOpinionDialog`/diff lado a lado ni comparación visual por claim. | Implementar el diff y estados vacío/error/cancelado. |
-| **`AuditBadge` no está en el chat** | La auditoría se ve en la pestaña Auditoría, no en cada respuesta del chat. | Añadir badge con `audit_status` y enlace al detalle. |
-
-### P2: documentación, Archify y deuda de plan
-
-| Gap | Evidencia | Acción |
-|---|---|---|
-| **Archify: 4 de 6 diagramas** | Existen contexto, gate, segunda opinión y hechos. Faltan `04-data-model.html` y `05-ux-navigation.html`. | Generar y validar los dos restantes. |
-| **El documento Archify conserva una frase obsoleta** | Dice “No existe hoy una carpeta docs/architecture” cuando ya existe. | Corregir el estado inicial y listar los 4/6 artefactos. |
-| **El plan habla de migraciones 0055-0058** | La implementación real llegó a `0061` por permisos de worker y aristas de grafo. | Actualizar el rango y el inventario. |
-| **Prompts/schemas del plan no existen con esos nombres** | Faltan `answer_question.v4.md`, `verify_answer.v3.md`, `fact_proof_review.v1.md`, `legal_audit.schema.json`, `second_opinion.schema.json` y `party_fact.schema.json`; existen prompts funcionales equivalentes. | Alinear nombres o corregir el inventario del plan. |
-| **Flags por defecto** | El plan P0-03 pide flags off; `config.py` tiene `LEGAL_GUARD_ENABLED=true`, `SECOND_OPINION_ENABLED=true` y `FACTS_PROOF_ENABLED=true`. | Decidir política de despliegue; para producción, activar después de migrar. |
-| **`data/legal_rules/co/checksums.json` no existe** | El plan lo pide; los checksums están por fila en JSON. | Generar el agregado o actualizar el plan. |
-| **No hay `layout.tsx` de proceso** | Las pestañas se insertan en la página de expediente y en páginas hijas; no hay layout compartido. | Extraer layout si se busca consistencia total. |
-| **`docs/PLAN` sigue diciendo “la implementación puede comenzar”** | El código ya está implementado en local. | Actualizar el estado de cierre y enlazar esta auditoría. |
+| Punto | Evidencia |
+|---|---|
+| Archify | **6/6**: contexto, gate, segunda opinión, hechos, modelo de datos y navegación UX. `validate`, `deliver`, `check --require-provenance` y `browser-check` pasan. |
+| Prompts/schemas | Nombres del plan creados; `validate_schemas.py` PASS (20 metaschemas y 11 casos). Los prompts v4/v3 son contratos de versión, no prompts activos duplicados. |
+| Flags | `LEGAL_GUARD_ENABLED`, `SECOND_OPINION_ENABLED` y `FACTS_PROOF_ENABLED` tienen default `false`; `.env`/`.env.test` locales los activan explícitamente. `.env.example` documenta las 15 variables que faltaban. |
+| Documentación | Plan, implementación, guía de diseño, contratos, Archify e índice alineados con el estado real y el rango `0059–0063`. |
 
 ---
 
-## 3. Lo que no es un gap
+## 2. Validación ejecutada
 
-- `cases` sigue siendo la unidad proceso/demanda.
-- Las tablas nuevas tienen RLS y triggers de misma organización.
-- `JUDICIALLY_PROVEN` y `ADMITTED` están protegidos por trigger; `EVIDENCE_SUPPORTED` no se publica como probado.
-- Los `826` hechos locales tienen estado de prueba; `426` son judicialmente probados.
-- Los `826` chunks `fact` tienen embeddings y el grafo tiene `19.641` aristas.
-- La segunda opinión no cae al mismo modelo de forma silenciosa; exige configuración distinta.
-- La exportación CKP 1.1 y la purga incluyen las tablas nuevas.
+| Comando | Resultado |
+|---|---|
+| `pytest tests/unit tests/integration tests/static tests/behavior tests/security -q` | **1308 passed**, 7 warnings |
+| `pytest tests/static -q` | **174 passed** |
+| `pytest tests/unit/test_legal_modules.py tests/integration/test_legal_modules_api.py -q` | **27 passed** |
+| `evals/golden/legal_modules_runner.py` | **7/7 PASS** |
+| `npm test` en `tests/e2e` | **24/24 passed** |
+| `npm run build` en `apps/web` | Correcto |
+| Docker local | API/web healthy; worker, worker-media y MCP healthy |
+| Corpus SQL | 270 filas activas, 135 por organización, 21 fuentes, 0 sin checksum/URL |
 
----
-
-## 4. Orden recomendado para cerrar
-
-1. **P0:** ampliar el corpus con las normas del expediente y firma legal; ejecutar importación en todas las organizaciones.
-2. **P0:** golden set + E2E de hechos/auditoría/segunda opinión.
-3. **P1:** validación semántica de normas, contradicciones y `quote_hash`; persistir juez.
-4. **P1:** activar `auto_second_opinion` y presupuesto; completar UI de diff.
-5. **P2:** generar los dos diagramas Archify restantes y corregir el estado documental.
-6. **P0 producción:** backup, migración `0054 -> 0061`, backfill, reindex, grafo y smoke test.
+La suite completa también verificó los contratos legacy: `/facts` sigue devolviendo lista por defecto (`envelope=true` es opt-in para la UI), el cache de test está desactivado y las auditorías de sistema llevan actor.
 
 ---
 
-## 5. Veredicto
+## 3. Bloqueos y límites reales
 
-El núcleo de los tres módulos funciona en local y la segunda opinión real está ejecutada. El sistema **falla cerrado** cuando falta una norma, un modelo o una decisión. No se puede declarar “producción legal completa” todavía: el corpus es un piloto de 38 normas por organización y faltan E2E/golden set y despliegue. Esos son los bloqueantes reales, no un fallo silencioso del gate.
+1. **Firma jurídica humana del corpus: pendiente.** No se puede sustituir con una firma automática. El acta contiene el formato y la evidencia técnica, pero la aceptación legal no está firmada.
+2. **Producción no desplegada.** No hay target, credenciales ni backup de producción en esta sesión. El runbook y el script están probados en seco; no se declara un despliegue que no ocurrió.
+3. **Cobertura residual.** El corpus cubre las normas con artículo concreto citadas por el expediente, pero no las que aparecen solo por nombre o en notas editoriales: Decreto 196/1971, Decreto 2364/2012, Decreto 1074/2015, Decreto 1469/2010, Ley 1285/2009, Ley 223/1995, Ley 2220/2022 y Ley 6/1992, además de concordancias sin número. El gate las bloquea; no las inventa.
+4. **Precios de proveedor.** `ai_models` no tiene tarifas cargadas; el costo de segunda opinión es una estimación explícita, no un precio facturado.
+5. **Posiciones de hechos.** Las 585 posiciones locales siguen `UNKNOWN` porque la extracción no encontró hablantes resueltos. Es el comportamiento seguro; requiere datos/revisión para pasar a `ALLEGES`/`DENIES`/`ADMITS`.
+6. **Producción legal completa.** No se puede afirmar mientras sigan abiertos los puntos 1–3. El sistema **falla cerrado** y no publica una conclusión jurídica sin norma, cita, decisión o segunda opinión cuando la política lo exige.
+
+---
+
+## 4. Veredicto
+
+Los tres módulos quedaron implementados, integrados y probados en local: antialucinación con gate determinista y juez, segunda opinión real con modelo distinto, hechos con invariantes y UI de auditoría/diff. El corpus pasó de 38 a **135 normas por organización** y hay E2E/golden set verificados.
+
+La afirmación correcta es: **listo para revisión legal y despliegue controlado**, no “producción legal completa”. Los bloqueantes restantes son externos al código: firma jurídica, credenciales/backup de producción y ampliación de las normas que el expediente cita sin artículo verificable.

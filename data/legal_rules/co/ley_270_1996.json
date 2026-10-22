@@ -1,0 +1,20 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Ley 270 de 1996 - Administración de Justicia",
+    "identifier": "16",
+    "title": "ARTÍCULO 16 - Ley 270 de 1996",
+    "text": "ARTÍCULO 16. SALAS. <Artículo modificado por el artículo 7 de la Ley 1285 de 2009. El nuevo texto es el siguiente:> <Inciso modificado por el artículo 10 de la Ley 2430 de 2024. El nuevo texto es el siguiente:> La Corte Suprema de Justicia cumplirá sus funciones como máximo tribunal de la Justicia Ordinaria por medio de cinco (5) salas, integradas así: La Sala Plena, integrada por veintitrés (23) Magistrados de las Salas de Casación; la Sala de Gobierno, integrada por el Presidente, el Vicepresidente y los Presidentes de cada una de las Salas de Casación; la Sala de Casación Civil y Agraria*, integrada por siete (7) Magistrados; la Sala de Casación Laboral, integrada por siete (7) Magistrados; la Sala de Casación Penal, integrada por nueve (9) Magistrados. PARÁGRAFO. La Sala Especial de Primera Instancia estará integrada por tres (3) Magistrados y la Sala Especial de Instrucción por seis (6) Magistrados.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0270_1996.html",
+    "checksum": "24e56f832b44a31587bfd7f297e22d56f09e591d581a386c6344cddc06e0c7bc",
+    "metadata": {
+      "source_label": "Ley 270 de 1996",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-16",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

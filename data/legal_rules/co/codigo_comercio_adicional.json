@@ -1,0 +1,18 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Código de Comercio - Decreto 410 de 1971",
+    "identifier": "784-5",
+    "title": "ARTÍCULO 784, numeral 5 (alias 784-5)",
+    "text": "ARTÍCULO 784. EXCEPCIONES DE LA ACCIÓN CAMBIARIA. Contra la acción cambiaria sólo podrán oponerse las siguientes excepciones: 1) Las que se funden en el hecho de no haber sido el demandado quien suscribió el título; 2) La incapacidad del demandado al suscribir el título; 3) Las de falta de representación o de poder bastante de quien haya suscrito el título a nombre del demandado; 4) Las fundadas en la omisión de los requisitos que el título deba contener y que la ley no supla expresamente; 5) La alteración del texto del título, sin perjuicio de lo dispuesto respecto de los signatarios posteriores a la alteración; 6) Las relativas a la no negociabilidad del título; 7) Las que se funden en quitas o en pago total o parcial, siempre que consten en el título; 8) Las que se funden en la consignación del importe del título conforme a la ley o en el depósito del mismo importe hecho en los términos de este Título; 9) Las que se funden en la cancelación judicial del título o en orden judicial de suspender su pago, proferida como se prevé en este Título; 10) Las de prescripción o caducidad, y las que se basen en la falta de requisitos necesarios para el ejercicio de la acción; 11) Las que se deriven de la falta de entrega del título o de la entrega sin intención de hacerlo negociable, contra quien no sea tenedor de buena fe; 12) Las derivadas del negocio jurídico que dio origen a la creación o transferencia del título, contra el demandante que haya sido parte en el respectivo negocio o contra cualquier otro demandante que no sea tenedor de buena fe exenta de culpa, y 13) Las demás personales que pudiere oponer el demandado contra el actor.",
+    "version_date": "1971-03-27",
+    "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=41102",
+    "checksum": "b187bb45264689cb1167bc9b10ba48abbbf257d905e7e6c03c8e716376690119",
+    "metadata": {
+      "source_label": "Código de Comercio",
+      "retrieved_at": "2026-10-22T15:25:41.317221+00:00",
+      "alias_of": "784",
+      "alias_reason": "El expediente cita el numeral 5 del artículo 784 como 784-5; se reutiliza el texto oficial del artículo completo."
+    }
+  }
+]

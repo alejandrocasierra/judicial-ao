@@ -86,7 +86,7 @@ export function FactsBoard({ caseId }: { caseId: string }) {
   const [editReason, setEditReason] = useState("");
 
   const params = useMemo(() => {
-    const p: Record<string, string> = { proof };
+    const p: Record<string, string> = { proof, envelope: "true" };
     if (side) p.side = side;
     if (q.trim().length >= 2) p.q = q.trim();
     return p;

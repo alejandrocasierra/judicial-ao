@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "workflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.json",
+    "sha256": "d361cd8ab5ba483cb870987eeb46dc8e0f34b1867ce1b5a7b519d4f3e042635d",
+    "bytes": 5160
+  },
+  "artifact": {
+    "path": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.html",
+    "sha256": "b76cba6c2de750aa8a54fe9232e0c6fa9644152e0075a2ba4275d1b43b8cb6bf",
+    "bytes": 768420
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2\\05-ux-navigation.finalize.json",
+    "summaryReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2\\05-ux-navigation.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2\\05-ux-navigation.browser-check.json"
+  },
+  "update": {
+    "status": "update_available",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.2.0",
+    "releaseNotes": "https://github.com/tt-a1i/archify/releases/tag/v3.2.0",
+    "severity": "normal",
+    "checkedAt": "2026-10-22T14:57:55.570Z",
+    "source": "cache",
+    "noticeRequired": true,
+    "noticeText": "Archify update: 3.0.1 → 3.2.0. A previous check at 2026-10-22T14:57:55.570Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.2.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
+    "eventKey": "archify@sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
+  },
+  "visualReview": "not-requested",
+  "durationMs": 4558,
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "routesOverSuggestedBends": 1
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [],
+      "detours": [
+        {
+          "relationship": {
+            "id": "nav-verif",
+            "from": "sidebar",
+            "to": "verificacion",
+            "label": "admin",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "bends": 3,
+          "stretch": 1.222
+        }
+      ],
+      "truncated": false
+    },
+    "hints": [
+      "sidebar → verificacion needs 3 bends: move node sidebar or verificacion so they share a row or column with matching centers, or sit diagonally with a clear corner."
+    ],
+    "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
+  }
+}

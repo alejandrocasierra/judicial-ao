@@ -1,0 +1,506 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "25",
+    "title": "ARTÍCULO 25 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 25. CUANTÍA. Cuando la competencia se determine por la cuantía, los procesos son de mayor, de menor y de mínima cuantía. Son de mínima cuantía cuando versen sobre pretensiones patrimoniales que no excedan el equivalente a cuarenta salarios mínimos legales mensuales vigentes (40 smlmv). Son de menor cuantía cuando versen sobre pretensiones patrimoniales que excedan el equivalente a cuarenta salarios mínimos legales mensuales vigentes (40 smlmv) sin exceder el equivalente a ciento cincuenta salarios mínimos legales mensuales vigentes (150 smlmv). Son de mayor cuantía cuando versen sobre pretensiones patrimoniales que excedan el equivalente a ciento cincuenta salarios mínimos legales mensuales vigentes (150 smlmv). El salario mínimo legal mensual a que se refiere este artículo, será el vigente al momento de la presentación de la demanda. Cuando se reclame la indemnización de daños extrapatrimoniales se tendrán en cuenta, solo para efectos de determinar la competencia por razón de la cuantía, los parámetros jurisprudenciales máximos al momento de la presentación de la demanda. PARÁGRAFO. <Parágrafo INEXEQUIBLE>",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012.html",
+    "checksum": "09651b4e7734742c8eb00870a9bd5333dc2541907a225604955e7c8d2ae3258e",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-25",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "27",
+    "title": "ARTÍCULO 27 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 27. CONSERVACIÓN Y ALTERACIÓN DE LA COMPETENCIA. La competencia no variará por la intervención sobreviniente de personas que tengan fuero especial o porque dejaren de ser parte en el proceso, salvo cuando se trate de un estado extranjero o un agente diplomático acreditado ante el Gobierno de la República frente a los cuales la Sala Civil de la Corte Suprema de Justicia tenga competencia. La competencia por razón de la cuantía podrá modificarse solo en los procesos contenciosos que se tramitan ante juez municipal, por causa de reforma de demanda, demanda de reconvención o acumulación de procesos o de demandas. Cuando se altere la competencia con arreglo a lo dispuesto en este artículo, lo actuado hasta entonces conservará su validez y el juez lo remitirá a quien resulte competente. Se alterará la competencia cuando la Sala Administrativa del Consejo Superior de la Judicatura haya dispuesto que una vez en firme la sentencia deban remitirse los expedientes a las oficinas de apoyo u oficinas de ejecución de sentencias declarativas o ejecutivas. En este evento los funcionarios y empleados judiciales adscritos a dichas oficinas ejercerán las actuaciones jurisdiccionales y administrativas que sean necesarias para seguir adelante la ejecución ordenada en la sentencia.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012.html",
+    "checksum": "39151a6fec3eea43bdcae6e23e20d39657ab3d939cf1dcc7c6792bfc925b2f33",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-27",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "35",
+    "title": "ARTÍCULO 35 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 35. ATRIBUCIONES DE LAS SALAS DE DECISIÓN Y DEL MAGISTRADO SUSTANCIADOR. Corresponde a las salas de decisión dictar las sentencias y los autos que decidan la apelación contra el que rechace el incidente de liquidación de perjuicios de condena impuesta en abstracto o el que rechace la oposición a la diligencia de entrega o resuelva sobre ella. El magistrado sustanciador dictará los demás autos que no correspondan a la sala de decisión. Los autos que resuelvan apelaciones, dictados por la sala o por el magistrado sustanciador, no admiten recurso. A solicitud del magistrado sustanciador, la sala plena especializada o única podrá decidir los recursos de apelación interpuestos contra autos o sentencias, cuando se trate de asuntos de trascendencia nacional, o se requiera unificar la jurisprudencia o establecer un precedente judicial.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr001.html",
+    "checksum": "8c4a28c4dba005dbc565cb3d9fa21a67875362b4a7f5d382972cec2db66437af",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-35",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "37",
+    "title": "ARTÍCULO 37 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 37. REGLAS GENERALES. La comisión solo podrá conferirse para la práctica de pruebas en los casos que autoriza el artículo 171, para la de otras diligencias que deban surtirse fuera de la sede del juez del conocimiento, y para secuestro y entrega de bienes en dicha sede, en cuanto fuere menester. No podrá comisionarse para la práctica de medidas cautelares extraprocesales. La comisión podrá consistir en la solicitud, por cualquier vía expedita, de auxilio a otro servidor público para que realice las diligencias necesarias que faciliten la práctica de las pruebas por medio de videoconferencia, teleconferencia o cualquier otro medio idóneo de comunicación simultánea. Cuando se ordene practicar medidas cautelares antes de la notificación del auto admisorio de la demanda o del mandamiento ejecutivo, a petición y costa de la parte actora y sin necesidad de que el juez lo ordene, se anexará al despacho comisorio una copia del auto admisorio de la demanda o del mandamiento ejecutivo, para efectos de que el comisionado realice la notificación personal. El retiro y entrega de copias de la demanda y sus anexos así como la fecha a partir de la cual debe computarse el término de traslado de la demanda, estará sujeto a lo previsto en el artículo 91 de este código. Cuando el despacho judicial comitente y el comisionado tengan habilitado el Plan de Justicia Digital, no será necesaria la remisión física de dichos documentos por parte del comitente.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr001.html",
+    "checksum": "14b0e78a90e05ae5167d29d4d8381a1022d70098a3b22db4d675c3d3bdc23bc2",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-37",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "40",
+    "title": "ARTÍCULO 40 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 40. PODERES DEL COMISIONADO. El comisionado tendrá las mismas facultades del comitente en relación con la diligencia que se le delegue, inclusive las de resolver reposiciones y conceder apelaciones contra las providencias que dicte, susceptibles de esos recursos. Sobre la concesión de las apelaciones que se interpongan se resolverá al final de la diligencia. Toda actuación del comisionado que exceda los límites de sus facultades es nula. La nulidad podrá alegarse a más tardar dentro de los cinco (5) días siguientes al de la notificación del auto que ordene agregar el despacho diligenciado al expediente. La petición de nulidad se resolverá de plano por el comitente, y el auto que la decida solo será susceptible de reposición.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr001.html",
+    "checksum": "668a9055ae35bd6dedc2d13b7f827f8b59aa6b5b22279d61adf17fe5688f944a",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-40",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "42",
+    "title": "ARTÍCULO 42 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 42. DEBERES DEL JUEZ. Son deberes del juez: 1. Dirigir el proceso, velar por su rápida solución, presidir las audiencias, adoptar las medidas conducentes para impedir la paralización y dilación del proceso y procurar la mayor economía procesal. 2. Hacer efectiva la igualdad de las partes en el proceso, usando los poderes que este código le otorga. 3. Prevenir, remediar, sancionar o denunciar por los medios que este código consagra, los actos contrarios a la dignidad de la justicia, lealtad, probidad y buena fe que deben observarse en el proceso, lo mismo que toda tentativa de fraude procesal. 4. Emplear los poderes que este código le concede en materia de pruebas de oficio para verificar los hechos alegados por las partes. 5. Adoptar las medidas autorizadas en este código para sanear los vicios de procedimiento o precaverlos, integrar el litisconsorcio necesario e interpretar la demanda de manera que permita decidir el fondo del asunto. Esta interpretación debe respetar el derecho de contradicción y el principio de congruencia. 6. Decidir aunque no haya ley exactamente aplicable al caso controvertido, o aquella sea oscura o incompleta, para lo cual aplicará las leyes que regulen situaciones o materias semejantes, y en su defecto la doctrina constitucional, la jurisprudencia, la costumbre y los principios generales del derecho sustancial y procesal. 7. Motivar la sentencia y las demás providencias, salvo los autos de mero trámite. La sustentación de las providencias deberá también tener en cuenta lo previsto en el artículo 7 sobre doctrina probable. 8. Dictar las providencias dentro de los términos legales, fijar las audiencias y diligencias en la oportunidad legal y asistir a ellas. 9. Guardar reserva sobre las decisiones que deban dictarse en los procesos. El mismo deber rige para los empleados judiciales. 10. Presidir el reparto de los asuntos cuando corresponda. 11. Verificar con el secretario las cuestiones relativas al proceso y abstenerse de solicitarle por auto informe sobre hechos que consten en el expediente. 12. Realizar el control de legalidad de la actuación procesal una vez agotada cada etapa del proceso. 13. Usar la toga en las audiencias. 14. Usar el Plan de Justicia Digital cuando se encuentre implementado en su despacho judicial. 15. Los demás que se consagren en la ley.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr001.html",
+    "checksum": "83803fa1fb1f1abbfa291798aefdf8a7e6a2e91fbbb61fb748d325fccdbef285",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-42",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "49",
+    "title": "ARTÍCULO 49 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 49. COMUNICACIÓN DEL NOMBRAMIENTO, ACEPTACIÓN DEL CARGO Y RELEVO DEL AUXILIAR DE LA JUSTICIA. El nombramiento del auxiliar de la justicia se le comunicará por telegrama enviado a la dirección que figure en la lista oficial, o por otro medio más expedito, o de preferencia a través de mensajes de datos. De ello se dejará constancia en el expediente. En la comunicación se indicará el día y la hora de la diligencia a la cual deba concurrir el auxiliar designado. En la misma forma se hará cualquier otra comunicación. El cargo de auxiliar de la justicia es de obligatoria aceptación para quienes estén inscritos en la lista oficial. Siempre que el auxiliar designado no acepte el cargo dentro de los cinco (5) días siguientes a la comunicación de su nombramiento, se excuse de prestar el servicio, no concurra a la diligencia, no cumpla el encargo en el término otorgado, o incurra en causal de exclusión de la lista, será relevado inmediatamente.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr001.html",
+    "checksum": "763377381ee4dace7a76ec9a203a8af92c54ef22f109faff3e5dfe5b40a57f73",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-49",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "72",
+    "title": "ARTÍCULO 72 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 72. LLAMAMIENTO DE OFICIO. En cualquiera de las instancias, siempre que el juez advierta colusión, fraude o cualquier otra situación similar en el proceso, ordenará la citación de las personas que puedan resultar perjudicadas, para que hagan valer sus derechos. El citado podrá solicitar pruebas si interviene antes de la audiencia de instrucción y juzgamiento. CAPÍTULO IV. APODERADOS.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr002.html",
+    "checksum": "c872f47a87829257299f3cd98611eaf6cd2d7164a48650a3177e6757a488beb6",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-72",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "77",
+    "title": "ARTÍCULO 77 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 77. FACULTADES DEL APODERADA. <sic> Salvo estipulación en contrario, el poder para litigar se entiende conferido para solicitar medidas cautelares extraprocesales, pruebas extraprocesales y demás actos preparatorios del proceso, adelantar todo el trámite de este, solicitar medidas cautelares, interponer recursos ordinarios, de casación y de anulación y realizar las actuaciones posteriores que sean consecuencia de la sentencia y se cumplan en el mismo expediente, y cobrar ejecutivamente las condenas impuestas en aquella. El apoderado podrá formular todas las pretensiones que estime conveniente para beneficio del poderdante. El poder para actuar en un proceso habilita al apoderado para recibir la notificación del auto admisorio de la demanda o del mandamiento ejecutivo, prestar juramento estimatorio y confesar espontáneamente. Cualquier restricción sobre tales facultades se tendrá por no escrita. El poder también habilita al apoderado para reconvenir y representar al poderdante en todo lo relacionado con la reconvención y la intervención de otras partes o de terceros. El apoderado no podrá realizar actos reservados por la ley a la parte misma; tampoco recibir, allanarse, ni disponer del derecho en litigio, salvo que el poderdante lo haya autorizado de manera expresa. Cuando se confiera poder a una persona jurídica para que designe o reemplace apoderados judiciales, aquella indicará las facultades que tendrá el apoderado sin exceder las otorgadas por el poderdante a la persona jurídica. CAPÍTULO V. DEBERES Y RESPONSABILIDADES DE LAS PARTES Y SUS APODERADOS.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr002.html",
+    "checksum": "727b0f709c79b553590650c6061666db4b927bf7b5e2aa617851ceaecbd71dc1",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-77",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "89",
+    "title": "ARTÍCULO 89 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 89. PRESENTACIÓN DE LA DEMANDA. La demanda se entregará, sin necesidad de presentación personal, ante el secretario del despacho judicial al que se dirija o de la oficina judicial respectiva, quien dejará constancia de la fecha de su recepción. Con la demanda deberá acompañarse copia para el archivo del juzgado, y tantas copias de ella y de sus anexos cuantas sean las personas a quienes deba correrse traslado. Además, deberá adjuntarse la demanda como mensaje de datos para el archivo del juzgado y el traslado de los demandados. Donde se haya habilitado en Plan de Justicia Digital, no será necesario presentar copia física de la demanda. Al momento de la presentación, el secretario verificará la exactitud de los anexos anunciados, y si no estuvieren conformes con el original los devolverá para que se corrijan. PARÁGRAFO. Atendiendo las circunstancias particulares del caso, el juez podrá excusar al demandante de presentar la demanda como mensaje de datos según lo dispuesto en este artículo.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr003.html",
+    "checksum": "f03098c080d2dcc46e9887ed7dbc1895e05d189d2256057be5f17f5ad4fb1198",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-89",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "90",
+    "title": "ARTÍCULO 90 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 90. ADMISIÓN, INADMISIÓN Y RECHAZO DE LA DEMANDA. El juez admitirá la demanda que reúna los requisitos de ley, y le dará el trámite que legalmente le corresponda aunque el demandante haya indicado una vía procesal inadecuada. En la misma providencia el juez deberá integrar el litisconsorcio necesario y ordenarle al demandado que aporte, durante el traslado de la demanda, los documentos que estén en su poder y que hayan sido solicitados por el demandante. El juez rechazará la demanda cuando carezca de jurisdicción o de competencia o cuando esté vencido el término de caducidad para instaurarla. En los dos primeros casos ordenará enviarla con sus anexos al que considere competente; en el último, ordenará devolver los anexos sin necesidad de desglose. Mediante auto no susceptible de recursos el juez declarará inadmisible la demanda solo en los siguientes casos: 1. Cuando no reúna los requisitos formales. 2. Cuando no se acompañen los anexos ordenados por la ley. 3. Cuando las pretensiones acumuladas no reúnan los requisitos legales. 4. Cuando el demandante sea incapaz y no actúe por conducto de su representante. 5. Cuando quien formule la demanda carezca de derecho de postulación para adelantar el respectivo proceso. 6. Cuando no contenga el juramento estimatorio, siendo necesario. 7. Cuando no se acredite que se agotó la conciliación prejudicial como requisito de procedibilidad. En estos casos el juez señalará con precisión los defectos de que adolezca la demanda, para que el demandante los subsane en el término de cinco (5) días, so pena de rechazo. Vencido el término para subsanarla el juez decidirá si la admite o la rechaza. Los recursos contra el auto que rechace la demanda comprenderán el que negó su admisión. La apelación se concederá en el efecto suspensivo y se resolverá de plano. En todo caso, dentro de los treinta (30) días siguientes a la fecha de la presentación de la demanda, deberá notificarse al demandante o ejecutante el auto admisorio o el mandamiento de pago, según fuere el caso, o el auto que rechace la demanda. Si vencido dicho término no ha sido notificado el auto respectivo, el término señalado en el artículo 121 para efectos de la pérdida de competencia se computará desde el día siguiente a la fecha de presentación de la demanda. Las demandas que sean rechazadas no se tendrán en cuenta como ingresos al juzgado, ni como egresos para efectos de la calificación de desempeño del juez. Semanalmente el juez remitirá a la oficina de reparto una relación de las demandas rechazadas, para su respectiva compensación en el reparto siguiente. PARÁGRAFO PRIMERO. La existencia de pacto arbitral no da lugar a inadmisión o rechazo de la demanda, pero provocará la terminación del proceso cuando se declare probada la excepción previa respectiva. PARÁGRAFO SEGUNDO. Cuando se trate de la causa prevista por el numeral 4 el juez lo remitirá al defensor de incapaces, para que le brinden la asesoría; si esta entidad comprueba que la persona no está en condiciones de sufragar un abogado, le nombrará uno de oficio.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr003.html",
+    "checksum": "111d21fc3d83025a3b268742016ecd79c766f533d5770e4e18aae85c691875e2",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-90",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "103",
+    "title": "ARTÍCULO 103 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 103. USO DE LAS TECNOLOGÍAS DE LA INFORMACIÓN Y DE LAS COMUNICACIONES. En todas las actuaciones judiciales deberá procurarse el uso de las tecnologías de la información y las comunicaciones en la gestión y trámite de los procesos judiciales, con el fin de facilitar y agilizar el acceso a la justicia, así como ampliar su cobertura. Las actuaciones judiciales se podrán realizar a través de mensajes de datos. La autoridad judicial deberá contar con mecanismos que permitan generar, archivar y comunicar mensajes de datos. En cuanto sean compatibles con las disposiciones de este código se aplicará lo dispuesto en la Ley 527 de 1999, las que lo sustituyan o modifiquen, y sus reglamentos. PARÁGRAFO PRIMERO. La Sala Administrativa del Consejo Superior de la Judicatura adoptará las medidas necesarias para procurar que al entrar en vigencia este código todas las autoridades judiciales cuenten con las condiciones técnicas necesarias para generar, archivar y comunicar mensajes de datos. El Plan de Justicia Digital estará integrado por todos los procesos y herramientas de gestión de la actividad jurisdiccional por medio de las tecnologías de la información y las comunicaciones, que permitan formar y gestionar expedientes digitales y el litigio en línea. El plan dispondrá el uso obligatorio de dichas tecnologías de manera gradual, por despachos judiciales o zonas geográficas del país, de acuerdo con la disponibilidad de condiciones técnicas para ello. PARÁGRAFO SEGUNDO. No obstante lo dispuesto en la Ley 527 de 1999, se presumen auténticos los memoriales y demás comunicaciones cruzadas entre las autoridades judiciales y las partes o sus abogados, cuando sean originadas desde el correo electrónico suministrado en la demanda o en cualquier otro acto del proceso. PARÁGRAFO TERCERO. Cuando este código se refiera al uso de correo electrónico, dirección electrónica, medios magnéticos o medios electrónicos, se entenderá que también podrán utilizarse otros sistemas de envío, trasmisión, acceso y almacenamiento de mensajes de datos siempre que garanticen la autenticidad e integridad del intercambio o acceso de información. La Sala Administrativa del Consejo Superior de la Judicatura establecerá los sistemas que cumplen con los anteriores presupuestos y reglamentará su utilización.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr003.html",
+    "checksum": "be589e53860b0b5a479926d3ebadd51ece6bd05bff61cc7180550e5652aee0e9",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-103",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "132",
+    "title": "ARTÍCULO 132 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 132. CONTROL DE LEGALIDAD. Agotada cada etapa del proceso el juez deberá realizar control de legalidad para corregir o sanear los vicios que configuren nulidades u otras irregularidades del proceso, las cuales, salvo que se trate de hechos nuevos, no se podrán alegar en las etapas siguientes, sin perjuicio de lo previsto para los recursos de revisión y casación.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr004.html",
+    "checksum": "03d9f74dd208e246354c666f7172d16b77a4bc816246ed1b783d97993f685538",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-132",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "136",
+    "title": "ARTÍCULO 136 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 136. SANEAMIENTO DE LA NULIDAD. La nulidad se considerará saneada en los siguientes casos: 1. Cuando la parte que podía alegarla no lo hizo oportunamente o actuó sin proponerla. 2. Cuando la parte que podía alegarla la convalidó en forma expresa antes de haber sido renovada la actuación anulada. 3. Cuando se origine en la interrupción o suspensión del proceso y no se alegue dentro de los cinco (5) días siguientes a la fecha en que haya cesado la causa. 4. Cuando a pesar del vicio el acto procesal cumplió su finalidad y no se violó el derecho de defensa. PARÁGRAFO. Las nulidades por proceder contra providencia ejecutoriada del superior, revivir un proceso legalmente concluido o pretermitir íntegramente la respectiva instancia, son insaneables.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr004.html",
+    "checksum": "083a337a4f1b60fe87e595b1d503467288f5f0e88526383b6fefec4c61000060",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-136",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "161",
+    "title": "ARTÍCULO 161 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 161. SUSPENSIÓN DEL PROCESO. El juez, a solicitud de parte, formulada antes de la sentencia, decretará la suspensión del proceso en los siguientes casos: 1. Cuando la sentencia que deba dictarse dependa necesariamente de lo que se decida en otro proceso judicial que verse sobre cuestión que sea imposible de ventilar en aquel como excepción o mediante demanda de reconvención. El proceso ejecutivo no se suspenderá porque exista un proceso declarativo iniciado antes o después de aquel, que verse sobre la validez o la autenticidad del título ejecutivo, si en este es procedente alegar los mismos hechos como excepción. 2. Cuando las partes la pidan de común acuerdo, por tiempo determinado. La presentación verbal o escrita de la solicitud suspende inmediatamente el proceso, salvo que las partes hayan convenido otra cosa. PARÁGRAFO. Si la suspensión recae solamente sobre uno de los procesos acumulados, aquel será excluido de la acumulación para continuar el trámite de los demás. También se suspenderá el trámite principal del proceso en los demás casos previstos en este código o en disposiciones especiales, sin necesidad de decreto del juez.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr005.html",
+    "checksum": "5f0cf7300ec196a6c0a3f8f818452eb3b2d3f561542babc5337db5a9776e2956",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-161",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "170",
+    "title": "ARTÍCULO 170 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 170. DECRETO Y PRÁCTICA DE PRUEBA DE OFICIO. El juez deberá decretar pruebas de oficio, en las oportunidades probatorias del proceso y de los incidentes y antes de fallar, cuando sean necesarias para esclarecer los hechos objeto de la controversia. Las pruebas decretadas de oficio estarán sujetas a la contradicción de las partes.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr006.html",
+    "checksum": "6f648aac9d87580651d7cc768db0d993e4f357014e312ecb0a626d262be70f8f",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-170",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "173",
+    "title": "ARTÍCULO 173 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 173. OPORTUNIDADES PROBATORIAS. Para que sean apreciadas por el juez las pruebas deberán solicitarse, practicarse e incorporarse al proceso dentro de los términos y oportunidades señalados para ello en este código. En la providencia que resuelva sobre las solicitudes de pruebas formuladas por las partes, el juez deberá pronunciarse expresamente sobre la admisión de los documentos y demás pruebas que estas hayan aportado. El juez se abstendrá de ordenar la práctica de las pruebas que, directamente o por medio de derecho de petición, hubiera podido conseguir la parte que las solicite, salvo cuando la petición no hubiese sido atendida, lo que deberá acreditarse sumariamente. Las pruebas practicadas por comisionado o de común acuerdo por las partes y los informes o documentos solicitados a otras entidades públicas o privadas, que lleguen antes de dictar sentencia, serán tenidas en cuenta para la decisión, previo el cumplimiento de los requisitos legales para su práctica y contradicción.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr006.html",
+    "checksum": "9b0a6aa56479625d175c365dcd5f2829c382580bd304283b44dbb4bc058762d4",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-173",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "185",
+    "title": "ARTÍCULO 185 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 185. DECLARACIÓN SOBRE DOCUMENTOS. Quien pretenda reconocer un documento privado deberá presentarlo e identificarse ante la autoridad respectiva. Sin perjuicio de la presunción de autenticidad, cualquier interesado podrá pedir que se cite al autor de un documento privado, al mandatario con facultades para obligar al mandante, o al representante de la persona jurídica a quien se atribuye, para que rinda declaración sobre la autoría, alcance y contenido del documento. El reconocimiento del documento por parte del mandatario producirá todos sus efectos respecto del mandante si aparece probado el mandato. La declaración del citado será recibida previo juramento. Si el documento está firmado a ruego de una persona que no sabía o no podía firmar, esta deberá declarar si se extendió por su orden, si el signatario obró a ruego suyo, y si es cierto su contenido; cuando el citado no pudiere o no supiere leer el juez deberá leerle el documento. En los demás casos bastará que el compareciente declare si es el autor del documento, o si se elaboré por su cuenta, o si es suya a firma o el manuscrito que se le atribuye. El reconocimiento de la autoría del documento hará presumir cierto el contenido. Si el citado no concurre a la diligencia, o si a pesar de comparecer se niega a prestar juramento o a declarar, o da respuestas evasivas no obstante la amonestación del juez, se tendrá por surtido el reconocimiento y así se declarará en nota puesta al pie del documento. Dentro de los tres (3) días siguientes a la fecha señalada para la diligencia el citado podrá probar al menos sumariamente que su inasistencia obedeció a causa justificada; si así lo hiciere, el juez señalará, por una sola vez, nueva fecha y hora para el reconocimiento, por medio de auto que se notificará por estado. En el proceso en que se aduzca un documento previamente reconocido en legal forma, ya sea expresa o tácitamente, no procederá la tacha en cuanto al autor jurídico, ni el desconocimiento.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr006.html",
+    "checksum": "6dbc1e825bd0bd4ed141b67666ae9324f4fc099e9aaee377f2dd52f132752921",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-185",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "191",
+    "title": "ARTÍCULO 191 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 191. REQUISITOS DE LA CONFESIÓN. La confesión requiere: 1. Que el confesante tenga capacidad para hacerla y poder dispositivo sobre el derecho que resulte de lo confesado. 2. Que verse sobre hechos que produzcan consecuencias jurídicas adversas al confesante o que favorezcan a la parte contraria. 3. Que recaiga sobre hechos respecto de los cuales la ley no exija otro medio de prueba. 4. Que sea expresa, consciente y libre. 5. Que verse sobre hechos personales del confesante o de los que tenga o deba tener conocimiento. 6. Que se encuentre debidamente probada, si fuere extrajudicial o judicial trasladada. La simple declaración de parte se valorará por el juez de acuerdo con las reglas generales de apreciación de las pruebas. Jurisprudencia Unificación",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr006.html",
+    "checksum": "9a479c314c8112875c2c2cd16e1dbbd9854c0d14c4a01d043e9b04270f114586",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-191",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "198",
+    "title": "ARTÍCULO 198 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 198. INTERROGATORIO DE LAS PARTES. El juez podrá, de oficio o a solicitud de parte, ordenar la citación de las partes a fin de interrogarlas sobre los hechos relacionados con el proceso. Las personas naturales capaces deberán absolver personalmente el interrogatorio. Cuando una persona jurídica tenga varios representantes o mandatarios generales cualquiera de ellos deberá concurrir a absolver el interrogatorio, sin que pueda invocar limitaciones de tiempo, cuantía o materia o manifestar que no le constan los hechos, que no esté facultado para obrar separadamente o que no está dentro de sus competencias, funciones o atribuciones. Para estos efectos es responsabilidad del representante informarse suficientemente. Cuando se trate de incidentes y de diligencias de entrega o secuestro de bienes podrá decretarse de oficio o a solicitud del interesado el interrogatorio de las partes y de los opositores que se encuentren presentes, en relación con los hechos objeto del incidente o de la diligencia, aun cuando hayan absuelto otro en el proceso. Si se trata de terceros que no estuvieron presentes en la diligencia y se opusieron por intermedio de apoderado, el auto que lo decrete quedará notificado en estrados, no admitirá recurso, y en él se ordenará que las personas que deben absolverlo comparezcan al juzgado en el día y la hora señalados; la diligencia solo se suspenderá una vez que se hayan practicado las demás pruebas que fueren procedentes. Practicado el interrogatorio o frustrado este por la no comparecencia del citado se reanudará la diligencia; en el segundo caso se tendrá por cierto que el opositor no es poseedor. El juez, de oficio, podrá decretar careos entre las partes.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr006.html",
+    "checksum": "e1d2b6d7b8749509bef8d23f30d96099de347401600968a45bba6d416a590b0b",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-198",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "261",
+    "title": "ARTÍCULO 261 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 261. DOCUMENTOS FIRMADOS EN BLANCO O CON ESPACIOS SIN LLENAR. Se presume cierto el contenido del documento firmado en blanco o con espacios sin llenar.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr008.html",
+    "checksum": "44d1b8f9605f8a755874826987d1769ae972b23dde9a916f77c7a3cb0534a526",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-261",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "330",
+    "title": "ARTÍCULO 330 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 330. EFECTOS DE LA DECISIÓN DEL SUPERIOR SOBRE EL DECRETO Y PRÁCTICA DE PRUEBAS EN PRIMERA INSTANCIA. Si el superior revoca o reforma el auto que había negado el decreto o práctica de una prueba y el juez no ha proferido sentencia, este dispondrá su práctica en la audiencia de instrucción y juzgamiento, si aún no se hubiere realizado, o fijará audiencia con ese propósito. Si la sentencia fue emitida antes de resolverse la apelación y aquella también fue objeto de este recurso, el superior practicará las pruebas en la audiencia de sustentación y fallo. CAPÍTULO III. SÚPLICA.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr011.html",
+    "checksum": "414b86f3a59ac995f9de0bd17be622df904a7043ba485e1980f45f4b83ec4957",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-330",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "430",
+    "title": "ARTÍCULO 430 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 430. MANDAMIENTO EJECUTIVO. Presentada la demanda acompañada de documento que preste mérito ejecutivo, el juez librará mandamiento ordenando al demandado que cumpla la obligación en la forma pedida, si fuere procedente, o en la que aquel considere legal. Los requisitos formales del título ejecutivo sólo podrán discutirse mediante recurso de reposición contra el mandamiento ejecutivo. No se admitirá ninguna controversia sobre los requisitos del título que no haya sido planteada por medio de dicho recurso. En consecuencia, los defectos formales del título ejecutivo no podrán reconocerse o declararse por el juez en la sentencia o en el auto que ordene seguir adelante la ejecución, según fuere el caso. Cuando como consecuencia del recurso de reposición el juez revoque el mandamiento de pago por ausencia de los requisitos del título ejecutivo, el demandante, dentro de los cinco (5) días siguientes a la ejecutoria del auto, podrá presentar demanda ante el juez para que se adelante proceso declarativo dentro del mismo expediente, sin que haya lugar a nuevo reparto. El juez se pronunciará sobre la demanda declarativa y, si la admite, ordenará notificar por estado a quien ya estuviese vinculado en el proceso ejecutivo. Vencido el plazo previsto en el inciso anterior, la demanda podrá formularse en proceso separado. De presentarse en tiempo la demanda declarativa, en el nuevo proceso seguirá teniendo vigencia la interrupción de la prescripción y la inoperancia de la caducidad generados en el proceso ejecutivo. El trámite de la demanda declarativa no impedirá formular y tramitar el incidente de liquidación de perjuicios en contra del demandante, si a ello hubiere lugar.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr015.html",
+    "checksum": "ac415b2057ce50e74054994d875c6ccc3776ad8e4fda0e8f237ddd3bb441e204",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-430",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "438",
+    "title": "ARTÍCULO 438 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 438. RECURSOS CONTRA EL MANDAMIENTO EJECUTIVO. El mandamiento ejecutivo no es apelable; el auto que lo niegue total o parcialmente y el que por vía de reposición lo revoque, lo será en el suspensivo. Los recursos de reposición contra el mandamiento ejecutivo se tramitarán y resolverán conjuntamente cuando haya sido notificado a todos los ejecutados.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr015.html",
+    "checksum": "fb39c426893742524614a1e793879e5e99ad72e17809e439e55e9565cd5248bf",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-438",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "465",
+    "title": "ARTÍCULO 465 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 465. CONCURRENCIA DE EMBARGOS EN PROCESOS DE DIFERENTES ESPECIALIDADES. Cuando en un proceso ejecutivo laboral, de jurisdicción coactiva o de alimentos se decrete el embargo de bienes embargados en uno civil, la medida se comunicará inmediatamente al juez civil, sin necesidad de auto que lo ordene, por oficio en el que se indicarán el nombre de las partes y los bienes de que se trate. El proceso civil se adelantará hasta el remate de dichos bienes, pero antes de la entrega de su producto al ejecutante, se solicitará al juez laboral, de familia o fiscal la liquidación definitiva y en firme, debidamente especificada, del crédito que ante él se cobra y de las costas, y con base en ella, por medio de auto, se hará la distribución entre todos los acreedores, de acuerdo con la prelación establecida en la ley sustancial. Dicho auto se comunicará por oficio al juez del proceso laboral, de familia o al funcionario que adelante el de jurisdicción coactiva. Tanto este como los acreedores de origen laboral, fiscal y de familia podrán interponer reposición dentro de los diez (10) días siguientes al del recibo del oficio. Los gastos hechos para el embargo, secuestro, avalúo y remate de los bienes en el proceso civil, se cancelarán con el producto del remate y con preferencia al pago de los créditos laborales, fiscales y de alimentos.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr016.html",
+    "checksum": "8eba8dcfd696a1d036653bbd7a18f96ff44f563e2186532fc2700b2458738957",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-465",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "468",
+    "title": "ARTÍCULO 468 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 468. DISPOSICIONES ESPECIALES PARA LA EFECTIVIDAD DE LA GARANTÍA REAL. Cuando el acreedor persiga el pago de una obligación en dinero, exclusivamente con el producto de los bienes gravados con hipoteca o prenda, se observarán las siguientes reglas: 1. Requisitos de la demanda. La demanda, además de cumplir los requisitos de toda demanda ejecutiva, deberá indicar los bienes objeto de gravamen. A la demanda se acompañará título que preste mérito ejecutivo, así como el de la hipoteca o prenda, y si se trata de aquella un certificado del registrador respecto de la propiedad del demandado sobre el bien inmueble perseguido y los gravámenes que lo afecten, en un período de diez (10) años si fuere posible. Cuando se trate de prenda sin tenencia, el certificado deberá versar sobre la vigencia del gravamen. El certificado que debe anexarse a la demanda debe haber sido expedido con una antelación no superior a un (1) mes. La demanda deberá dirigirse contra el actual propietario del inmueble, la nave o la aeronave materia de la hipoteca o de la prenda. Si el pago de la obligación a cargo del deudor se hubiere pactado en diversos instalamentos, en la demanda podrá pedirse el valor de todos ellos, en cuyo caso se harán exigibles los no vencidos. Si del certificado del registrador aparece que sobre los bienes gravados con prenda o hipoteca existe algún embargo ordenado en proceso ejecutivo, en la demanda deberá informarse, bajo juramento, si en aquel ha sido citado el acreedor, y de haberlo sido, la fecha de la notificación. 2. Embargo y secuestro. Simultáneamente con el mandamiento ejecutivo y sin necesidad de caución, el juez decretará el embargo y secuestro del bien hipotecado o dado en prenda, que se persiga en la demanda. El registrador deberá inscribir el embargo, aunque el demandado haya dejado de ser propietario del bien. Acreditado el embargo, si el bien ya no pertenece al demandado, el juez de oficio tendrá como sustituto al actual propietario a quien se le notificará el mandamiento de pago. En este proceso no habrá lugar a reducción de embargos ni al beneficio de competencia. 3. Orden de seguir adelante la ejecución. Si no se proponen excepciones y se hubiere practicado el embargo de los bienes gravados con hipoteca o prenda, o el ejecutado hubiere prestado caución para evitarlo o levantarlo, se ordenará seguir adelante la ejecución para que con el producto de ellos se pague al demandante el crédito y las costas. El secuestro de los bienes inmuebles no será necesario para ordenar seguir adelante la ejecución, pero sí para practicar el avalúo y señalar la fecha del remate. Cuando no se pueda efectuar el secuestro por oposición de poseedor, o se levante por el mismo motivo, se aplicará lo dispuesto en el numeral 3 del artículo 596, sin que sea necesario reformar la demanda. 4. Intervención de terceros acreedores. En el mandamiento ejecutivo se ordenará la citación de los terceros acreedores que conforme a los certificados del registrador acompañados a la demanda, aparezca que tienen a su favor hipoteca o prenda sobre los mismos bienes, para que en el término de diez (10) días contados desde su respectiva notificación hagan valer sus créditos, sean o no exigibles. La citación se hará mediante notificación personal y si se designa curador ad litem el plazo para que este presente la demanda será de diez (10) días a partir de su notificación. Citados los terceros acreedores, todas las demandas presentadas en tiempo se tramitarán conjuntamente con la inicial, y el juez librará un solo mandamiento ejecutivo para las que cumplan los requisitos necesarios para ello; respecto de las que no los cumplan se proferirán por separado los correspondientes autos. En la providencia que ordene seguir adelante la ejecución se fijará el orden de preferencia de los distintos créditos y se condenará al deudor en las costas causadas en interés general de los acreedores y en las propias de cada uno, que se liquidarán conjuntamente. Vencido el término para que concurran los acreedores citados, se adelantará el proceso hasta su terminación. Si hecho el pago al demandante y a los acreedores que concurrieron sobrare dinero, se retendrá el saldo a fin de que sobre él puedan hacer valer sus créditos los que no hubieren concurrido, mediante proceso ejecutivo que se tramitará a continuación, en el mismo expediente, y deberá iniciarse dentro de los treinta (30) días siguientes al mencionado pago, vencidos los cuales se entregará al ejecutado dicho saldo. 5. Remate de bienes. El acreedor con hipoteca de primer grado, podrá hacer postura con base en la liquidación de su crédito; si quien lo hace es un acreedor hipotecario de segundo grado, requerirá la autorización de aquel y así sucesivamente los demás acreedores hipotecarios. Si el precio del bien fuere inferior al valor del crédito y las costas, se adjudicará el bien por dicha suma; si fuere superior, el juez dispondrá que el acreedor consigne a orden del juzgado la diferencia con la última liquidación aprobada del crédito, y de las costas si las hubiere, en el término de tres (3) días, caso en el cual aprobará el remate. Si el acreedor no realiza oportunamente la consignación se procederá como lo dispone el inciso final del artículo 453. Si son varios los acreedores y se han liquidado costas a favor de todos, se aplicará lo preceptuado en el numeral 7 artículo 365. Cuando el proceso verse sobre la efectividad de la prenda y esta se justiprecie en suma no mayor a un salario mínimo mensual, en firme el avalúo el acreedor podrá pedir su adjudicación dentro de los cinco (5) días siguientes, para lo cual en lo pertinente se aplicarán las reglas de este artículo. Cuando a pesar del remate o de la adjudicación del bien la obligación no se extinga, el acreedor podrá perseguir otros bienes del ejecutado, sin necesidad de prestar caución, siempre y cuando este sea el deudor de la obligación. 6. Concurrencia de embargos. El embargo decretado con base en título hipotecario o prendario sujeto a registro, se inscribirá aunque se halle vigente otro practicado sobre el mismo bien en proceso ejecutivo seguido para el cobro de un crédito sin garantía real. Recibida la comunicación del nuevo embargo, simultáneamente con su inscripción el registrador deberá cancelar el anterior, dando inmediatamente informe escrito de ello al juez que lo decretó, quien, en caso de haberse practicado el secuestro, remitirá copia de la diligencia al juez que adelanta el proceso con base en garantía real para que tenga efectos en este y le oficie al secuestre dándole cuenta de ello. En tratándose de bienes no sujetos a registro, cuando el juez del proceso con garantía prendaria, antes de llevar a cabo el secuestro, tenga conocimiento de que en otro ejecutivo sin dicha garantía ya se practicó, librará oficio al juez de este proceso para que proceda como se dispone en el inciso anterior. Si en el proceso con base en garantía real se practica secuestro sobre los bienes prendados que hubieren sido secuestrados en proceso ejecutivo sin garantía real, el juez de aquel librará oficio al de este, para que cancele tal medida y comunique dicha decisión al secuestre. En todo caso, el remanente se considerará embargado a favor del proceso en el que se canceló el embargo o el secuestro a que se refieren los dos incisos anteriores. Cuando en diferentes procesos ejecutivos se decrete el embargo del mismo bien con base en garantías reales, prevalecerá el embargo que corresponda al gravamen que primero se registró. El demandante del proceso cuyo embargo se cancela, podrá hacer valer su derecho en el otro proceso dentro de la oportunidad señalada en el inciso primero del numeral 4. En tal caso, si en el primero se persiguen más bienes, se suspenderá su trámite hasta la terminación del segundo, una vez que en aquel se presente copia de la demanda y del mandamiento de pago. Si el producto de los bienes rematados en el proceso cuyo embargo prevaleció, no alcanzare a cubrir el crédito cobrado por el demandante del otro proceso, este se reanudará a fin de que se le pague la parte insoluta. Si en el proceso cuyo embargo se cancela intervienen otros acreedores, el trámite continuará respecto de estos, pero al distribuir el producto del remate se reservará lo que corresponda al acreedor hipotecario o prendario que hubiere comparecido al proceso cuyo embargo prevaleció. Satisfecho a dicho acreedor total o parcialmente su crédito en el otro proceso, la suma reservada o lo que restare de ella se distribuirá entre los demás acreedores cuyos créditos no hubieren sido cancelados; si quedare remanente y no estuviere embargado, se entregará al ejecutado. Cuando el embargo se cancele después de dictada sentencia de excepciones no podrá el demandado proponerlas de nuevo en el otro proceso. 7. Obligaciones distintas de pagar sumas de dinero. Si la obligación garantizada con hipoteca o prenda es de entregar un cuerpo cierto o bienes de género, de hacer o de no hacer, el demandante procederá de conformidad con lo dispuesto en el artículo 428. PARÁGRAFO. En los procesos de que trata este artículo no se aplicarán los artículos 462, 463 y 600. CAPÍTULO VII. EJECUCIÓN PARA EL COBRO DE DEUDAS FISCALES.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr016.html",
+    "checksum": "bf4501026e497accb3a998829a4943e890fd7d7b95e7c5d276cecbc02d822129",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-468",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "593",
+    "title": "ARTÍCULO 593 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 593. EMBARGOS. Para efectuar embargos se procederá así: 1. El de bienes sujetos a registro se comunicará a la autoridad competente de llevar el registro con los datos necesarios para la inscripción: si aquellos pertenecieren al afectado con la medida, lo inscribirá y expedirá a costa del solicitante un certificado sobre su situación jurídica en un período equivalente a diez (10) años, si fuere posible. Una vez inscrito el embargo, el certificado sobre la situación jurídica del bien se remitirá por el registrador directamente al juez. Si algún bien no pertenece al afectado, el registrador se abstendrá de inscribir el embargo y lo comunicará al juez; si lo registra, este de oficio o a petición de parte ordenará la cancelación del embargo. Cuando el bien esté siendo perseguido para hacer efectiva la garantía real, deberá aplicarse lo dispuesto en el numeral 2 del artículo 468. 2. El de los derechos que por razón de mejoras o cosechas tenga una persona que ocupa un predio de propiedad de otra, se perfeccionará previniendo a aquella y al obligado al respectivo pago, que se entiendan con el secuestre para todo lo relacionado con las mejoras y sus productos o beneficios. Para el embargo de mejoras plantadas por una persona en terrenos baldíos, se notificará a esta para que se abstenga de enajenarlas o gravarlas. 3. El de bienes muebles no sujetos a registro y el de la posesión sobre bienes muebles o inmuebles se consumará mediante el secuestro de estos, excepto en los casos contemplados en los numerales siguientes. 4. El de un crédito u otro derecho semejante se perfeccionará con la notificación al deudor mediante entrega del correspondiente oficio, en el que se le prevendrá que para hacer el pago deberá constituir certificado de depósito a órdenes del juzgado. Si el deudor se negare a firmar el recibo del oficio, lo hará por él cualquiera persona que presencie el hecho. Al recibir el deudor la notificación deberá informar acerca de la existencia del crédito, de cuándo se hace exigible, de su valor, de cualquier embargo que con anterioridad se le hubiere comunicado y si se le notificó antes alguna cesión o si la aceptó, con indicación del nombre del cesionario y la fecha de aquella, so pena de responder por el correspondiente pago, de todo lo cual se le prevendrá en el oficio de embargo. La notificación al deudor interrumpe el término para la prescripción del crédito, y si aquel no lo paga oportunamente, el juez designará secuestre quien podrá adelantar proceso judicial para tal efecto. Si fuere hallado el título del crédito, se entregará al secuestre; en caso contrario, se le expedirán las copias que solicite para que inicie el proceso. El embargo del crédito de percepción sucesiva comprende los vencimientos posteriores a la fecha en que se decretó y los anteriores que no hubieren sido cancelados. 5. El de derechos o créditos que la persona contra quien se decrete el embargo persiga o tenga en otro proceso se comunicará al juez que conozca de él para los fines consiguientes, y se considerará perfeccionado desde la fecha de recibo de la comunicación en el respectivo despacho judicial. 6. El de acciones en sociedades anónimas o en comandita por acciones, bonos, certificados nominativos de depósito, unidades de fondos mutuos, títulos similares, efectos públicos nominativos y en general títulos valores a la orden, se comunicará al gerente, administrador o liquidador de la respectiva sociedad o empresa emisora o al representante administrativo de la entidad pública o a la entidad administradora, según sea el caso, para que tome nota de él, de lo cual deberá dar cuenta al juzgado dentro de los tres (3) días siguientes, so pena de incurrir en multa de dos (2) a cinco (5) salarios mínimos legales mensuales. El embargo se considerará perfeccionado desde la fecha de recibo del oficio y a partir de esta no podrá aceptarse ni autorizarse transferencia ni gravamen alguno. El de acciones, títulos, bonos y efectos públicos, títulos valores y efectos negociables a la orden y al portador, se perfeccionará con la entrega del respectivo título al secuestre. Los embargos previstos en este numeral se extienden a los dividendos, utilidades, intereses y demás beneficios que al derecho embargado correspondan, con los cuales deberá constituirse certificado de depósito a órdenes del juzgado, so pena de hacerse responsable de dichos valores. El secuestre podrá adelantar el cobro judicial, exigir rendición de cuentas y promover cualesquiera otras medidas autorizadas por la ley con dicho fin. 7. El del interés de un socio en sociedad colectiva y de gestores de la en comandita, o de cuotas en una de responsabilidad limitada, o en cualquier otro tipo de sociedad, se comunicará a la autoridad encargada de la matrícula y registro de sociedades, la que no podrá registrar ninguna transferencia o gravamen de dicho interés, ni reforma de la sociedad que implique la exclusión del mencionado socio o la disminución de sus derechos en ella. A este embargo se aplicará lo dispuesto en el inciso tercero del numeral anterior y se comunicará al representante de la sociedad en la forma establecida en el inciso primero del numeral 4, a efecto de que cumpla lo dispuesto en tal inciso. 8. Si el deudor o la persona contra quien se decreta el embargo fuere socio comanditario, se comunicará al socio o socios gestores o al liquidador, según fuere el caso. El embargo se considerará perfeccionado desde la fecha de recibo del oficio. 9. El de salarios devengados o por devengar se comunicará al pagador o empleador en la forma indicada en el inciso primero del numeral 4 para que de las sumas respectivas retenga la proporción determinada por la ley y constituya certificado de depósito, previniéndole que de lo contrario responderá por dichos valores. Si no se hicieren las consignaciones el juez designará secuestre que deberá adelantar el cobro judicial, si fuere necesario. 10. El de sumas de dinero depositadas en establecimientos bancarios y similares, se comunicará a la correspondiente entidad como lo dispone el inciso primero del numeral 4, debiéndose señalar la cuantía máxima de la medida, que no podrá exceder del valor del crédito y las costas más un cincuenta por ciento (50%). Aquellos deberán constituir certificado del depósito y ponerlo a disposición del juez dentro de los tres (3) días siguientes al recibo de la comunicación; con la recepción del oficio queda consumado el embargo. 11. El de derechos proindiviso en bienes muebles se comunicará a los otros copartícipes, advirtiéndoles que en todo lo relacionado con aquellos deben entenderse con el secuestre. PARÁGRAFO 1o. En todos los casos en que se utilicen mensajes de datos los emisores dejarán constancia de su envío y los destinatarios, sean oficinas públicas o particulares, tendrán el deber de revisarlos diariamente y tramitarlos de manera inmediata. PARÁGRAFO 2o. La inobservancia de la orden impartida por el juez, en todos los caso previstos en este artículo, hará incurrir al destinatario del oficio respectivo en multas sucesivas de dos (2) a cinco (5) salarios mínimos mensuales.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr020.html",
+    "checksum": "07c37140924ee59f727c5bd13e6b96a7eac5125e82fbdc4c42225296e108a777",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-593",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1564 de 2012 - Código General del Proceso",
+    "identifier": "599",
+    "title": "ARTÍCULO 599 - Código General del Proceso (Ley 1564 de 2012)",
+    "text": "ARTÍCULO 599. EMBARGO Y SECUESTRO. Desde la presentación de la demanda el ejecutante podrá solicitar el embargo y secuestro de bienes del ejecutado. Cuando se ejecute por obligaciones de una persona fallecida, antes de liquidarse la sucesión, sólo podrán embargarse y secuestrarse bienes del causante. El juez, al decretar los embargos y secuestros, podrá limitarlos a lo necesario; el valor de los bienes no podrá exceder del doble del crédito cobrado, sus intereses y las costas prudencialmente calculadas, salvo que se trate de un solo bien o de bienes afectados por hipoteca o prenda* que garanticen aquel crédito, o cuando la división disminuya su valor o su venalidad. En el momento de practicar el secuestro el juez deberá de oficio limitarlo en la forma indicada en el inciso anterior, si el valor de los bienes excede ostensiblemente del límite mencionado, o aparece de las facturas de compra, libros de contabilidad, certificados de catastro o recibos de pago de impuesto predial, o de otros documentos oficiales, siempre que se le exhiban tales pruebas en la diligencia. En los procesos ejecutivos, el ejecutado que proponga excepciones de mérito o el tercer afectado con la medida cautelar, podrán solicitarle al juez que ordene al ejecutante prestar caución hasta por el diez por ciento (10%) del valor actual de la ejecución para responder por los perjuicios que se causen con su práctica, so pena de levantamiento. La caución deberá prestarse dentro de los quince (15) días siguientes a la notificación del auto que la ordene. Contra la providencia anterior, no procede recurso de apelación. Para establecer el monto de la caución, el juez deberá tener en cuenta la clase de bienes sobre los que recae la medida cautelar practicada y la apariencia de buen derecho de las excepciones de mérito. La caución a que se refiere el artículo anterior, no procede cuando el ejecutante sea una entidad financiera o vigilada por la Superintendencia Financiera de Colombia o una entidad de derecho público. Cuando se trate de caución expedida por compañía de seguros, su efectividad podrá reclamarse también por el asegurado o beneficiario directamente ante la aseguradora, de acuerdo con las normas del Código de Comercio. PARÁGRAFO. El ejecutado podrá solicitar que de la relación de bienes de su propiedad e ingresos, el juez ordene el embargo y secuestro de los que señale con el fin de evitar que se embarguen otros, salvo cuando el embargo se funde en garantía real. El juez, previo traslado al ejecutante por dos (2) días, accederá a la solicitud siempre que sean suficientes, con sujeción a los criterios establecidos en los dos incisos anteriores.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr020.html",
+    "checksum": "382aea120a7afcd786d62fad28ef7a3a82efdaae324328fc4327635b80761566",
+    "metadata": {
+      "source_label": "Código General del Proceso (Ley 1564 de 2012)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-599",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

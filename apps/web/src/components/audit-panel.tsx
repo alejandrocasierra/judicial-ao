@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SecondOpinionDiff, type SecondOpinionDiffRun } from "@/components/second-opinion-diff";
 import { cn } from "@/lib/utils";
 
 type Audit = {
@@ -47,6 +49,12 @@ type SecondOpinion = {
   summary?: string | null;
   chat_message_id?: string | null;
   created_at: string;
+  cost?: number | string | null;
+  cost_source?: string | null;
+  comparison_mode?: string | null;
+  comparison_error?: string | null;
+  error_code?: string | null;
+  error_detail?: string | null;
   claims?: Array<{ claim_text: string; comparison: string }>;
   findings?: Array<{ code: string; severity: string; message: string }>;
 };
@@ -91,6 +99,23 @@ export function AuditPanel({ caseId }: { caseId: string }) {
     mutationFn: (messageId: string) => api.post(`/cases/${caseId}/messages/${messageId}/second-opinion`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["second-opinions", caseId] }),
   });
+  const [diffRunId, setDiffRunId] = useState<string | null>(null);
+  const diffRun = useQuery({
+    queryKey: ["second-opinion", caseId, diffRunId],
+    queryFn: () => api.get<SecondOpinionDiffRun>(`/cases/${caseId}/second-opinions/${diffRunId}`),
+    enabled: !!diffRunId,
+    refetchInterval: (q) => {
+      const status = (q.state.data as SecondOpinionDiffRun | undefined)?.status;
+      return status && ["QUEUED", "RUNNING"].includes(status) ? 3000 : false;
+    },
+  });
+
+  useEffect(() => {
+    const fromUrl = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("audit")
+      : null;
+    if (fromUrl) setSelectedId(fromUrl);
+  }, []);
 
   useEffect(() => {
     if (!selectedId && audits.data?.audits?.length) setSelectedId(audits.data.audits[0].id);
@@ -177,11 +202,22 @@ export function AuditPanel({ caseId }: { caseId: string }) {
                 {requestSecond.isError && <p className="text-xs text-rose-600">No se pudo solicitar. Revisa el modelo de segunda opinión en Verificación.</p>}
                 {latestRun && (
                   <div className="rounded-md border p-3 text-sm">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="outline">{latestRun.status}</Badge>
                       {latestRun.verdict && <Badge variant="secondary">{latestRun.verdict}</Badge>}
+                      {latestRun.comparison_mode && (
+                        <Badge variant="outline">
+                          {latestRun.comparison_mode === "LLM" ? "LLM" : "determinista"}
+                        </Badge>
+                      )}
                     </div>
                     <p className="mt-1 text-muted-foreground">{latestRun.summary || "Segunda opinión en curso."}</p>
+                    {["COMPLETED", "FAILED", "CANCELLED", "QUEUED", "RUNNING"].includes(latestRun.status) && (
+                      <Button size="sm" variant="outline" className="mt-2"
+                              onClick={() => setDiffRunId(latestRun.id)}>
+                        Ver comparación lado a lado
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardContent></Card>
@@ -229,6 +265,23 @@ export function AuditPanel({ caseId }: { caseId: string }) {
           )}
         </div>
       </div>
+
+      <Dialog open={!!diffRunId} onOpenChange={(open) => !open && setDiffRunId(null)}>
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="pr-8 text-left text-base">
+              Comparación de segunda opinión
+            </DialogTitle>
+          </DialogHeader>
+          {diffRun.isLoading && <p className="text-sm text-muted-foreground">Cargando comparación…</p>}
+          {diffRun.error && (
+            <p className="rounded-md border border-rose-600/30 p-3 text-sm text-rose-700 dark:text-rose-300">
+              No se pudo cargar la comparación. La respuesta original no se modifica.
+            </p>
+          )}
+          {diffRun.data && <SecondOpinionDiff run={diffRun.data} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

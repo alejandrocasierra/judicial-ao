@@ -1,0 +1,38 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Ley 590 de 2000 - Mipymes",
+    "identifier": "2",
+    "title": "ARTÍCULO 2 - Ley 590 de 2000",
+    "text": "ARTICULO 2o. DEFINICIONES. <Artículo modificado por el artículo 43 de la Ley 1450 de 2011. El nuevo texto es el siguiente:> Para todos los efectos, se entiende por empresa, toda unidad de explotación económica, realizada por persona natural o jurídica, en actividades agropecuarias, industriales, comerciales o de servicios, en el área rural o urbana. Para la clasificación por tamaño empresarial, entiéndase micro, pequeña, mediana y gran empresa, se podrá utilizar uno o varios de los siguientes criterios: 1. Número de trabajadores totales. 2. Valor de ventas brutas anuales. 3. Valor activos totales. Para efectos de los beneficios otorgados por el Gobierno nacional a las micro, pequeñas y medianas empresas el criterio determinante será el valor de ventas brutas anuales. PARÁGRAFO 1o. El Gobierno Nacional reglamentará los rangos que aplicarán para los tres criterios e incluirá especificidades sectoriales en los casos que considere necesario. PARÁGRAFO 2o. Las definiciones contenidas en el artículo 2o de la Ley 590 de 2000 continuarán vigentes hasta tanto entren a regir las normas reglamentarias que profiera el Gobierno Nacional en desarrollo de lo previsto en el presente artículo.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0590_2000.html",
+    "checksum": "9b578fc3f2f10fee5ca6e7df5d3e4cd96184caf5c7eec5bca731a8f980957a8d",
+    "metadata": {
+      "source_label": "Ley 590 de 2000",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-2",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 590 de 2000 - Mipymes",
+    "identifier": "43",
+    "title": "ARTÍCULO 43 - Ley 590 de 2000",
+    "text": "ARTICULO 43. ESTIMULOS A LA CREACION DE EMPRESAS. Los aportes parafiscales destinados al Sena, el ICBF y las Cajas de Compensación Familiar, a cargo de las micro, pequeñas y medianas empresas que se constituyan e instalen a partir de la promulgación de la presente ley, serán objeto de las siguientes reducciones: 1. Setenta y cinco por ciento (75%) para el primer año de operación. 2. Cincuenta por ciento (50%) para el segundo año de operación; y 3. Veinticinco por ciento (25%) para el tercer año de operación. PARAGRAFO 1o. Para los efectos de este artículo, se considera constituida una micro, pequeña o mediana empresa en la fecha de la escritura pública de constitución, en el caso de las personas jurídicas, y en la fecha de registro en la Cámara de Comercio, en el caso de las demás Mipymes. Así mismo, se entiende instalada la empresa cuando se presente memorial dirigido a la Administración de Impuestos y Aduanas respectiva, en la cual manifieste lo siguiente: a) Intención de acogerse a los beneficios que otorga este artículo; b) Actividad económica a la que se dedica; c) Capital de la empresa; d) Lugar de ubicación de la planta física o inmueble donde se desarrollará la actividad económica; e) Domicilio principal. PARAGRAFO 2o. No se consideran como nuevas micro, pequeñas o medianas empresas, ni gozarán de los beneficios previstos en este artículo, las que se hayan constituido con anterioridad a la fecha de promulgación de la presente ley, aunque sean objeto de reforma estatutaria o de procesos de escisión o fusión con otras Mipymes. PARAGRAFO 3o. Quienes suministren información falsa con el propósito de obtener los beneficios previstos en el presente artículo deberán pagar el valor de las reducciones de las obligaciones parafiscales obtenidas, y además una sanción correspondiente al doscientos por ciento (200%) del valor de tales beneficios, sin perjuicio de las sanciones penales a que haya lugar.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0590_2000.html",
+    "checksum": "8915fe27ecd1419b314c66fd6f5e49c12081ad139c7f21f41ee99a5b331dc96a",
+    "metadata": {
+      "source_label": "Ley 590 de 2000",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-43",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

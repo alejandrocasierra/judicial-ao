@@ -60,6 +60,7 @@
     "FACT_NOT_FOUND": "Hecho no encontrado.",
     "FACT_REVIEW_ERROR": "No se pudo revisar el hecho.",
     "FACT_VALIDATION_ERROR": "El hecho no cumple las reglas de prueba.",
+    "FACTS_PROOF_DISABLED": "La transición a un estado probatorio está deshabilitada.",
     "MESSAGE_NOT_FOUND": "Mensaje no encontrado.",
     "SECOND_OPINION_DISABLED": "La segunda opinión está deshabilitada.",
     "SECOND_OPINION_NOT_FOUND": "Segunda opinión no encontrada.",

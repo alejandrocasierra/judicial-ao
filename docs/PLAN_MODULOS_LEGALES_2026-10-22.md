@@ -1,8 +1,9 @@
 # Plan de implementación: anti-alucinación legal, segunda opinión y hechos probados
 
-**Versión:** 1.0  
+**Versión:** 1.1 (estado al 2026-10-22, cierre P2)  
 **Fecha:** 2026-10-22  
 **Base verificada:** rama `main`, commit `963297c`  
+**Estado de ejecución:** implementado y probado en local sobre las migraciones `0055` a `0061`; la `0062` está en curso por P1. La cobertura legal todavía es piloto. Estado real, pruebas y gaps: [AUDITORIA_MODULOS_LEGALES_2026-10-22.md](AUDITORIA_MODULOS_LEGALES_2026-10-22.md). Diagramas: [architecture/README.md](architecture/README.md).  
 **Alcance:** tres módulos nuevos sobre el producto actual, sin reescribir el pipeline ni romper los cuatro casos cerrados.  
 **Documentos hermanos:**
 - [Implementación y evidencia](IMPLEMENTACION_MODULOS_LEGALES_2026-10-22.md)
@@ -10,6 +11,7 @@
 - [Guía de diseño web y responsive](GUIA_DISENO_MODULOS_LEGALES.md)
 - [Plan de diagramas Archify](ARCHIFY_MODULOS_LEGALES.md)
 - [Arquitectura generada](architecture/README.md)
+- [Auditoría de módulos legales](AUDITORIA_MODULOS_LEGALES_2026-10-22.md)
 
 ---
 
@@ -93,7 +95,7 @@ Estas decisiones no quedan a discusión durante la implementación. Si un caso n
 | D14 | Los registros de auditoría y las revisiones de hechos son append-only. | No se actualiza un veredicto histórico; se crea una nueva corrida o revisión. |
 | D15 | La revisión humana se registra en `reviews` y en `*_revisions`; un override exige motivo. | Se conserva la salida original y quién decidió. |
 | D16 | La política por proceso vive en `case_verification_settings`; la política global en `legal_guard_policies`. | Ningún caso queda sin política: hereda la global. |
-| D17 | Migraciones `0055` a `0058`; backfill y reindexado en scripts separados, no dentro de una migración larga. | Despliegue controlado, reversible y sin locks prolongados. |
+| D17 | Migraciones `0055` a `0061` (la `0062` la agrega P1 para el gate semántico); backfill y reindexado en scripts separados, no dentro de una migración larga. | Despliegue controlado, reversible y sin locks prolongados. |
 | D18 | `chunks` no cambia de dimensión ni de modelo de embeddings; se agrega el tipo `fact` y metadatos. | No se rompe el índice pgvector existente. |
 | D19 | El grafo se reconstruye después de cambios de hechos; no se escribe a mano. | Consistencia con `graph_build`. |
 | D20 | El CKP sube a `1.1` e incluye auditorías, segunda opinión, posiciones y revisiones. | Exportación completa y reproducible. |
@@ -332,7 +334,7 @@ Nuevo `apps/api/app/services/legal_guard.py`:
 - Índice único por `(organization_id, jurisdiction, source, identifier, version_date)`.
 - No se permite afirmar una norma sin fila activa.
 
-**Corpus inicial del piloto:** `data/legal_rules/co/` con un JSON por norma y `checksums.json`. Incluye, como mínimo, las normas que ya citan los casos piloto: Código Civil, Código General del Proceso (Ley 1564 de 2012) y las normas sustantivas/procesales que aparezcan en los escritos. Cada fila lleva `source` oficial, `identifier`, `version_date`, `official_url`, `checksum` y `text`. El importador `scripts/import_legal_rules.py` valida checksum, hace `--dry-run` y no descarga nada en runtime. Si una norma no está en el corpus, el guard bloquea la conclusión jurídica; no se completa con memoria del modelo. El corpus se amplía por proceso con revisión legal, no por scraping automático.
+**Corpus inicial del piloto:** `data/legal_rules/co/` con un JSON por norma y `checksums.json`. El agregado `checksums.json` existe y está validado (135 normas, 21 fuentes); los checksums por fila siguen siendo la fuente primaria. Incluye, como mínimo, las normas que ya citan los casos piloto: Código Civil, Código General del Proceso (Ley 1564 de 2012) y las normas sustantivas/procesales que aparezcan en los escritos. Cada fila lleva `source` oficial, `identifier`, `version_date`, `official_url`, `checksum` y `text`. El importador `scripts/import_legal_rules.py` valida checksum, hace `--dry-run` y no descarga nada en runtime. Si una norma no está en el corpus, el guard bloquea la conclusión jurídica; no se completa con memoria del modelo. El corpus se amplía por proceso con revisión legal, no por scraping automático.
 
 ### 4.7 Política de publicación
 
@@ -644,6 +646,14 @@ La UI muestra dos columnas: Demandante y Demandado. Un hecho común puede tener 
 | `0056_second_opinion` | `second_opinion_runs`, `second_opinion_claims`, `second_opinion_findings`; FKs a `answer_audits`, `model_runs`, `ai_models` | Sí: drop de tablas |
 | `0057_party_facts` | columnas de `facts`, `fact_positions`, `fact_revisions`, extensión de `evidence_links`; checks e índices | Sí: drop de columnas/tablas |
 | `0058_facts_graph_indexes` | RLS, grants, triggers de misma organización, índices GIN/btree, índices de grafo y chunks; defaults | Sí: drop de índices/policies/triggers |
+| `0059_legal_modules_purge` | `DELETE` para `purge_case` en las tablas append-only, con la transacción de purga | Sí: revoke |
+| `0060_graph_fact_edges` | Tipos de arista `POSITION_ON`, `DECISION_PROVES_FACT`, `FACT_ABOUT_ISSUE` | Sí: restaurar el CHECK anterior |
+| `0061_second_opinion_worker` | `UPDATE` de `second_opinion_runs` para el worker | Sí: revoke |
+| `0062_legal_gate_semantics` (P1, en curso) | Precios de modelo, `cost_source`/`comparison_mode` y trigger de `EVIDENCE_SUPPORTED` | Sí: drop de columnas/trigger |
+
+La `0062` no está aplicada en una base limpia al cierre de esta pasada: el
+cargador de migraciones parte el cuerpo de la función en el primer `$$`. Es un
+bloqueo de P1, no de estos módulos ya migrados.
 
 **Backfill y reindexado no van dentro de una migración larga.** Se ejecutan con scripts idempotentes después de `alembic upgrade head`:
 - `scripts/backfill_legal_modules.py`
@@ -765,16 +775,18 @@ Orden exacto:
 
 ### 7.8 Archify
 
-Se crea `docs/architecture/` (no existe hoy) con:
+`docs/architecture/` contiene los seis diagramas del plan:
 - `00-system-context.html`
 - `01-legal-guard-flow.html`
 - `02-second-opinion-sequence.html`
 - `03-facts-lifecycle.html`
 - `04-data-model.html`
 - `05-ux-navigation.html`
-- `README.md` con índice y fecha/commit.
+- `README.md` con índice, evidencia y comando de regeneración.
 
-Los diagramas se generan con la skill **archify**, en HTML autónomo, con tema claro/oscuro y SVG inline. Se enlazan desde el plan, `docs/CHAT_PIPELINE_CONTRACT.md` y `docs/SSD_Judicial_AI_Platform.md` (addendum, sin reescribir el SSD).
+Los diagramas se generan con la skill **archify**, en HTML autónomo, con tema
+claro/oscuro y SVG inline. Se enlazan desde este plan, `docs/CHAT_PIPELINE_CONTRACT.md`,
+`docs/MCP_PARITY.md` y el índice de arquitectura.
 
 ---
 
@@ -1077,7 +1089,7 @@ Los tres se siembran como agentes de sistema, con prompts versionados y skills e
 
 ```text
 1. Backup de BD y storage.
-2. Alembic 0055-0058.
+2. Alembic `0055` a `0061` (o `head` cuando `0062` esté validada).
 3. Deploy API + workers + web con flags OFF.
 4. Backfill legal modules (dry-run, lote, real).
 5. Reindex facts + graph por caso.
@@ -1090,12 +1102,26 @@ Los tres se siembran como agentes de sistema, con prompts versionados y skills e
 
 ### 13.2 Flags
 
-- `LEGAL_GUARD_ENABLED=false` por defecto.
-- `LEGAL_GUARD_DEFAULT_MODE=BALANCED`.
-- `SECOND_OPINION_ENABLED=false`.
-- `FACTS_PROOF_ENABLED=false`.
+- `LEGAL_GUARD_ENABLED=false` por defecto en `config.py` (P0-03).
+- `LEGAL_GUARD_DEFAULT_MODE=BALANCED`; en código el campo es `LEGAL_GUARD_MODE`.
+- `SECOND_OPINION_ENABLED=false` por defecto.
+- `FACTS_PROOF_ENABLED=false` por defecto. Ojo: al 2026-10-22 ningún servicio lee
+  este flag; es un no-op hasta que P1 lo conecte o lo elimine.
 - `LEGAL_NORM_STRICT=true`.
 - `AUDIT_RETENTION_DAYS` y `SECOND_OPINION_MAX_COST` por org.
+
+Activar solo después de migrar y verificar, por entorno y de forma explícita:
+
+```dotenv
+LEGAL_GUARD_ENABLED=true
+LEGAL_GUARD_MODE=BALANCED
+SECOND_OPINION_ENABLED=true
+FACTS_PROOF_ENABLED=true
+```
+
+Local y `.env.test` ya llevan estas líneas para no perder la cobertura; los
+entornos develop/quality/production deben añadirlas al desplegar, porque al no
+estar definidas heredan el `false` del código.
 
 ### 13.3 Rollback
 
@@ -1180,7 +1206,7 @@ Un punto se considera cerrado solo cuando:
 - `apps/api/app/routers/second_opinion.py`
 - `apps/api/app/workers/handlers/second_opinion.py`
 - `apps/api/app/workers/handlers/facts_build.py`
-- `apps/api/migrations/versions/0055_legal_guard.py` a `0058_facts_graph_indexes.py`
+- `apps/api/migrations/versions/0055_legal_guard.py` a `0061_second_opinion_worker.py` (y `0062_legal_gate_semantics.py`, P1)
 - `apps/api/db/sql/055_legal_guard.sql` a `058_facts_graph_indexes.sql`
 - `packages/prompts/answer_question.v4.md`
 - `packages/prompts/verify_answer.v3.md`
@@ -1209,10 +1235,25 @@ Un punto se considera cerrado solo cuando:
 - `scripts/reindex_facts.py`
 - `scripts/rebuild_graphs.py`
 - `scripts/import_legal_rules.py`
-- `data/legal_rules/co/*.json` + `checksums.json`
+- `data/legal_rules/co/*.json` + `checksums.json` (el agregado `checksums.json` ya existe y está validado)
 - `data/modelos/segunda_opinion.json`
 - `docs/architecture/*` (Archify)
 - tests nuevos listados en la sección 12.
+
+**Estado real de prompts y schemas al 2026-10-22:**
+
+- `answer_question.v4.md` y `verify_answer.v3.md` existen como **contratos de
+  versión** (`loaded_as_prompt: false`): documentan el delta y la condición para
+  activarlo. El runtime sigue cargando `answer_question.v3.md`/`v2.md` y
+  `verify_answer.v2.md`, así que no hay dos prompts activos ni comportamiento
+  duplicado.
+- `fact_proof_review.v1.md` es un prompt nuevo y activo como contrato, pero
+  `services/party_facts.py` todavía no lo invoca; la recomendación siempre pasa
+  por revisión humana y nunca escribe `ADMITTED`/`JUDICIALLY_PROVEN`.
+- `legal_audit.schema.json`, `second_opinion.schema.json` y
+  `party_fact.schema.json` validan contra metaschema 2020-12 y contra los
+  invariantes reales (PASSED sin críticos, COMPLETED con veredicto,
+  `is_proven` derivado, `ADMITTED` con posición `ADMITS`).
 
 ### Modificados
 
@@ -1260,7 +1301,14 @@ Un punto se considera cerrado solo cuando:
 | Golden set | reporte de métricas | QA + legal |
 | Seguridad | reporte sin críticos | security |
 | Rendimiento | p50/p95 | performance |
-| Docs/Archify | índice y diagramas | docs |
+| Docs/Archify | índice y 6 diagramas validados (`architecture/README.md`) | docs |
 | Aceptación | firma | responsable |
 
-**Estado del plan:** cerrado, sin decisiones abiertas. La implementación puede comenzar por P0-01 y P1-01.
+**Estado del plan (2026-10-22):** ejecutado en local sobre `0055` a `0061`; la
+`0062` está en curso por P1. Verificado: gate legal, segunda opinión (corrida
+real) y ledger de hechos; 6/6 diagramas Archify; prompts y schemas del plan
+creados. Pendiente: corpus completo y firma legal (P0), golden set y E2E,
+corrección de `0062` y despliegue con backup, backfill y reindexado. El detalle,
+con evidencia y bloqueos, está en
+[`AUDITORIA_MODULOS_LEGALES_2026-10-22.md`](AUDITORIA_MODULOS_LEGALES_2026-10-22.md)
+y en [`docs/coordination/LEGAL_MODULES/P2.md`](coordination/LEGAL_MODULES/P2.md).

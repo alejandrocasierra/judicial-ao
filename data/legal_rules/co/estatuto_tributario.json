@@ -1,0 +1,75 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Estatuto Tributario - Decreto 624 de 1989",
+    "identifier": "630",
+    "title": "ARTÍCULO 630 - Estatuto Tributario (Decreto 624 de 1989)",
+    "text": "ARTICULO 630. INFORMACIÓN DE LOS JUECES CIVILES. Es obligación del juez, en todo proceso ejecutivo de mayor cuantía, dar cuenta a la Administración de Impuestos, de los títulos valores que hayan sido presentados, mediante oficio en el cual se relacionará la clase de título, su cuantía, la fecha de su exigibilidad, el nombre del acreedor y del deudor con su identificación. La omisión por parte del juez de lo dispuesto en este artículo, constituye causal de mala conducta.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/estatuto_tributario_pr026.html",
+    "checksum": "521d9f2a361833e47c3a470e89e1d9e5d6c475eb25a4e993f652911554c1febe",
+    "metadata": {
+      "source_label": "Estatuto Tributario (Decreto 624 de 1989)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-630",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Estatuto Tributario - Decreto 624 de 1989",
+    "identifier": "839-1",
+    "title": "ARTÍCULO 839-1 - Estatuto Tributario (Decreto 624 de 1989) (ARTÍCULO 839-01)",
+    "text": "ARTICULO 839-1. TRAMITE PARA ALGUNOS EMBARGOS. <Artículo adicionado por el artículo 86 de la Ley 6 de 1992. El nuevo texto es el siguiente:> El embargo de bienes sujetos a registro se comunicará a la oficina encargada del mismo, por oficio que contendrá los datos necesarios para el registro; si aquellos pertenecieren al ejecutado lo inscribirá y remitirá el certificado donde figure la inscripción, al funcionario de la Administración de Impuestos que ordenó el embargo. Si el bien no pertenece al ejecutado, el registrador se abstendrá de inscribir el embargo y así lo comunicará enviando la prueba correspondiente. Si lo registra, el funcionario que ordenó el embargo de oficio o a petición de parte ordenará la cancelación del mismo Cuando sobre dichos bienes ya existiere otro embargo registrado, se inscribirá y comunicará a la Administración de Impuestos y al Juzgado que haya ordenado el embargo anterior. En este caso si el crédito que ordenó el embargo anterior es de grado inferior al del Fisco, el funcionario de cobranzas continúará con el procedimiento de cobro, informando de ello al juez respectivo y si este lo solicita, pondrá a su disposición el remanente del remate. Si el crédito que originó el embargo anterior es de grado superior al del fisco, el funcionario de cobro se hará parte en el proceso ejecutivo y velará por que se garantice la deuda con el remanente del remate del bien embargado. Si del respectivo certificado de la oficina donde se encuentren registrados los bienes, resulta que los bienes embargados están gravados con prenda o hipoteca, el funcionario ejecutor hará saber al acreedor la existencia del cobro coactivo, mediante notificación personal o por correo para que pueda hacer valer su crédito ante juez competente. El dinero que sobre del remate del bien hipotecado se enviará al juez que solicite y que adelante el proceso para el cobro del crédito con garantía real. 2. El embargo de saldos bancarios, depósitos de ahorro, títulos de contenido crediticio y de los demás valores de que sea titular o beneficiario el contribuyente, depositados en establecimientos bancarios, crediticios, financieros o similares, en cualquiera de sus oficinas o agencias en todo el país se comunicará a la entidad y quedará consumado con la recepción del oficio. Al recibirse la comunicación, la suma retenida deberá ser consignada al día hábil siguiente en la cuenta de depósitos que se señale, o deberá informarse de la no existencia de sumas de dinero depositadas en dicha entidad. PARAGRAFO 1o. Los embargos no contemplados en esta norma se tramitarán y perfeccionarán de acuerdo con lo dispuesto en el artículo 681 del Código de Procedimiento Civil. PARAGRAFO 2o. Lo dispuesto en el numeral 1) de este artículo en lo relativo a la prelación de los embargos, será aplicable a todo tipo de embargo de bienes. PARAGRAFO 3o. Las entidades bancarias, crediticias financieras y las demás personas y entidades, a quienes se les comunique los embargos, que no den cumplimiento oportuno con las obligaciones impuestas por las normas, responderán solidariamente con el contribuyente por el pago de la obligación.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/estatuto_tributario_pr034.html",
+    "checksum": "f06ac353ca93cf9d1f43cfd0f93aa03dffa92f38b0c873ba40663915f54f78e7",
+    "metadata": {
+      "source_label": "Estatuto Tributario (Decreto 624 de 1989)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-839-1",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Estatuto Tributario - Decreto 624 de 1989",
+    "identifier": "839-01",
+    "title": "ARTÍCULO 839-01 - Estatuto Tributario (Decreto 624 de 1989) (ALIAS DEL ARTÍCULO 839-1)",
+    "text": "ARTICULO 839-1. TRAMITE PARA ALGUNOS EMBARGOS. <Artículo adicionado por el artículo 86 de la Ley 6 de 1992. El nuevo texto es el siguiente:> El embargo de bienes sujetos a registro se comunicará a la oficina encargada del mismo, por oficio que contendrá los datos necesarios para el registro; si aquellos pertenecieren al ejecutado lo inscribirá y remitirá el certificado donde figure la inscripción, al funcionario de la Administración de Impuestos que ordenó el embargo. Si el bien no pertenece al ejecutado, el registrador se abstendrá de inscribir el embargo y así lo comunicará enviando la prueba correspondiente. Si lo registra, el funcionario que ordenó el embargo de oficio o a petición de parte ordenará la cancelación del mismo Cuando sobre dichos bienes ya existiere otro embargo registrado, se inscribirá y comunicará a la Administración de Impuestos y al Juzgado que haya ordenado el embargo anterior. En este caso si el crédito que ordenó el embargo anterior es de grado inferior al del Fisco, el funcionario de cobranzas continúará con el procedimiento de cobro, informando de ello al juez respectivo y si este lo solicita, pondrá a su disposición el remanente del remate. Si el crédito que originó el embargo anterior es de grado superior al del fisco, el funcionario de cobro se hará parte en el proceso ejecutivo y velará por que se garantice la deuda con el remanente del remate del bien embargado. Si del respectivo certificado de la oficina donde se encuentren registrados los bienes, resulta que los bienes embargados están gravados con prenda o hipoteca, el funcionario ejecutor hará saber al acreedor la existencia del cobro coactivo, mediante notificación personal o por correo para que pueda hacer valer su crédito ante juez competente. El dinero que sobre del remate del bien hipotecado se enviará al juez que solicite y que adelante el proceso para el cobro del crédito con garantía real. 2. El embargo de saldos bancarios, depósitos de ahorro, títulos de contenido crediticio y de los demás valores de que sea titular o beneficiario el contribuyente, depositados en establecimientos bancarios, crediticios, financieros o similares, en cualquiera de sus oficinas o agencias en todo el país se comunicará a la entidad y quedará consumado con la recepción del oficio. Al recibirse la comunicación, la suma retenida deberá ser consignada al día hábil siguiente en la cuenta de depósitos que se señale, o deberá informarse de la no existencia de sumas de dinero depositadas en dicha entidad. PARAGRAFO 1o. Los embargos no contemplados en esta norma se tramitarán y perfeccionarán de acuerdo con lo dispuesto en el artículo 681 del Código de Procedimiento Civil. PARAGRAFO 2o. Lo dispuesto en el numeral 1) de este artículo en lo relativo a la prelación de los embargos, será aplicable a todo tipo de embargo de bienes. PARAGRAFO 3o. Las entidades bancarias, crediticias financieras y las demás personas y entidades, a quienes se les comunique los embargos, que no den cumplimiento oportuno con las obligaciones impuestas por las normas, responderán solidariamente con el contribuyente por el pago de la obligación.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/estatuto_tributario_pr034.html",
+    "checksum": "f06ac353ca93cf9d1f43cfd0f93aa03dffa92f38b0c873ba40663915f54f78e7",
+    "metadata": {
+      "source_label": "Estatuto Tributario (Decreto 624 de 1989)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-839-1",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py",
+      "alias_of": "839-1"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Estatuto Tributario - Decreto 624 de 1989",
+    "identifier": "840",
+    "title": "ARTÍCULO 840 - Estatuto Tributario (Decreto 624 de 1989)",
+    "text": "ARTICULO 840. REMATE DE BIENES. <Artículo modificado por el artículo 266 de la Ley 1819 de 2016. El nuevo texto es el siguiente:> En firme el avalúo, la Dirección de Impuestos y Aduanas Nacionales (DIAN) efectuará el remate de los bienes, directamente o a través de entidades de derecho público o privado, y adjudicará los bienes a favor de la nación en caso de declararse desierto el remate después de la tercera licitación por el porcentaje de esta última, de acuerdo con las normas del Código General del Proceso, en la forma y términos que establezca el reglamento. La Dirección de Impuestos y Aduanas Nacionales podrá realizar el remate de bienes en forma virtual, en los términos y condiciones que establezca el reglamento. Los bienes adjudicados a favor de la nación dentro de los procesos de cobro coactivo y en los procesos concursales se podrán administrar y disponer directamente por la Dirección de Impuestos y Aduanas Nacionales, mediante la venta, donación entre entidades públicas, destrucción y/o gestión de residuos o chatarrización, en la forma y términos que establezca el reglamento. La Dirección de Impuestos y Aduanas Nacionales también podrá entregar para su administración y/o venta al Colector de Activos de la Nación, Central de Inversiones (CISA), los bienes adjudicados a favor de la nación dentro de los procesos de cobro coactivo y en los procesos concursales. PARÁGRAFO 1o. Los gastos en que incurra el Colector de Activos de la Nación, Central de Inversiones (CISA), para la administración y venta de los bienes adjudicados a favor de la nación dentro de los procesos concursales o en proceso de cobro coactivo se pagarán con cargo al presupuesto de la Dirección de Impuestos y Aduanas Nacionales (DIAN). PARÁGRAFO 2o. Los bienes que, a la entrada en vigencia de la presente ley, ya hubieran sido recibidos en pago de obligaciones administradas por la Dirección de Impuestos y Aduanas Nacionales (DIAN), tendrán el tratamiento previsto en las disposiciones contenidas en este artículo.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/estatuto_tributario_pr034.html",
+    "checksum": "215b697aafeb66e205067d8986d27e6e2df275d57528140792b9035f0395890e",
+    "metadata": {
+      "source_label": "Estatuto Tributario (Decreto 624 de 1989)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-840",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

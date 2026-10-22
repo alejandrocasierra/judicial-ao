@@ -1,0 +1,164 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Código Civil - Ley 57 de 1887",
+    "identifier": "769",
+    "title": "ARTÍCULO 769 - Código Civil (Ley 57 de 1887)",
+    "text": "ARTÍCULO 769. <PRESUNCIÓN DE BUENA FE>. La buena fe se presume, excepto en los casos en que la ley establece la presunción contraria. En todos los otros, la mala fe deberá probarse.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr023.html",
+    "checksum": "b4eba889e80a8d36b32459e89871e831075a7d5f860d91bd1151d147f53fbb94",
+    "metadata": {
+      "source_label": "Código Civil (Ley 57 de 1887)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-769",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Código Civil - Ley 57 de 1887",
+    "identifier": "1602",
+    "title": "ARTÍCULO 1602 - Código Civil (Ley 57 de 1887)",
+    "text": "ARTÍCULO 1602. <LOS CONTRATOS SON LEY PARA LAS PARTES>. Todo contrato legalmente celebrado es una ley para los contratantes, y no puede ser invalidado sino por su consentimiento mutuo o por causas legales.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr049.html",
+    "checksum": "d54cb4dcbe2256aaa5ddfca84b4a086c5d3712633e54fc80030d21f79756a305",
+    "metadata": {
+      "source_label": "Código Civil (Ley 57 de 1887)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-1602",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Código Civil - Ley 57 de 1887",
+    "identifier": "1617",
+    "title": "ARTÍCULO 1617 - Código Civil (Ley 57 de 1887)",
+    "text": "ARTÍCULO 1617. <INDEMNIZACIÓN POR MORA EN OBLIGACIONES DE DINERO>. Si la obligación es de pagar una cantidad de dinero, la indemnización de perjuicios por la mora está sujeta a las reglas siguientes: 1a.) Se siguen debiendo los intereses convencionales, si se ha pactado un interés superior al legal, o empiezan a deberse los intereses legales, en el caso contrario; quedando, sin embargo, en su fuerza las disposiciones especiales que autoricen el cobro de los intereses corrientes en ciertos casos. El interés legal se fija en seis por ciento anual. 2a.) El acreedor no tiene necesidad de justificar perjuicios cuando solo cobra intereses; basta el hecho del retardo. 3a.) Los intereses atrasados no producen interés. 4a.) La regla anterior se aplica a toda especie de rentas, cánones y pensiones periódicas. Jurisprudencia Unificación TÍTULO XIII. DE LA INTERPRETACIÓN DE LOS CONTRATOS",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr049.html",
+    "checksum": "9dcab32e3b9cded45c930bcfb1e6b54090342233350b521c486ed1e8da4602cd",
+    "metadata": {
+      "source_label": "Código Civil (Ley 57 de 1887)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-1617",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Código Civil - Ley 57 de 1887",
+    "identifier": "2432",
+    "title": "ARTÍCULO 2432 - Código Civil (Ley 57 de 1887)",
+    "text": "ARTÍCULO 2432. <DEFINICIÓN DE HIPOTECA>. La hipoteca es un derecho de prenda constituido sobre inmuebles que no dejan por eso de permanecer en poder del deudor.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr075.html",
+    "checksum": "4e2f7bd098b8f231a4cc0f62ef99e86a76d2b4f93316f158e329c8226d33a230",
+    "metadata": {
+      "source_label": "Código Civil (Ley 57 de 1887)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-2432",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Código Civil - Ley 57 de 1887",
+    "identifier": "2438",
+    "title": "ARTÍCULO 2438 - Código Civil (Ley 57 de 1887)",
+    "text": "ARTÍCULO 2438. <HIPOTECAS SUJETAS A CONDICIÓN O PLAZO>. La hipoteca podrá otorgarse bajo cualquiera condición, y desde o hasta cierto día. Otorgada bajo condición suspensiva o desde día cierto, no valdrá sino desde que se cumpla la condición o desde que llega el día; pero cumplida la condición o llegado el día, será su fecha la misma de la inscripción. Podrá así mismo otorgarse en cualquier tiempo, antes o después de los contratos a que acceda; y correrá desde que se inscriba.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr075.html",
+    "checksum": "0b224edada924fc5d5290a2a509fdba6663c107b787ad1e34236fee459f538aa",
+    "metadata": {
+      "source_label": "Código Civil (Ley 57 de 1887)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-2438",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Código Civil - Ley 57 de 1887",
+    "identifier": "2478",
+    "title": "ARTÍCULO 2478 - Código Civil (Ley 57 de 1887)",
+    "text": "ARTÍCULO 2478. <TRANSACCIÓN SOBRE LITIGIO QUE HIZO PASO A COSA JUZGADA>. Es nula asimismo la transacción, si, al tiempo de celebrarse, estuviere ya terminado el litigio por sentencia pasada en autoridad de cosa juzgada, y de que las partes o alguna de ellas no haya tenido conocimiento al tiempo de transigir.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr077.html",
+    "checksum": "0ee77093fcb2a2cdba86bbc2d5cef5ea543ea68b6857ecd3d3daa8be6304121d",
+    "metadata": {
+      "source_label": "Código Civil (Ley 57 de 1887)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-2478",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Código Civil - Ley 57 de 1887",
+    "identifier": "2499",
+    "title": "ARTÍCULO 2499 - Código Civil (Ley 57 de 1887)",
+    "text": "ARTÍCULO 2499. <CREDITOS DE TERCERA CLASE>. La tercera clase de créditos comprende los hipotecarios. A cada finca gravada con hipoteca podrá abrirse, a petición de los respectivos acreedores, o de cualquiera de ellos, un concurso particular para que se les pague inmediatamente con ella, según el orden de las fechas de sus hipotecas. Las hipotecas de una misma fecha que gravan una misma finca, preferirán unas a otras en el orden de su inscripción. En este concurso se pagarán primeramente las costas judiciales causadas en él.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr077.html",
+    "checksum": "430bab82ba27c2d505090a9af5b749d5fc9410e0ed23b26bb49bc7e8a4e57d69",
+    "metadata": {
+      "source_label": "Código Civil (Ley 57 de 1887)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-2499",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Código Civil - Ley 57 de 1887",
+    "identifier": "2500",
+    "title": "ARTÍCULO 2500 - Código Civil (Ley 57 de 1887)",
+    "text": "ARTÍCULO 2500. <EXTENSIONES DE LOS CREDITOS DE PRIMERA CLASE A FINCAS HIPOTECADAS>. Los créditos de la primera clase no se extenderán a las fincas hipotecadas, sino en el caso de no poderse cubrir en su totalidad con los otros bienes del deudor. El déficit se dividirá entonces entre las fincas hipotecadas a proporción de los valores de éstas, y lo que a cada una quepa se cubrirá con ella, en el orden y forma que se expresan en el artículo 2495.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr077.html",
+    "checksum": "3929d80ec6eb36ba0b8b5214163652ea4e906ca78693414fe82070ccc8027cf0",
+    "metadata": {
+      "source_label": "Código Civil (Ley 57 de 1887)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-2500",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Código Civil - Ley 57 de 1887",
+    "identifier": "2535",
+    "title": "ARTÍCULO 2535 - Código Civil (Ley 57 de 1887)",
+    "text": "ARTÍCULO 2535. <PRESCRIPCIÓN EXTINTIVA>. La prescripción que extingue las acciones y derechos ajenos exige solamente cierto lapso de tiempo durante el cual no se hayan ejercido dichas acciones. Se cuenta este tiempo desde que la obligación se haya hecho exigible.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr078.html",
+    "checksum": "8b07010b6907ab5e5f3bf499ffdcdebc7cd95cf83aae0511c2d22b12d5deabf1",
+    "metadata": {
+      "source_label": "Código Civil (Ley 57 de 1887)",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-2535",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

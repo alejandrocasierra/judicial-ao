@@ -1,0 +1,20 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Decreto 650 de 1996 - Reglamentario de la Ley 223 de 1995",
+    "identifier": "15",
+    "title": "ARTÍCULO 15 - Decreto 650 de 1996",
+    "text": "ARTÍCULO 15. DEVOLUCIONES. <Artículo compilado en el artículo 2.2.2.15 del Decreto Único Reglamentario 1625 de 2016. Debe tenerse en cuenta lo dispuesto por el artículo 3.2.1.1 del mismo Decreto 1625 de 2016> Cuando el acto, contrato o negocio jurídico no se registre en razón a que no es objeto de registro de conformidad con las disposiciones legales, o por el desistimiento voluntario de las partes cuando éste sea permitido por la ley y no se haya efectuado el registro, procederá la devolución del valor pagado. Igualmente, procederá la devolución cuando se presenten pagos en exceso o pagos de lo no debido. Para efectos de la devolución, el interesado elevará memorial de solicitud a la entidad recaudadora, acompañada de la prueba del pago, dentro del término que se señala a continuación: <Inciso NULO>",
+    "version_date": "1996-04-03",
+    "official_url": "https://normograma.dian.gov.co/dian/compilacion/docs/decreto_0650_1996.htm",
+    "checksum": "f7c819569a29827e35e023310f76adfbabae28a8452dcfe517b45fbd0dff9b59",
+    "metadata": {
+      "source_label": "Decreto 650 de 1996",
+      "source_page_updated": "1996-04-03",
+      "retrieved_at": "1996-04-03T00:00:00+00:00",
+      "article_anchor": "art-15",
+      "extraction": "dian-normograma/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

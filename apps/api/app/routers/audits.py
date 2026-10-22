@@ -15,6 +15,22 @@ from app.services import audit, legal_guard
 
 router = APIRouter(prefix="/cases/{case_id}", tags=["audits"])
 
+# Lista blanca interna de columnas actualizables de la política. El nombre de la
+# columna nunca viene del cliente: se deriva de este mapa y el valor va por bind.
+_POLICY_COLUMNS = {
+    "mode": "mode",
+    "require_primary_citation": "require_primary_citation",
+    "require_legal_norm": "require_legal_norm",
+    "block_on_unsupported": "block_on_unsupported",
+    "block_on_numbers": "block_on_numbers",
+    "block_on_parties": "block_on_parties",
+    "block_on_legal_conclusion": "block_on_legal_conclusion",
+    "require_second_opinion": "require_second_opinion",
+    "max_unsupported_claims": "max_unsupported_claims",
+    "min_ocr_confidence": "min_ocr_confidence",
+    "min_asr_confidence": "min_asr_confidence",
+}
+
 
 def _audit_row(conn, audit_id: str):
     return one(conn, "SELECT * FROM answer_audits WHERE id=:a", a=audit_id)
@@ -33,12 +49,15 @@ def list_audits(case_id: UUID, status: str | None = None, message_id: UUID | Non
         where.append("chat_message_id=:m")
         params["m"] = str(message_id)
     with tx(p.org_id, p.user_id) as conn:
-        return {"audits": rows(conn, f"""
+        sql = """
             SELECT id, chat_message_id, model_run_id, status, mode, claims_total,
                    claims_supported, claims_blocked, findings_critical, duration_ms, created_at
-            FROM answer_audits WHERE {' AND '.join(where)}
-            ORDER BY created_at DESC LIMIT :l
-        """, **params)}
+            FROM answer_audits
+        """
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY created_at DESC LIMIT :l"
+        return {"audits": rows(conn, sql, **params)}
 
 
 @router.post("/messages/{message_id}/audit")
@@ -132,12 +151,10 @@ def put_policy(case_id: UUID, body: VerificationPolicyIn, request: Request,
             """, o=str(p.org_id), c=str(case_id), n="Politica del proceso", u=str(p.user_id))
             policy_id = str(row["id"])
         fields = body.model_dump(exclude_unset=True)
-        for key in ("mode", "require_primary_citation", "require_legal_norm",
-                    "block_on_unsupported", "block_on_numbers", "block_on_parties",
-                    "block_on_legal_conclusion", "require_second_opinion",
-                    "max_unsupported_claims", "min_ocr_confidence", "min_asr_confidence"):
+        for key, column in _POLICY_COLUMNS.items():
             if key in fields and fields[key] is not None:
-                conn.execute(text(f"UPDATE legal_guard_policies SET {key}=:v, version=version+1, updated_at=now() WHERE id=:p"),
+                conn.execute(text("UPDATE legal_guard_policies SET " + column +
+                                  "=:v, version=version+1, updated_at=now() WHERE id=:p"),
                              {"v": fields[key], "p": policy_id})
         if "second_opinion_model_id" in fields:
             model_id = fields["second_opinion_model_id"]

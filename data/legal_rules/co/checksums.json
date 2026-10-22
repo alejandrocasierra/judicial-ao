@@ -1,0 +1,1311 @@
+{
+  "schema": "judicial-ai/legal-corpus-manifest/v1",
+  "jurisdiction": "co",
+  "generated_at": "2026-10-22T15:25:41.434418+00:00",
+  "rules_count": 135,
+  "sources_count": 21,
+  "sources": [
+    {
+      "source": "Código Civil - Ley 57 de 1887",
+      "rules": 13
+    },
+    {
+      "source": "Código de Comercio - Decreto 410 de 1971",
+      "rules": 4
+    },
+    {
+      "source": "Decreto 1069 de 2015 - Decreto Único Reglamentario del Sector Justicia y del Derecho",
+      "rules": 1
+    },
+    {
+      "source": "Decreto 2150 de 1995 - Supresión de Trámites y Firma Mecánica",
+      "rules": 1
+    },
+    {
+      "source": "Decreto 2723 de 2014 - Superintendencia de Notariado y Registro",
+      "rules": 2
+    },
+    {
+      "source": "Decreto 525 de 2009 - Mipymes y Aportes Parafiscales",
+      "rules": 8
+    },
+    {
+      "source": "Decreto 650 de 1996 - Reglamentario de la Ley 223 de 1995",
+      "rules": 1
+    },
+    {
+      "source": "Decreto 806 de 2020 - Notificaciones Electrónicas",
+      "rules": 1
+    },
+    {
+      "source": "Decreto 960 de 1970 - Estatuto Notarial",
+      "rules": 3
+    },
+    {
+      "source": "Decreto Ley 019 de 2012 - Supresión de Trámites",
+      "rules": 2
+    },
+    {
+      "source": "Estatuto Tributario - Decreto 624 de 1989",
+      "rules": 4
+    },
+    {
+      "source": "Ley 1394 de 2010 - Arancel Judicial",
+      "rules": 3
+    },
+    {
+      "source": "Ley 1437 de 2011 - Código de Procedimiento Administrativo y de lo Contencioso Administrativo (CPACA)",
+      "rules": 5
+    },
+    {
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "rules": 59
+    },
+    {
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "rules": 16
+    },
+    {
+      "source": "Ley 1581 de 2012 - Protección de Datos Personales",
+      "rules": 2
+    },
+    {
+      "source": "Ley 2213 de 2022 - Uso de Tecnologías de la Información",
+      "rules": 3
+    },
+    {
+      "source": "Ley 270 de 1996 - Administración de Justicia",
+      "rules": 1
+    },
+    {
+      "source": "Ley 527 de 1999 - Comercio Electrónico y Firma Digital",
+      "rules": 3
+    },
+    {
+      "source": "Ley 590 de 2000 - Mipymes",
+      "rules": 2
+    },
+    {
+      "source": "Ley 962 de 2005 - Racionalización de Trámites",
+      "rules": 1
+    }
+  ],
+  "corpus_sha256": "5c6a16c236c68af97f17407c189c3cd99489cc2a0c0d3b29eb560120d9271739",
+  "rules": [
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "1",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "7e5b524b91caf27631ffee51936c6c8113efa00acc9ae63b06e87670424c37df",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "108",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "7cd09fb5293ec1b40ed1d257400b9b557dd7d69a70f5ade62dc11e80b005c41f",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "110",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "116fe61e1b72285e74412acf798cc18910088b466316acf3e52b8c7b864089b2",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "12",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "7412b64ceb255b0f91c14a2cb353957a1a91c744f6e1c0fba0128af339381ea1",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "133",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "0d1344f07529add929f5f6a18bd5da723d91d9a62bc4719128afe660cb0b0efe",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "14",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "ef75e58fc5bd9508220a131c831febfb73f36c20c6ec3ea76ad17cbd4015bf0d",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "15",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "03bdc1c1ff3e18f7d3332724446418659576b8d73a54ed06ae302bcf0d04a62b",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "155",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "deaf9585d69bd3b02fb956fd2cd15a72c9d5e65a4a84cf879a438526463d46a3",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "1564 de 2012",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "2e916a0ee5db91c1867d4e109f97110bb92710e6848a6ca220bfb77775bc9df3",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "174",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "ea97eaccb80f0b9d5fb05ee193f6869f4c8438339c6567ed07313290198d7df7",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "18",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "43f152e59dadc3d58bb6bf8ca7a8357c73e2a5097c6320ba6a055d3665b04719",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "2",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "5776712e8c3b81042176e35a1425e4970c9298ef55bb803d4a0fa0ba45693631",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "227",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "3101434570f489e6f5c9d261c6fb6c841550451501c9b298ebce383d19dc37dc",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "28",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "f088ab31941878d9dbb01f47f9b43bb24a52884a2a38e020aa50e9a54a7ecdb0",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "290",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "45da4d2a4d64d2e32f602257a45c3463c9c86d268e415c6753db1e16fd0f3410",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "291",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "38de34d07342a6004d937a0f41bab7c8a75861d6c9fac5ef4556a97025b29352",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "292",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "8ba6e23da16f4264c4b37180b669df426ff6a48e99df031c48ec69f126594093",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "293",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "3e5b7f3d65aa1c0185301ae3d556e3d3dc4524781c8c55e52f1b5dd9bcd6d6ab",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "309",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "e6631c46925cdf8ac052c6b10dc304f818e9b163d89a1636e7cc391c5f6dae55",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "319",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "4776a2546aeb87a2a3aa269c63e1dc33dd39be3cd35a9d770b41ed18b21f8cfa",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "372",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "5026746c45836ec717ef4e77fe544030de8c938c525786e049135735daa77677",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "373",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "74585e87f3379c1ad4c8c08147eed140facdcfbdb0b785431bcbd802d745a500",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "422",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "c2c2b7318c6f4a0afee4ae5562837dd1bc39abc34486de6f66a9f8cc67905f46",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "443",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "4b876d25312e58780384247694775d239e5247e4e2b5cfef9022be10c5f565ec",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "462",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "cc995b542641ac6692ad5cfd12d72dd9885c3e11381dfa312ec9f5b69666084c",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "463",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "8eabe93c2338f527f77e34f2bbd0832ba10ccc2f01cbe6dfef2c272ac2d20ee9",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "466",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "fe42b5e1e318fcabb769ba50c4bb620fc04f68e4ca68f7868c5f5abb417f0d47",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "48",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "9eccf4d5cbb37327833284ed511743a6978ef402cacf7d0fdfbcee94061c94d1",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "76",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "8a7902564cb5ed755706de0c61ba597c96f2b90307213fc09e5c337ea7105bf6",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "78",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "d2a0b48a90a98e2f5842eb83f54f3a2ff24ebaa86732010bfa72f262beca473a",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "82",
+      "version_date": "2025-08-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=48425",
+      "checksum": "a2570c50bae6ff5d2cfb43e7bd7130e5eb62ef0320621d23b9967ff4e99bf99d",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "103",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr003.html",
+      "checksum": "be589e53860b0b5a479926d3ebadd51ece6bd05bff61cc7180550e5652aee0e9",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "132",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr004.html",
+      "checksum": "03d9f74dd208e246354c666f7172d16b77a4bc816246ed1b783d97993f685538",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "136",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr004.html",
+      "checksum": "083a337a4f1b60fe87e595b1d503467288f5f0e88526383b6fefec4c61000060",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "161",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr005.html",
+      "checksum": "5f0cf7300ec196a6c0a3f8f818452eb3b2d3f561542babc5337db5a9776e2956",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "170",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr006.html",
+      "checksum": "6f648aac9d87580651d7cc768db0d993e4f357014e312ecb0a626d262be70f8f",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "173",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr006.html",
+      "checksum": "9b0a6aa56479625d175c365dcd5f2829c382580bd304283b44dbb4bc058762d4",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "185",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr006.html",
+      "checksum": "6dbc1e825bd0bd4ed141b67666ae9324f4fc099e9aaee377f2dd52f132752921",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "191",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr006.html",
+      "checksum": "9a479c314c8112875c2c2cd16e1dbbd9854c0d14c4a01d043e9b04270f114586",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "198",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr006.html",
+      "checksum": "e1d2b6d7b8749509bef8d23f30d96099de347401600968a45bba6d416a590b0b",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "25",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012.html",
+      "checksum": "09651b4e7734742c8eb00870a9bd5333dc2541907a225604955e7c8d2ae3258e",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "261",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr008.html",
+      "checksum": "44d1b8f9605f8a755874826987d1769ae972b23dde9a916f77c7a3cb0534a526",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "27",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012.html",
+      "checksum": "39151a6fec3eea43bdcae6e23e20d39657ab3d939cf1dcc7c6792bfc925b2f33",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "330",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr011.html",
+      "checksum": "414b86f3a59ac995f9de0bd17be622df904a7043ba485e1980f45f4b83ec4957",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "35",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr001.html",
+      "checksum": "8c4a28c4dba005dbc565cb3d9fa21a67875362b4a7f5d382972cec2db66437af",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "37",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr001.html",
+      "checksum": "14b0e78a90e05ae5167d29d4d8381a1022d70098a3b22db4d675c3d3bdc23bc2",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "40",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr001.html",
+      "checksum": "668a9055ae35bd6dedc2d13b7f827f8b59aa6b5b22279d61adf17fe5688f944a",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "42",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr001.html",
+      "checksum": "83803fa1fb1f1abbfa291798aefdf8a7e6a2e91fbbb61fb748d325fccdbef285",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "430",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr015.html",
+      "checksum": "ac415b2057ce50e74054994d875c6ccc3776ad8e4fda0e8f237ddd3bb441e204",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "438",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr015.html",
+      "checksum": "fb39c426893742524614a1e793879e5e99ad72e17809e439e55e9565cd5248bf",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "465",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr016.html",
+      "checksum": "8eba8dcfd696a1d036653bbd7a18f96ff44f563e2186532fc2700b2458738957",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "468",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr016.html",
+      "checksum": "bf4501026e497accb3a998829a4943e890fd7d7b95e7c5d276cecbc02d822129",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "49",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr001.html",
+      "checksum": "763377381ee4dace7a76ec9a203a8af92c54ef22f109faff3e5dfe5b40a57f73",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "593",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr020.html",
+      "checksum": "07c37140924ee59f727c5bd13e6b96a7eac5125e82fbdc4c42225296e108a777",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "599",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr020.html",
+      "checksum": "382aea120a7afcd786d62fad28ef7a3a82efdaae324328fc4327635b80761566",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "72",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr002.html",
+      "checksum": "c872f47a87829257299f3cd98611eaf6cd2d7164a48650a3177e6757a488beb6",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "77",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr002.html",
+      "checksum": "727b0f709c79b553590650c6061666db4b927bf7b5e2aa617851ceaecbd71dc1",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "89",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr003.html",
+      "checksum": "f03098c080d2dcc46e9887ed7dbc1895e05d189d2256057be5f17f5ad4fb1198",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/cgp_adicional.json",
+      "source": "Ley 1564 de 2012 - Código General del Proceso",
+      "identifier": "90",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1564_2012_pr003.html",
+      "checksum": "111d21fc3d83025a3b268742016ecd79c766f533d5770e4e18aae85c691875e2",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "2457",
+      "version_date": "2019-10-20",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr076.html",
+      "checksum": "02915c7ddb12ae03475c3e9011b2e9c49329ec943d81d0de9ff2b7ce91a78107",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "2488",
+      "version_date": "2019-10-20",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr077.html",
+      "checksum": "1114ac7ce4bc767b95bc037bf0a91a507f34ab88b81ea7e4b5a227057b7c8cec",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "2495",
+      "version_date": "2019-10-20",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr077.html",
+      "checksum": "777c6b8a8e6bf3eb0715fc07fce0b8bea63198b8b617db5418b578a92bc769ee",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "2502",
+      "version_date": "2019-10-20",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr077.html",
+      "checksum": "487bc618a0008dcaf7f05bfbf2b2930b21cce169c10ed8cabc3885b7d668f570",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil_adicional.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "1602",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr049.html",
+      "checksum": "d54cb4dcbe2256aaa5ddfca84b4a086c5d3712633e54fc80030d21f79756a305",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil_adicional.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "1617",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr049.html",
+      "checksum": "9dcab32e3b9cded45c930bcfb1e6b54090342233350b521c486ed1e8da4602cd",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil_adicional.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "2432",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr075.html",
+      "checksum": "4e2f7bd098b8f231a4cc0f62ef99e86a76d2b4f93316f158e329c8226d33a230",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil_adicional.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "2438",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr075.html",
+      "checksum": "0b224edada924fc5d5290a2a509fdba6663c107b787ad1e34236fee459f538aa",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil_adicional.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "2478",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr077.html",
+      "checksum": "0ee77093fcb2a2cdba86bbc2d5cef5ea543ea68b6857ecd3d3daa8be6304121d",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil_adicional.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "2499",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr077.html",
+      "checksum": "430bab82ba27c2d505090a9af5b749d5fc9410e0ed23b26bb49bc7e8a4e57d69",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil_adicional.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "2500",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr077.html",
+      "checksum": "3929d80ec6eb36ba0b8b5214163652ea4e906ca78693414fe82070ccc8027cf0",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil_adicional.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "2535",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr078.html",
+      "checksum": "8b07010b6907ab5e5f3bf499ffdcdebc7cd95cf83aae0511c2d22b12d5deabf1",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_civil_adicional.json",
+      "source": "Código Civil - Ley 57 de 1887",
+      "identifier": "769",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/codigo_civil_pr023.html",
+      "checksum": "b4eba889e80a8d36b32459e89871e831075a7d5f860d91bd1151d147f53fbb94",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_comercio.json",
+      "source": "Código de Comercio - Decreto 410 de 1971",
+      "identifier": "622",
+      "version_date": "1971-03-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=41102",
+      "checksum": "7e91bd0da62ca147528a4e6eb8a4048b93c6aef5495e46128ccb0f8f5ddec878",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_comercio.json",
+      "source": "Código de Comercio - Decreto 410 de 1971",
+      "identifier": "784",
+      "version_date": "1971-03-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=41102",
+      "checksum": "b187bb45264689cb1167bc9b10ba48abbbf257d905e7e6c03c8e716376690119",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_comercio.json",
+      "source": "Código de Comercio - Decreto 410 de 1971",
+      "identifier": "886",
+      "version_date": "1971-03-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=41102",
+      "checksum": "5e0e2d791652db618f66a8f8bebc7fa914b4b6c373915d91826b8c29bd84217d",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/codigo_comercio_adicional.json",
+      "source": "Código de Comercio - Decreto 410 de 1971",
+      "identifier": "784-5",
+      "version_date": "1971-03-27",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=41102",
+      "checksum": "b187bb45264689cb1167bc9b10ba48abbbf257d905e7e6c03c8e716376690119",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_1069_2015.json",
+      "source": "Decreto 1069 de 2015 - Decreto Único Reglamentario del Sector Justicia y del Derecho",
+      "identifier": "2.2.6.1.2.4.1",
+      "version_date": "2024-04-29",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=74174",
+      "checksum": "a0446de614ac8c40e495f4d2a058f9f3820b99eadb56dcbd6dc2420f8df1d429",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_2150_1995.json",
+      "source": "Decreto 2150 de 1995 - Supresión de Trámites y Firma Mecánica",
+      "identifier": "12",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_2150_1995.html",
+      "checksum": "0414a96a2b02003746f1bf487816c889f234fba1fa9d8d5b494f0f466f6e937c",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_2723_2014.json",
+      "source": "Decreto 2723 de 2014 - Superintendencia de Notariado y Registro",
+      "identifier": "21",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_2723_2014.html",
+      "checksum": "73a8ccfd6ab4d247989682cf7e80e2b545ba265cfedc4ccd467a1bd15b5731bd",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_2723_2014.json",
+      "source": "Decreto 2723 de 2014 - Superintendencia de Notariado y Registro",
+      "identifier": "22",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_2723_2014.html",
+      "checksum": "ac721145746efbc2a0e3bf13cd611dce55758d5e408633e6ab63ff7ad8ac561d",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_525_2009.json",
+      "source": "Decreto 525 de 2009 - Mipymes y Aportes Parafiscales",
+      "identifier": "1",
+      "version_date": "2009-02-23",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=35300",
+      "checksum": "f9f055294df90db902d69f0005a717bb4e69fc43ee1654f99c610cc4d046bb2a",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_525_2009.json",
+      "source": "Decreto 525 de 2009 - Mipymes y Aportes Parafiscales",
+      "identifier": "2",
+      "version_date": "2009-02-23",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=35300",
+      "checksum": "c04295a7ed121e5cd350ef068aa9fce8dba3eb2bd69827b5f76788362fba8bff",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_525_2009.json",
+      "source": "Decreto 525 de 2009 - Mipymes y Aportes Parafiscales",
+      "identifier": "3",
+      "version_date": "2009-02-23",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=35300",
+      "checksum": "c65b8adcf105ede863d28b9911f317c76ad0c9d520a8f78175927780af7b3f86",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_525_2009.json",
+      "source": "Decreto 525 de 2009 - Mipymes y Aportes Parafiscales",
+      "identifier": "4",
+      "version_date": "2009-02-23",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=35300",
+      "checksum": "131cc58306d1a7dd7534d6972547caff7e3c6242ebc40a34ca83239e950bde3b",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_525_2009.json",
+      "source": "Decreto 525 de 2009 - Mipymes y Aportes Parafiscales",
+      "identifier": "5",
+      "version_date": "2009-02-23",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=35300",
+      "checksum": "9cdae21a094199aaf77ce49a0451f4be9bcb08ea78296c25649e9cd9eb3c5595",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_525_2009.json",
+      "source": "Decreto 525 de 2009 - Mipymes y Aportes Parafiscales",
+      "identifier": "6",
+      "version_date": "2009-02-23",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=35300",
+      "checksum": "39a57a417053a5b5fa572fd48810dfe8acf63a63420e333850af0281de4c7e76",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_525_2009.json",
+      "source": "Decreto 525 de 2009 - Mipymes y Aportes Parafiscales",
+      "identifier": "7",
+      "version_date": "2009-02-23",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=35300",
+      "checksum": "3806570351e91f550a471bcc57ab41db02542be8e3756ed04f3b9a7f8277fe0e",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_525_2009.json",
+      "source": "Decreto 525 de 2009 - Mipymes y Aportes Parafiscales",
+      "identifier": "8",
+      "version_date": "2009-02-23",
+      "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=35300",
+      "checksum": "21a1840a64e31c2297987f58e3298b2108e9b4d69804f73e5607cdfc0f0c1eb6",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_650_1996.json",
+      "source": "Decreto 650 de 1996 - Reglamentario de la Ley 223 de 1995",
+      "identifier": "15",
+      "version_date": "1996-04-03",
+      "official_url": "https://normograma.dian.gov.co/dian/compilacion/docs/decreto_0650_1996.htm",
+      "checksum": "f7c819569a29827e35e023310f76adfbabae28a8452dcfe517b45fbd0dff9b59",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_806_2020.json",
+      "source": "Decreto 806 de 2020 - Notificaciones Electrónicas",
+      "identifier": "8",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_0806_2020.html",
+      "checksum": "bf14599f8bd41688cc1f653a0d979b78acefa9d92e4faa898823eeea120439b4",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_960_1970.json",
+      "source": "Decreto 960 de 1970 - Estatuto Notarial",
+      "identifier": "68",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_0960_1970_pr001.html",
+      "checksum": "cd2615414af835d7b4432e07c35afc86a20ab323ee6eb881c2b112c922f7d904",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_960_1970.json",
+      "source": "Decreto 960 de 1970 - Estatuto Notarial",
+      "identifier": "80",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_0960_1970_pr001.html",
+      "checksum": "c5f3887b091406c752e0d6682929f42d17c018e5fd6ce9620f2b0efe0f050260",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_960_1970.json",
+      "source": "Decreto 960 de 1970 - Estatuto Notarial",
+      "identifier": "81",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_0960_1970_pr001.html",
+      "checksum": "2a356b9bd4af256a8f5210fd750d97beb8c152c45628daecc4462678cc39eb9a",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_ley_019_2012.json",
+      "source": "Decreto Ley 019 de 2012 - Supresión de Trámites",
+      "identifier": "15",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_0019_2012.html",
+      "checksum": "cfec6441b34db78a5bac4d904a371c0d972823999a1d7cbed67972d001628c02",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/decreto_ley_019_2012.json",
+      "source": "Decreto Ley 019 de 2012 - Supresión de Trámites",
+      "identifier": "18",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_0019_2012.html",
+      "checksum": "0c82b960dae569770e1d3db3160e5d6c2a5c047e1c0c7c8917899fa359238635",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/estatuto_tributario.json",
+      "source": "Estatuto Tributario - Decreto 624 de 1989",
+      "identifier": "630",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/estatuto_tributario_pr026.html",
+      "checksum": "521d9f2a361833e47c3a470e89e1d9e5d6c475eb25a4e993f652911554c1febe",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/estatuto_tributario.json",
+      "source": "Estatuto Tributario - Decreto 624 de 1989",
+      "identifier": "839-01",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/estatuto_tributario_pr034.html",
+      "checksum": "f06ac353ca93cf9d1f43cfd0f93aa03dffa92f38b0c873ba40663915f54f78e7",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/estatuto_tributario.json",
+      "source": "Estatuto Tributario - Decreto 624 de 1989",
+      "identifier": "839-1",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/estatuto_tributario_pr034.html",
+      "checksum": "f06ac353ca93cf9d1f43cfd0f93aa03dffa92f38b0c873ba40663915f54f78e7",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/estatuto_tributario.json",
+      "source": "Estatuto Tributario - Decreto 624 de 1989",
+      "identifier": "840",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/estatuto_tributario_pr034.html",
+      "checksum": "215b697aafeb66e205067d8986d27e6e2df275d57528140792b9035f0395890e",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1394_2010.json",
+      "source": "Ley 1394 de 2010 - Arancel Judicial",
+      "identifier": "6",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1394_2010.html",
+      "checksum": "dd3a19542cfbd099a98ec9335aa76d15bdfb5cba78fce3d6c5ca676f745ed64c",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1394_2010.json",
+      "source": "Ley 1394 de 2010 - Arancel Judicial",
+      "identifier": "7",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1394_2010.html",
+      "checksum": "bc04186edd4ec2c5a5c889f1aaa9ff00dce17cfe2243060bf0ee9d18ebd2ad86",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1394_2010.json",
+      "source": "Ley 1394 de 2010 - Arancel Judicial",
+      "identifier": "8",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1394_2010.html",
+      "checksum": "645b85dc17b0d472c45b07102c69686df0971af2e23be440e00aec7d05f97633",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1437_2011.json",
+      "source": "Ley 1437 de 2011 - Código de Procedimiento Administrativo y de lo Contencioso Administrativo (CPACA)",
+      "identifier": "67",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1437_2011_pr001.html",
+      "checksum": "b571d6b5459b06f309d39bab7206416e8f72ab224d19ee108632090d9690c916",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1437_2011.json",
+      "source": "Ley 1437 de 2011 - Código de Procedimiento Administrativo y de lo Contencioso Administrativo (CPACA)",
+      "identifier": "76",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1437_2011_pr001.html",
+      "checksum": "73d7a517f85b98f9c013643fbc9d329e404e5920148c443f67a667822c378c76",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1437_2011.json",
+      "source": "Ley 1437 de 2011 - Código de Procedimiento Administrativo y de lo Contencioso Administrativo (CPACA)",
+      "identifier": "77",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1437_2011_pr001.html",
+      "checksum": "7f7d2a6f2780b4a646e34a1290928e048efa42dba7413c5b2542bb9441608970",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1437_2011.json",
+      "source": "Ley 1437 de 2011 - Código de Procedimiento Administrativo y de lo Contencioso Administrativo (CPACA)",
+      "identifier": "79",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1437_2011_pr001.html",
+      "checksum": "03f760aea4c48d4ed0d4ee5a2e721bfba1e11d6940a3b52faa558f6c47ddf3b1",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1437_2011.json",
+      "source": "Ley 1437 de 2011 - Código de Procedimiento Administrativo y de lo Contencioso Administrativo (CPACA)",
+      "identifier": "87",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1437_2011_pr002.html",
+      "checksum": "0225c7c3c091c7e249f2412ff32c4a8c6cbf33e57a7b461d14bfa111eb6538da",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "10",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "b6c1032ddbe8c0ab02f71637e70352bc10c3ab16a4bfc6289aaa549c3c6a5f44",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "11",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "bdaa72aab7eb1a9034344b0b7c891fa0e41c5d2b3d504e05e805ec29c52814de",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "12",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "aafea481a00b9754ec981029d7fc91f72bc9ff733779368cce5a9820f4df7f7d",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "13",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "7ead136ebffcceb260824f21cbc63689a10d3522b7dbb02b7036c3c1965d4aa6",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "14",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "f753e096c0d8e1fa5086342659df35405fdb80ee565ca04a3610452c5c7c5ae3",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "15",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "7650c381255bacd50ffeb0b6944138cc0a1e899620a6bee03ac9139c86029111",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "16",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "f02ec5309b06cea0ab7b51497c513176e33e23ebc11ae3c83b679ae1c3ba3132",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "22",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "75eaac632e5d3fc1841424612e98a678dd18418d29194d5a8d7133829269eb82",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "28",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "3cdc40d4393a03e4a3ecac82ed0aff1cc95d575de09cdbd017c27a91b4a92625",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "3",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "538d399299b0779f99433c2e39946e16f1d3a925f746754ea9b82aa7947c1e5b",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "31",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "9bb2707b4af27fa72317fd234c1094a74f80924eece9a89476faab1db5ea9616",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "33",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "9e384cc8bcbd75a500065ed3cbb9d981c958515e4ae9b1ca5bd182202749b542",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "34",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "947579d71c2d1cde1b50305a71c71a54c702add7df6c6332e77f5e51dbb37157",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "4",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "42ca8020762821223ed707634ed5c3477cea7e76a9d59053c87ed1e555016b8d",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "59",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012_pr001.html",
+      "checksum": "64ac49f43c9d3e6cee4de62e394d608fbe1935e3bd2a25b609ce21e9ddf7c1ba",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1579_2012.json",
+      "source": "Ley 1579 de 2012 - Estatuto de Registro de Instrumentos Públicos",
+      "identifier": "8",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1579_2012.html",
+      "checksum": "cf2b937c2da73d96075a8a2a533f9d7a7e1811650017dd63605e154da1303e73",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1581_2012.json",
+      "source": "Ley 1581 de 2012 - Protección de Datos Personales",
+      "identifier": "4",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1581_2012.html",
+      "checksum": "b5626675f536a7e7a764106d40d5f1ac25660fb48ef33f62c545f87e2fb9f1b2",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_1581_2012.json",
+      "source": "Ley 1581 de 2012 - Protección de Datos Personales",
+      "identifier": "9",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1581_2012.html",
+      "checksum": "f0d30b138feb7cb1fcedcbd2dea4e4bbf315d5e5c299ea666afd7a15afa770bd",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_2213_2022.json",
+      "source": "Ley 2213 de 2022 - Uso de Tecnologías de la Información",
+      "identifier": "10",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_2213_2022.html",
+      "checksum": "4885fa62b0e92e4ee50f0c5aeeea25e6fc3139c389d64f719ecab88f26e9ec08",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_2213_2022.json",
+      "source": "Ley 2213 de 2022 - Uso de Tecnologías de la Información",
+      "identifier": "3",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_2213_2022.html",
+      "checksum": "63ee5731c2761bdf173af39d76317068b6e960e52001f5c9b6a4bd4f5745e635",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_2213_2022.json",
+      "source": "Ley 2213 de 2022 - Uso de Tecnologías de la Información",
+      "identifier": "9",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_2213_2022.html",
+      "checksum": "b73e8b4558f491c0a2173490c6ccbb7009bf2834cb3dfb90647f4a201dba383a",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_270_1996.json",
+      "source": "Ley 270 de 1996 - Administración de Justicia",
+      "identifier": "16",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0270_1996.html",
+      "checksum": "24e56f832b44a31587bfd7f297e22d56f09e591d581a386c6344cddc06e0c7bc",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_527_1999.json",
+      "source": "Ley 527 de 1999 - Comercio Electrónico y Firma Digital",
+      "identifier": "12",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0527_1999.html",
+      "checksum": "fd41ea1007b64b929076244d71d7f1d41c96e5da137bc2395ac2434350dccfb9",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_527_1999.json",
+      "source": "Ley 527 de 1999 - Comercio Electrónico y Firma Digital",
+      "identifier": "20",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0527_1999.html",
+      "checksum": "71bb89ba6cff47a1b5103333731c76745b71e2711d8af01761ce4a07ae565d01",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_527_1999.json",
+      "source": "Ley 527 de 1999 - Comercio Electrónico y Firma Digital",
+      "identifier": "7",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0527_1999.html",
+      "checksum": "0fe1e0d82d8f3f7c8bd613382bdbf0aea47c935802d01abe41bf43c9f2bd0fe4",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_590_2000.json",
+      "source": "Ley 590 de 2000 - Mipymes",
+      "identifier": "2",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0590_2000.html",
+      "checksum": "9b578fc3f2f10fee5ca6e7df5d3e4cd96184caf5c7eec5bca731a8f980957a8d",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_590_2000.json",
+      "source": "Ley 590 de 2000 - Mipymes",
+      "identifier": "43",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0590_2000.html",
+      "checksum": "8915fe27ecd1419b314c66fd6f5e49c12081ad139c7f21f41ee99a5b331dc96a",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    },
+    {
+      "path": "data/legal_rules/co/ley_962_2005.json",
+      "source": "Ley 962 de 2005 - Racionalización de Trámites",
+      "identifier": "19",
+      "version_date": "2026-10-15",
+      "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0962_2005.html",
+      "checksum": "202965a52bee9d1764d182894178d79b1dfe0bff264e270411f2341a77f81bd1",
+      "generated_at": "2026-10-22T15:25:41.434418+00:00"
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Ley 527 de 1999 - Comercio Electrónico y Firma Digital",
+    "identifier": "7",
+    "title": "ARTÍCULO 7 - Ley 527 de 1999",
+    "text": "ARTICULO 7o. FIRMA. Cuando cualquier norma exija la presencia de una firma o establezca ciertas consecuencias en ausencia de la misma, en relación con un mensaje de datos, se entenderá satisfecho dicho requerimiento si: a) Se ha utilizado un método que permita identificar al iniciador de un mensaje de datos y para indicar que el contenido cuenta con su aprobación; b) Que el método sea tanto confiable como apropiado para el propósito por el cual el mensaje fue generado o comunicado. Lo dispuesto en este artículo se aplicará tanto si el requisito establecido en cualquier norma constituye una obligación, como si las normas simplemente prevén consecuencias en el caso de que no exista una firma.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0527_1999.html",
+    "checksum": "0fe1e0d82d8f3f7c8bd613382bdbf0aea47c935802d01abe41bf43c9f2bd0fe4",
+    "metadata": {
+      "source_label": "Ley 527 de 1999",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-7",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 527 de 1999 - Comercio Electrónico y Firma Digital",
+    "identifier": "12",
+    "title": "ARTÍCULO 12 - Ley 527 de 1999",
+    "text": "ARTICULO 12. CONSERVACION DE LOS MENSAJES DE DATOS Y DOCUMENTOS. Cuando la ley requiera que ciertos documentos, registros o informaciones sean conservados, ese requisito quedará satisfecho, siempre que se cumplan las siguientes condiciones: 1. Que la información que contengan sea accesible para su posterior consulta. 2. Que el mensaje de datos o el documento sea conservado en el formato en que se haya generado, enviado o recibido o en algún formato que permita demostrar que reproduce con exactitud la información generada, enviada o recibida, y 3. Que se conserve, de haber alguna, toda información que permita determinar el origen, el destino del mensaje, la fecha y la hora en que fue enviado o recibido el mensaje o producido el documento. No estará sujeta a la obligación de conservación, la información que tenga por única finalidad facilitar el envío o recepción de los mensajes de datos. Los libros y papeles del comerciante podrán ser conservados en cualquier medio técnico que garantice su reproducción exacta.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0527_1999.html",
+    "checksum": "fd41ea1007b64b929076244d71d7f1d41c96e5da137bc2395ac2434350dccfb9",
+    "metadata": {
+      "source_label": "Ley 527 de 1999",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-12",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 527 de 1999 - Comercio Electrónico y Firma Digital",
+    "identifier": "20",
+    "title": "ARTÍCULO 20 - Ley 527 de 1999",
+    "text": "ARTICULO 20. ACUSE DE RECIBO. Si al enviar o antes de enviar un mensaje de datos, el iniciador solicita o acuerda con el destinatario que se acuse recibo del mensaje de datos, pero no se ha acordado entre éstos una forma o método determinado para efectuarlo, se podrá acusar recibo mediante: a) Toda comunicación del destinatario, automatizada o no, o b) Todo acto del destinatario que baste para indicar al iniciador que se ha recibido el mensaje de datos. Si el iniciador ha solicitado o acordado con el destinatario que se acuse recibo del mensaje de datos, y expresamente aquél ha indicado que los efectos del mensaje de datos estarán condicionados a la recepción de un acuse de recibo, se considerará que el mensaje de datos no ha sido enviado en tanto que no se haya recepcionado el acuse de recibo.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0527_1999.html",
+    "checksum": "71bb89ba6cff47a1b5103333731c76745b71e2711d8af01761ce4a07ae565d01",
+    "metadata": {
+      "source_label": "Ley 527 de 1999",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-20",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

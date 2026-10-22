@@ -36,9 +36,10 @@ from app.services import (audit, case_tools, claim_seed, contradiction_seed, cor
                           deadline as deadline_mod, entity_seed, evidence_carryover,
                           evidence_labels, intent as intent_service, intent_profile, legal_guard,
                           memory, occurrences, party_answer, query_hints, ratelimit, role_answer,
-                          text_terms)
+                          second_opinion, text_terms)
 from app.services.case_tools import ToolContext
 from app.routers.query import _attachment_file_cards, _run_query, _safe_emit
+from app.workers.dispatcher import create_job, enqueue_if_pending
 
 router = APIRouter(prefix="/cases/{case_id}/chats", tags=["chat"])
 
@@ -357,7 +358,8 @@ def list_messages(case_id: UUID, session_id: UUID, limit: int = 50, offset: int 
     offset = max(0, offset)
     with tx(p.org_id, p.user_id) as c:
         _session(c, case_id, session_id)
-        msgs = rows(c, """SELECT page.*, f.verdict, f.corrected_intent
+        msgs = rows(c, """SELECT page.*, f.verdict, f.corrected_intent,
+                aa.id AS audit_id, aa.status AS audit_status
             FROM (
                 SELECT id, role, content, attachments, citations, occurrences, uncertainties,
                        occurrences_term, occurrences_note, answer_kind, intent,
@@ -367,8 +369,13 @@ def list_messages(case_id: UUID, session_id: UUID, limit: int = 50, offset: int 
                 ORDER BY created_at DESC, id DESC LIMIT :l OFFSET :o
             ) page
             LEFT JOIN intent_feedback f ON f.message_id = page.id AND f.user_id = :u
+            LEFT JOIN LATERAL (
+                SELECT a.id, a.status FROM answer_audits a
+                WHERE a.organization_id = :org AND a.chat_message_id = page.id
+                ORDER BY a.created_at DESC LIMIT 1
+            ) aa ON true
             ORDER BY page.created_at ASC, page.id ASC""",
-                   s=str(session_id), l=limit, o=offset, u=p.user_id)
+                   s=str(session_id), l=limit, o=offset, u=p.user_id, org=p.org_id)
     return {"messages": msgs, "limit": limit, "offset": offset}
 
 
@@ -778,6 +785,29 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     result.setdefault("occurrences_term", None)
     result.setdefault("occurrences_note", None)
 
+    guard_before = result.get("_guard_result") or {}
+    policy_before = guard_before.get("policy") or {}
+    # La política se relee del caso: una respuesta en caché no puede saltarse un
+    # `require_second_opinion` activado después de generarse la respuesta.
+    try:
+        with tx(p.org_id, p.user_id) as pc:
+            policy_before = legal_guard.load_policy(pc, str(p.org_id), str(case_id))
+    except Exception as exc:  # noqa: BLE001 — se conserva la política de la auditoría
+        log.warning("verification policy reload failed: %s", exc)
+    requires_second = bool(policy_before.get("require_second_opinion"))
+    original_answer = str(result.get("answer") or "")
+    publish_answer = original_answer
+    if requires_second:
+        # Publicación retenida: la respuesta original queda en model_runs y en la
+        # auditoría; el chat no la muestra hasta la segunda opinión humana/verificador.
+        publish_answer = ("La respuesta queda retenida hasta que se complete la segunda "
+                          "opinión independiente exigida por la política del proceso.")
+        result["publication_blocked"] = True
+        result["publication_block_reason"] = "SECOND_OPINION_REQUIRED"
+        result["answer"] = publish_answer
+    auto_result: dict = {"triggered": False, "reason": "AUDIT_UNAVAILABLE"}
+    auto_job = None
+
     with tx(p.org_id, p.user_id) as c:
         assistant_msg = one(c, """INSERT INTO chat_messages (organization_id, session_id, role, content,
                                      attachments, citations, occurrences, uncertainties, occurrences_term,
@@ -786,10 +816,10 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
             VALUES (:o, :s, 'assistant', :t, CAST(:fc AS jsonb), CAST(:ci AS jsonb), CAST(:oc AS jsonb),
                     CAST(:unc AS jsonb), :ot, :on, :ak, :intent, :dg, :mr, :ic, :ir, :isrc, :rv)
             RETURNING id, created_at, answer_kind, intent, degraded""",
-                            o=p.org_id, s=str(session_id), t=result["answer"],
+                            o=p.org_id, s=str(session_id), t=publish_answer,
                             fc=json.dumps(result.get("file_cards", [])),
-                            ci=json.dumps(result.get("citations", [])),
-                            oc=json.dumps(result.get("occurrences") or []),
+                            ci=json.dumps([] if requires_second else result.get("citations", [])),
+                            oc=json.dumps([] if requires_second else (result.get("occurrences") or [])),
                             unc=json.dumps(result.get("uncertainties") or []),
                             ot=result.get("occurrences_term"), on=result.get("occurrences_note"),
                             ak=answer_kind, intent=intent_out, dg=degraded,
@@ -821,13 +851,57 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
             try:
                 result["audit_id"] = legal_guard.persist(
                     c, org_id=str(p.org_id), case_id=str(case_id),
-                    question=body.content, answer=str(result.get("answer") or ""),
+                    question=body.content, answer=original_answer,
                     result=guard_result, model_run_id=result.get("model_run_id"),
                     chat_message_id=str(assistant_msg["id"]), actor_id=str(p.user_id),
                     pipeline_version=s.PIPELINE_VERSION)
                 result["audit_status"] = guard_result.get("status")
             except Exception as exc:  # noqa: BLE001 - no invalida la respuesta
                 log.warning("chat legal audit persist failed: %s", exc)
+        # Segunda opinión automática/política, idempotente por create_run.
+        if result.get("audit_id"):
+            try:
+                auto_result = second_opinion.request_auto(
+                    c, org_id=str(p.org_id), case_id=str(case_id),
+                    message_id=str(assistant_msg["id"]), actor_id=str(p.user_id),
+                    intent=intent_out, audit_status=result.get("audit_status"),
+                    policy=policy_before)
+                run = auto_result.get("run")
+                if auto_result.get("triggered") and run and run.get("status") == "QUEUED":
+                    auto_job = create_job(
+                        c, org_id=str(p.org_id), case_id=str(case_id),
+                        job_type="second_opinion", input_ids=[str(run["id"])],
+                        actor_id=str(p.user_id), key_parts=["second_opinion", str(run["id"])],
+                        pipeline_version=s.PIPELINE_VERSION,
+                        model_version=str(run.get("verifier_model_name") or "verifier"))
+                    auto_result["job_id"] = str(auto_job["id"])
+            except Exception as exc:  # noqa: BLE001 — nunca tumba el turno
+                log.warning("auto second opinion request failed: %s", exc)
+                auto_result = {"triggered": False, "reason": "SECOND_OPINION_ERROR"}
+        if requires_second and not auto_result.get("triggered"):
+            # No se pudo encolar (p. ej. presupuesto): se informa sin publicar.
+            result["publication_block_reason"] = str(auto_result.get("reason") or "SECOND_OPINION_REQUIRED")
+    if auto_job is not None:
+        try:
+            enqueue_if_pending(auto_job, str(p.org_id), str(p.user_id))
+        except Exception:  # noqa: BLE001
+            log.debug("could not enqueue auto second opinion", exc_info=True)
+    if result.get("publication_blocked"):
+        # No se publican claims, citas ni ubicaciones de una respuesta retenida.
+        result["claims"] = []
+        result["citations"] = []
+        result["citations_used"] = []
+        result["occurrences"] = []
+        result["unsupported_claims"] = []
+        result["uncertainties"] = [
+            "La respuesta original queda retenida en la auditoría hasta que se "
+            "complete la segunda opinión independiente."
+        ]
+    if auto_result.get("triggered"):
+        result["second_opinion"] = {
+            "triggered": True, "reason": auto_result.get("reason"),
+            "run_id": str((auto_result.get("run") or {}).get("id") or ""),
+            "job_id": auto_result.get("job_id")}
     _update_summary(s, p, session_id, session)
     return {"user_message": user_msg, "assistant_message": assistant_msg, **result}
 

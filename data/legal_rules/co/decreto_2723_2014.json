@@ -1,0 +1,38 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Decreto 2723 de 2014 - Superintendencia de Notariado y Registro",
+    "identifier": "21",
+    "title": "ARTÍCULO 21 - Decreto 2723 de 2014",
+    "text": "ARTÍCULO 21. FUNCIONES DE LA SUBDIRECCIÓN DE APOYO JURÍDICO REGISTRAL. Son funciones de la Subdirección de Apoyo Jurídico Registral, las siguientes: 1. Apoyar jurídicamente a las Oficinas de Registro de Instrumentos Públicos del país, de conformidad con los lineamientos impartidos por la Oficina Asesora Jurídica. 2. Sustanciar y resolver en segunda instancia los recursos contra los actos administrativos proferidos por los Registradores de Instrumentos Públicos. 3. Comunicar e instruir a los Registradores de Instrumento Públicos sobre la aplicación de las normas o criterios jurídicos que rijan el actuar registral. 4. Resolver las revocatorias directas, recursos de queja y derechos de petición que se interpongan en ejercicio del procedimiento jurídico registral. 5. Asistir al Director Técnico de Registro en la adopción de las medidas para apoyar a las Oficinas de Registro con el fin de evitar la afectación de la prestación del servicio público registral. 6. Aplicar en las decisiones que tome la Dirección las directrices impartidas para la unificación de criterios en materia registral. 7. Apoyar en la sustanciación de las tutelas que se interpongan frente a los temas de su competencia. 8. Participar en el proceso de identificación, medición y control de riesgos operativos relacionados con los procesos que se desarrollan en la dependencia. 9. Promover y desarrollar la implementación, mantenimiento y mejora del Sistema Integrado de Gestión de la dependencia. 10. Las demás que le sean asignadas y que correspondan a la naturaleza de la dependencia.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_2723_2014.html",
+    "checksum": "73a8ccfd6ab4d247989682cf7e80e2b545ba265cfedc4ccd467a1bd15b5731bd",
+    "metadata": {
+      "source_label": "Decreto 2723 de 2014",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-21",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Decreto 2723 de 2014 - Superintendencia de Notariado y Registro",
+    "identifier": "22",
+    "title": "ARTÍCULO 22 - Decreto 2723 de 2014",
+    "text": "ARTÍCULO 22. FUNCIÓN DE LAS OFICINAS DE REGISTRO DE INSTRUMENTOS PÚBLICOS. Las Oficinas de Registro de Instrumentos Públicos prestarán el servicio público de registro de instrumentos públicos de conformidad con lo establecido en la Ley 1579 de 2012, las demás normas que la reglamenten, adicionen, modifiquen o sustituyan. 1. Proponer al Director Técnico de Registro las políticas, estrategias, planes y programas de mejoramiento continuo en relación con la prestación del servicio público de registro de Instrumentos Públicos. 2. Implementar las políticas, estrategias, planes y programas en relación con la prestación del servicio público registral. 3. Prestar el servicio de registro de instrumentos públicos de conformidad con lo establecido en la Ley 1579 de 2012 y en las normas que la reglamenten, modifiquen, adicionen y sustituyan, bajo los principios de celeridad, seguridad y eficiencia. 4. Inscribir los documentos de los actos sujetos al registro, así como absolver las consultas que los ciudadanos formulen, con fundamento en las disposiciones legales. 5. Expedir certificados de tradición de los bienes inmuebles sometidos a registro, mediante la reproducción fiel y total de las inscripciones contenidas en el folio de matrícula inmobiliaria. 6. Expedir los actos administrativos, oficios y documentos relacionados con el registro de instrumentos públicos de conformidad con la ley. 7. Consolidar y elaborar los reportes de la información estadística de la oficina de registro, de acuerdo a los parámetros establecidos por la Superintendencia. 8. Administrar los documentos propios del registro, así como también de los folios de matrícula inmobiliaria de acuerdo con la normatividad establecida para la materia. 9. Implementar las políticas de servicio al ciudadano y asegurar su desarrollo y cumplimiento de conformidad a la normatividad vigente y en concordancia con el Sistema de Gestión de Calidad. 10. Atender las peticiones, quejas y reclamos en relación con la prestación del servicio público registral, en coordinación con la Oficina de Atención al Ciudadano. 11. Identificar los riesgos inherentes a la prestación del servicio registral en el país y proponer los mecanismos para mitigarlos. 12. Promover y desarrollar la implementación, mantenimiento y mejora del Sistema Integrado de Gestión de la dependencia. 13. Las demás inherentes a la naturaleza y funciones de la dependencia.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_2723_2014.html",
+    "checksum": "ac721145746efbc2a0e3bf13cd611dce55758d5e408633e6ab63ff7ad8ac561d",
+    "metadata": {
+      "source_label": "Decreto 2723 de 2014",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-22",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

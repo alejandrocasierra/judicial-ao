@@ -1,19 +1,27 @@
 # Plan de diagramas y documentación Archify
 
-**Versión:** 1.0  
+**Versión:** 1.1 (estado al 2026-10-22, cierre P2)  
 **Fecha:** 2026-10-22  
-**Base:** commit `963297c`  
+**Base:** estado local tras las migraciones `0055` a `0061` (la `0062` está en curso por P1)  
 **Plan maestro:** [PLAN_MODULOS_LEGALES_2026-10-22.md](PLAN_MODULOS_LEGALES_2026-10-22.md)
 
-**Artefactos generados:** [`docs/architecture/README.md`](architecture/README.md) (4 diagramas Archify validados)
+**Artefactos generados:** [`docs/architecture/README.md`](architecture/README.md) (6 diagramas Archify validados)
 
 ## 0. Estado actual
 
-La carpeta `docs/architecture/` ya existe con cuatro diagramas Archify validados:
-contexto, gate legal, segunda opinión y ciclo de vida de hechos. Quedan pendientes
-`04-data-model.html` y `05-ux-navigation.html` para cumplir los seis del plan. La
-arquitectura sigue viviendo también en `docs/SSD_Judicial_AI_Platform.md`,
-`docs/CHAT_PIPELINE_CONTRACT.md`, `docs/MCP_PARITY.md` y el código.
+La carpeta `docs/architecture/` existe y contiene los **seis** diagramas del plan:
+contexto, gate legal, segunda opinión, ciclo de vida de hechos, modelo de datos y
+navegación/UX. Los seis pasaron `validate`, `deliver`, `check` y `browser-check`
+de Archify 3.0.1 y tienen sus JSON fuente y recibos versionados.
+
+Dos notas de alcance:
+
+- `04` se dibuja como mapa de entidades con cardinalidades porque la versión
+  instalada de Archify no incluye el modo `erd`. Cubre `0055` a `0061`; la `0062`
+  (gate semántico y precios de modelo) todavía no está reflejada.
+- `05` refleja la UI implementada al 2026-10-22, no la propuesta: sidebar plana,
+  tres pestañas y sin badge de auditoría en el chat. La brecha está declarada en
+  el propio diagrama y en la guía de diseño.
 
 La fuente de verdad sigue siendo el código y las migraciones. Los diagramas explican, no reemplazan.
 
@@ -24,16 +32,15 @@ La fuente de verdad sigue siendo el código y las migraciones. Los diagramas exp
 ```text
 docs/architecture/
 ├── README.md
-├── 00-system-context.html
-├── 01-legal-guard-flow.html
-├── 02-second-opinion-sequence.html
-├── 03-facts-lifecycle.html
-├── 04-data-model.html
-├── 05-ux-navigation.html
-└── assets/
-    ├── theme.css
-    └── diagram.js
+├── 00-system-context.html   (+ .json y recibos)
+├── 01-legal-guard-flow.html (+ .json y recibos)
+├── 02-second-opinion-sequence.html (+ .json y recibos)
+├── 03-facts-lifecycle.html  (+ .json y recibos)
+├── 04-data-model.html       (+ .json y recibos)
+└── 05-ux-navigation.html    (+ .json y recibos)
 ```
+
+No hay carpeta `assets/`: cada HTML es autónomo y no depende de CSS/JS externos.
 
 Cada HTML es autónomo, con SVG inline, tema claro/oscuro, sin CDN ni dependencias de red. Se puede abrir desde el repo y exportar a PNG/SVG.
 
@@ -216,15 +223,29 @@ No se edita el SSD completo para evitar deriva.
 
 ## 5. Criterios de aceptación
 
-- [ ] `docs/architecture/README.md` existe y lista los 6 diagramas.
-- [ ] Los 6 HTML abren sin red y sin errores de consola.
-- [ ] Tema claro/oscuro funciona.
-- [ ] SVG sin overflow en 1280 y 390 px.
-- [ ] Cada caja/flujo apunta a código, tabla o decisión existente.
-- [ ] No hay datos reales ni cifras inventadas.
-- [ ] `CHAT_PIPELINE_CONTRACT`, `MCP_PARITY`, addendum y README enlazan los diagramas.
-- [ ] El diagrama de datos coincide con las migraciones 0055-0058.
-- [ ] El diagrama de hechos coincide con la taxonomía de la sección 6 del plan.
-- [ ] El diagrama de segunda opinión muestra la fase 1 ciega.
-- [ ] El diagrama de UX coincide con la guía de diseño.
-- [ ] Se exportan PNG/SVG para revisión legal.
+Estado real al 2026-10-22. Solo se marca lo verificado; lo parcial se deja
+declarado con su motivo.
+
+- [x] `docs/architecture/README.md` existe y lista los 6 diagramas.
+- [x] Los 6 HTML abren sin red: son autónomos y `browser-check` los carga desde
+  disco. Los errores de consola no forman parte del recibo de Archify, así que
+  ese punto no se declara verificado por separado.
+- [x] Tema claro/oscuro: `browser-check` verifica ambos extremos en los 6.
+- [ ] SVG sin overflow en 1280 y 390 px: `browser-check` mide 1440, 1600, 1920 y
+  2048 px (sin desborde horizontal). 1280 y 390 no se midieron en esta pasada.
+- [x] Cada caja/flujo apunta a código, tabla o decisión existente (revisado a mano
+  contra `0055`-`0061`, routers y componentes de `apps/web`).
+- [x] No hay datos reales ni cifras inventadas en los diagramas.
+- [x] `CHAT_PIPELINE_CONTRACT` y `MCP_PARITY` enlazan los diagramas; el índice
+  `architecture/README.md` enlaza plan, auditoría, contratos y guía.
+- [ ] `docs/ADDENDUM_MODULOS_LEGALES.md`: no se creó para no duplicar el plan
+  (§4-§7) y la implementación. Si el SSD exige un addendum propio, debe escribirse
+  enlazando estos diagramas, no copiando su contenido.
+- [x] El diagrama de datos coincide con las migraciones `0055`-`0061`
+  (`0062` pendiente de P1).
+- [x] El diagrama de hechos coincide con la taxonomía de la sección 6 del plan.
+- [x] El diagrama de segunda opinión muestra la fase 1 ciega.
+- [x] El diagrama de UX coincide con la UI implementada y la guía de diseño
+  actualizada (`GUIA_DISENO_MODULOS_LEGALES.md` §4.1 y §4.2).
+- [ ] Se exportan PNG/SVG para revisión legal: no se exportaron en esta pasada.
+  El visor de cada HTML permite la exportación manual.

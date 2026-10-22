@@ -1,0 +1,20 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Ley 962 de 2005 - Racionalización de Trámites",
+    "identifier": "19",
+    "title": "ARTÍCULO 19 - Ley 962 de 2005",
+    "text": "ARTÍCULO 19. PUBLICIDAD Y NOTIFICACIÓN DE LOS ACTOS DE REGISTRO Y TÉRMINO PARA RECURRIR. Para los efectos de los artículos 14, 15 y 28 del Código Contencioso Administrativo, las entidades encargadas de llevar los registros públicos podrán informar a las personas interesadas sobre las actuaciones consistentes en solicitudes de inscripción, mediante la publicación de las mismas en medio electrónico público, en las cuales se indicará la fecha de la solicitud y el objeto del registro. Los actos de inscripción a que se refiere este artículo se entenderán notificados frente a los intervinientes en la actuación y frente a terceros el día en que se efectúe la correspondiente anotación. Cuando se publique la actuación de registro en curso en la forma prevista en el inciso primer o de este artículo, los recursos que procedan contra el acto de inscripción podrán interponerse dentro de los cinco (5) días siguientes a la fecha del registro respectivo.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_0962_2005.html",
+    "checksum": "202965a52bee9d1764d182894178d79b1dfe0bff264e270411f2341a77f81bd1",
+    "metadata": {
+      "source_label": "Ley 962 de 2005",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-19",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

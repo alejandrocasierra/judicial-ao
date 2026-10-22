@@ -24,6 +24,7 @@ import { useChatStore } from "@/lib/chat-store";
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
 import { Markdown } from "@/components/markdown";
+import { AuditBadge } from "@/components/audit-badge";
 import { toast } from "sonner";
 
 interface Agent { id: string; name: string; is_system: boolean }
@@ -67,6 +68,11 @@ interface ChatMessage {
   stopped?: boolean;
   /** Mensaje de error del turno (no es una respuesta del asistente). */
   error?: boolean;
+  /** Auditoría legal persistida para este turno. */
+  audit_status?: string | null;
+  audit_id?: string | null;
+  /** La política exige segunda opinión antes de publicar. */
+  publication_blocked?: boolean;
 }
 interface HistoryMessage {
   role: "user" | "assistant";
@@ -83,6 +89,8 @@ interface HistoryMessage {
   /** Veredicto ya guardado por este usuario (el botón recuerda la elección). */
   verdict?: Verdict | null;
   corrected_intent?: string | null;
+  audit_status?: string | null;
+  audit_id?: string | null;
 }
 type Verdict = "accepted" | "rejected" | "wrong_intent";
 interface FeedbackState { verdict: Verdict; corrected?: string }
@@ -111,6 +119,11 @@ interface SendResponse {
   elapsed_ms?: number; timings?: Record<string, number>;
   occurrences_term?: string; occurrences_note?: string;
   pending_correction?: { tool: string; summary: string; requires_confirmation?: boolean } | null;
+  audit_id?: string | null;
+  audit_status?: string | null;
+  publication_blocked?: boolean;
+  publication_block_reason?: string | null;
+  second_opinion?: { triggered: boolean; reason?: string; run_id?: string; job_id?: string } | null;
   user_message: { id: string }; assistant_message: { id: string };
 }
 
@@ -315,6 +328,8 @@ function mapHistory(m: HistoryMessage): ChatMessage {
       degraded: m.degraded || undefined,
       occurrences_note: m.occurrences_note || undefined,
       occurrences_term: m.occurrences_term || undefined,
+      audit_status: m.audit_status || undefined,
+      audit_id: m.audit_id || undefined,
     };
   }
   return {
@@ -537,6 +552,9 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
             elapsed_ms: meta.elapsed_ms,
             occurrences_note: meta.occurrences_note,
             occurrences_term: meta.occurrences_term,
+            audit_status: meta.audit_status ?? mapped[i].audit_status,
+            audit_id: meta.audit_id ?? mapped[i].audit_id,
+            publication_blocked: meta.publication_blocked ?? mapped[i].publication_blocked,
           };
           break;
         }
@@ -991,6 +1009,21 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                     </p>
                   ) : <Markdown text={m.content} />
                 ) : <p>{m.content}</p>}
+                {m.role === "assistant" && !m.error && (m.audit_status || m.publication_blocked) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <AuditBadge
+                      status={m.audit_status}
+                      auditId={m.audit_id}
+                      caseId={caseId}
+                      blocked={m.publication_blocked}
+                    />
+                    {m.publication_blocked && (
+                      <span className="text-[11px] text-muted-foreground">
+                        Respuesta original retenida en la auditoría hasta la segunda opinión.
+                      </span>
+                    )}
+                  </div>
+                )}
                 {m.stopped && (
                   <p className="mt-1 text-xs text-muted-foreground">Generación detenida.</p>
                 )}

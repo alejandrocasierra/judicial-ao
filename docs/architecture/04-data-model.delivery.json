@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "4495c104-d8d7-4498-8b32-ccd2382935f3",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\04-data-model.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\04-data-model.html",
+  "specification": {
+    "sha256": "fc739cca4a6f1fcf24ed60464a9fc1de16061b94bcf53cad8d32ed6817f9be66",
+    "bytes": 6991
+  },
+  "artifact": {
+    "sha256": "d9d2c3766136e7f8e9ef2abd0c004e9014602ec5a2e5ffa2ca612c03f9b21d68",
+    "bytes": 793056
+  }
+}

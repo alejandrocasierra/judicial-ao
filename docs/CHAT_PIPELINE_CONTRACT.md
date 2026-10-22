@@ -581,3 +581,7 @@ El resultado se persiste en `answer_audits`; el mensaje devuelve `audit_id` y
 `audit_status`. Un hallazgo `CRITICAL` elimina el claim afectado; si no queda
 ningun claim, la respuesta es `insufficient`. La segunda opinion es asincrona,
 exige un modelo distinto y nunca escribe en el expediente.
+
+Diagramas: [`architecture/01-legal-guard-flow.html`](architecture/01-legal-guard-flow.html)
+y [`architecture/02-second-opinion-sequence.html`](architecture/02-second-opinion-sequence.html).
+Indice completo en [`architecture/README.md`](architecture/README.md).

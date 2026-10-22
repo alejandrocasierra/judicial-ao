@@ -1,0 +1,20 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Decreto 1069 de 2015 - Decreto Único Reglamentario del Sector Justicia y del Derecho",
+    "identifier": "2.2.6.1.2.4.1",
+    "title": "ARTÍCULO 2.2.6.1.2.4.1 - Decreto 1069 de 2015",
+    "text": "ARTÍCULO 2.2.6.1.2.4.1. Diligencia de reconocimiento privado. En la diligencia de reconocimiento de un documento privado el notario dejará constancia de la manifestación del interesado, suscrita por éste, de que el contenido de aquél es cierto. Para tal efecto podrá utilizar un sello en donde se exprese de manera inequívoca esta declaración. Si el documento contiene varias hojas, sellará y rubricará cada una de ellas. Esta diligencia será firmada por el notario en último lugar. En igual forma se procederá para el reconocimiento de la firma. (Decreto 2148 de 1983, artículo 34) Subsección 5 De las autenticaciones",
+    "version_date": "2024-04-29",
+    "official_url": "https://www.funcionpublica.gov.co/eva/gestornormativo/norma.php?i=74174",
+    "checksum": "a0446de614ac8c40e495f4d2a058f9f3820b99eadb56dcbd6dc2420f8df1d429",
+    "metadata": {
+      "source_label": "Decreto 1069 de 2015",
+      "source_page_updated": "2024-04-29",
+      "retrieved_at": "2024-04-29T00:00:00+00:00",
+      "article_anchor": "art-2.2.6.1.2.4.1",
+      "extraction": "funcionpublica-gestornormativo/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

@@ -86,9 +86,15 @@ Reglas:
 
 ### 4.1 Sidebar global
 
-Mantener 256 px, drawer en móvil, pero agrupar:
+**Implementado (2026-10-22):** una lista plana de 12 entradas, sin grupos, en el
+orden actual: Dashboard, Usuarios, Roles y permisos, Correos, Agentes, Skills,
+Modelos IA, Verificación, Procesos, Chats IA, Backups, Alertas. `Verificación`
+sigue siendo la política y los modelos de segunda opinión.
+
+**Propuesta pendiente (no implementada):** agrupar en Operación y Administración.
 
 ```text
+PROPUESTA
 OPERACIÓN
   Dashboard
   Procesos
@@ -105,7 +111,6 @@ ADMINISTRACIÓN
   Alertas
 ```
 
-- `Verificación` es la política global y los modelos de segunda opinión.
 - Los módulos por proceso no van en el sidebar global; viven en las pestañas del proceso.
 - `aria-current="page"` en el ítem activo.
 - Objetivo táctil mínimo 44 px.
@@ -114,18 +119,21 @@ ADMINISTRACIÓN
 
 ### 4.2 Pestañas del proceso
 
-Debajo del header del proceso, sticky en desktop:
+**Implementado:** tres pestañas, con scroll horizontal en pantallas estrechas.
 
 ```text
-[Expediente] [Hechos] [Auditoría] [Cronología]
+[Expediente] [Hechos] [Auditoría]
 ```
 
 - `Expediente`: carpetas, archivos, documentos, visor OCR/ASR.
 - `Hechos`: ledger por parte.
-- `Auditoría`: auditorías del proceso y segunda opinión.
-- `Cronología`: abre el diálogo actual de timeline.
+- `Auditoría`: auditorías del proceso, segunda opinión y diff por claim.
+- `Cronología`: **no es una pestaña**; sigue siendo el diálogo de timeline que se
+  abre desde Expediente.
 - En móvil, scroll horizontal con indicador de borde; no se apilan.
 - La pestaña activa tiene borde inferior `primary` y texto `foreground`; las inactivas `muted-foreground`.
+
+Mapa de navegación con el estado real: [`architecture/05-ux-navigation.html`](architecture/05-ux-navigation.html).
 
 ---
 
@@ -145,7 +153,7 @@ Debajo del header del proceso, sticky en desktop:
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ Proceso · radicado · estado           [Partes] [Subir]       │
-│ [Expediente] [Hechos] [Auditoría] [Cronología]               │
+│ [Expediente] [Hechos] [Auditoría]                            │
 ├──────────────────────────────────────────────────────────────┤
 │ Hechos del proceso                       [Filtros] [Reconstruir]│
 │ [Probados] [Con prueba] [Discutidos] [Todos]                  │
@@ -254,6 +262,14 @@ Debajo del header del proceso, sticky en desktop:
 ---
 
 ## 6. Componentes y estados
+
+**Estado de implementación (2026-10-22):** existen `ProcessTabs`, `FactsBoard`,
+`ProofBadge`, `AuditPanel`, `AuditBadge` (badge por respuesta en el chat) y
+`SecondOpinionDiff` (diálogo de comparación). `FactCard`, `PartyPositionBadge` y
+`FactDetailSheet` están resueltos dentro de `FactsBoard`; `SecondOpinionDialog` y
+`VerificationPolicyForm` están resueltos dentro de `AuditPanel` y la página
+`/dashboard/verificacion`. La tabla describe el contrato de componente, no la
+lista de archivos.
 
 | Componente | Props mínimas | Estados |
 |---|---|---|

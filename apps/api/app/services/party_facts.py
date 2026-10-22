@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
+from app.core.config import get_settings
 from app.core.db import one, rows
 from app.services import text_terms
 
@@ -24,6 +26,27 @@ PROOF_STATUSES = {
     "ALLEGED", "ADMITTED", "EVIDENCE_SUPPORTED", "JUDICIALLY_PROVEN",
     "DISPUTED", "REJECTED", "UNRESOLVED",
 }
+PROVEN_STATUSES = {"ADMITTED", "JUDICIALLY_PROVEN"}
+
+
+class ProofStatusDisabled(RuntimeError):
+    """La transición a un estado probatorio está apagada por FACTS_PROOF_ENABLED."""
+
+
+def proof_transitions_allowed() -> bool:
+    """Fail closed: sin configuración legible no se promueve a probado."""
+    try:
+        return bool(get_settings().FACTS_PROOF_ENABLED)
+    except Exception:  # noqa: BLE001 — configuración rota no habilita prueba
+        log.warning("FACTS_PROOF_ENABLED unavailable; blocking proof transitions")
+        return False
+
+
+def _assert_proof_transition_allowed(fact: dict[str, Any], requested: str | None) -> None:
+    if (requested in PROVEN_STATUSES
+            and str(fact.get("proof_status") or "") != str(requested)
+            and not proof_transitions_allowed()):
+        raise ProofStatusDisabled("facts_proof_disabled")
 POSITIONS = {"ALLEGES", "DENIES", "ADMITS", "UNKNOWN"}
 SIDES = {"DEMANDANTE", "DEMANDADO", "TERCERO", "NO_ATRIBUIDO"}
 ROLE_SIDE = {
@@ -142,9 +165,23 @@ def _fact_row(conn: Connection, case_id: str, fact_id: str) -> dict[str, Any] | 
     return one(conn, "SELECT * FROM facts WHERE id = :f AND case_id = :c", f=fact_id, c=case_id)
 
 
+def _claims(conn: Connection, fact_id: str) -> list[dict[str, Any]]:
+    """Claims vinculados y su postura; compatibilidad con el contrato legado."""
+    return rows(conn, """
+        SELECT cl.id, cl.text, fc.stance, cl.claim_type,
+               p.name AS claimant, cl.confidence, fc.claim_id
+        FROM fact_claims fc
+        JOIN claims cl ON cl.id = fc.claim_id
+        LEFT JOIN parties p ON p.id = cl.claimant_party_id
+        WHERE fc.fact_id = :f
+        ORDER BY fc.stance, cl.created_at
+    """, f=fact_id)
+
+
 def _serialize(conn: Connection, fact: dict[str, Any]) -> dict[str, Any]:
     out = dict(fact)
     out["positions"] = _positions(conn, str(fact["id"]))
+    out["claims"] = _claims(conn, str(fact["id"]))
     out["evidence"] = _evidence(conn, str(fact["id"]))
     out["citations"] = _citations(conn, str(fact["id"]))
     if fact.get("proven_by_decision_id") or fact.get("determined_by_decision_id"):
@@ -187,11 +224,14 @@ def list_facts(conn: Connection, case_id: str, *, proof: str = "proven",
     if q:
         where.append("(f.proposition ILIKE :q OR coalesce(f.fact_code,'') ILIKE :q)")
         params["q"] = f"%{q.strip()}%"
-    facts = rows(conn, f"""
-        SELECT f.* FROM facts f WHERE {' AND '.join(where)}
+    sql = "SELECT f.* FROM facts f"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += """
         ORDER BY f.is_proven DESC, f.updated_at DESC, f.id
         LIMIT :limit
-    """, **params)
+    """
+    facts = rows(conn, sql, **params)
     return [_serialize(conn, f) for f in facts]
 
 
@@ -242,6 +282,207 @@ def ensure_positions_from_claims(conn: Connection, org_id: str, case_id: str,
     return int(result.rowcount or 0)
 
 
+_FIRST_PERSON_ADMISSION = re.compile(
+    r"\b(?:admito|admitimos|acepto|aceptamos|reconozco|reconocemos|confieso|confesamos|"
+    r"me\s+allano|nos\s+allanamos)\b", re.I)
+_THIRD_PERSON_ADMISSION = re.compile(
+    r"\b(?:admite|admiten|acepta|aceptan|reconoce|reconocen|confiesa|confiesan|"
+    r"se\s+allana|se\s+allanan)\b", re.I)
+_FIRST_PERSON_DENIAL = re.compile(
+    r"\b(?:niego|negamos|rechazo|rechazamos|me\s+opongo|nos\s+oponemos|"
+    r"no\s+acepto|no\s+aceptamos|no\s+reconozco|no\s+reconocemos|no\s+admito|no\s+admitimos)\b", re.I)
+_THIRD_PERSON_DENIAL = re.compile(
+    r"\b(?:niega|niegan|rechaza|rechazan|se\s+opone|se\s+oponen|"
+    r"no\s+acepta|no\s+aceptan|no\s+reconoce|no\s+reconocen|no\s+admite|no\s+admiten)\b", re.I)
+_FIRST_PERSON_ALLEGATION = re.compile(
+    r"\b(?:alego|alegamos|sostengo|sostenemos|afirmo|afirmamos|manifiesto|manifestamos|"
+    r"argumento|argumentamos|solicito|solicitamos)\b", re.I)
+_THIRD_PERSON_ALLEGATION = re.compile(
+    r"\b(?:alega|alegan|sostiene|sostienen|afirma|afirman|manifiesta|manifiestan|"
+    r"argumenta|argumentan)\b", re.I)
+
+
+def infer_stance(text: str, *, party_name: str | None, speaker_party_id: str | None,
+                 target_party_id: str | None) -> str:
+    """Extrae ALLEGES/DENIES/ADMITS solo de una declaración atribuible a la parte.
+
+    Reglas duras:
+    - sin hablante conocido no hay posición;
+    - una afirmación de A sobre lo que dijo B no crea posición de B;
+    - ADMITS exige verbo explícito de admisión en primera persona o auto-referencia
+      de la propia parte. "menciona", "consta" o "figura" no son admisión;
+    - "no niego" no se convierte en admisión.
+    """
+    folded = text_terms.norm(text)
+    if not folded or not speaker_party_id:
+        return "UNKNOWN"
+    if target_party_id and str(speaker_party_id) != str(target_party_id):
+        return "UNKNOWN"
+    if re.search(r"\bno\s+nieg[oa]\b", folded):
+        return "UNKNOWN"
+    name = text_terms.norm(party_name or "")
+    self_reference = bool(name and name in folded)
+    first_person = bool(re.search(r"\b(?:yo|nosotros|mi\s+representado)\b", folded))
+    denial_at_start = bool(re.match(
+        r"^\s*(?:niega|niegan|rechaza|rechazan|se\s+opone|se\s+oponen|"
+        r"no\s+acepta|no\s+aceptan|no\s+reconoce|no\s+reconocen|no\s+admite|no\s+admiten)\b",
+        folded))
+    admission_at_start = bool(re.match(
+        r"^\s*(?:admite|admiten|acepta|aceptan|reconoce|reconocen|confiesa|confiesan|"
+        r"se\s+allana|se\s+allanan)\b", folded))
+    allegation_at_start = bool(re.match(
+        r"^\s*(?:alega|alegan|sostiene|sostienen|afirma|afirman|manifiesta|manifiestan|"
+        r"argumenta|argumentan)\b", folded))
+
+    if (_FIRST_PERSON_DENIAL.search(folded)
+            or (self_reference and _THIRD_PERSON_DENIAL.search(folded))
+            or denial_at_start):
+        return "DENIES"
+    if _FIRST_PERSON_ADMISSION.search(folded):
+        return "ADMITS"
+    if ((self_reference or admission_at_start) and _THIRD_PERSON_ADMISSION.search(folded)
+            and not _THIRD_PERSON_DENIAL.search(folded)):
+        return "ADMITS"
+    if (_FIRST_PERSON_ALLEGATION.search(folded)
+            or (self_reference and _THIRD_PERSON_ALLEGATION.search(folded))
+            or allegation_at_start):
+        return "ALLEGES"
+    if first_person and self_reference:
+        # Declaración en primera persona sin verbo de postura: no se inventa.
+        return "UNKNOWN"
+    return "UNKNOWN"
+
+
+def extract_positions_from_claims(conn: Connection, org_id: str, case_id: str,
+                                  actor_id: str | None = None, *, dry_run: bool = True,
+                                  limit: int = 5000) -> dict[str, Any]:
+    """Convierte claims explícitos en posiciones con cita; nunca toca UNKNOWN a ciegas.
+
+    Solo actualiza posiciones `UNKNOWN` o crea la faltante. Una posición revisada
+    por un humano (ALLEGES/DENIES/ADMITS) no se sobrescribe. No cambia el estado
+    de prueba ni `is_proven`; eso lo decide `_derive_proof` y la revisión humana.
+    """
+    linked = rows(conn, """
+        SELECT fc.fact_id, cl.id AS claim_id, cl.text, cl.claim_type,
+               cl.claimant_party_id, cl.confidence,
+               sp.resolved_party_id AS speaker_party_id,
+               p.name AS party_name, p.role AS party_role,
+               'linked' AS source
+        FROM fact_claims fc
+        JOIN claims cl ON cl.id = fc.claim_id AND cl.case_id = :c
+        LEFT JOIN LATERAL (
+          SELECT s2.resolved_party_id
+          FROM citations ci
+          JOIN transcript_segments ts ON ts.id = ci.segment_id
+          JOIN speakers s2 ON s2.id = ts.speaker_id
+          WHERE ci.target_type='claim' AND ci.target_id=cl.id
+            AND s2.resolved_party_id IS NOT NULL
+          LIMIT 1
+        ) sp ON true
+        LEFT JOIN parties p ON p.id = coalesce(cl.claimant_party_id, sp.resolved_party_id)
+        WHERE cl.review_status <> 'REJECTED'
+        ORDER BY fc.fact_id, cl.created_at
+        LIMIT :n
+    """, c=case_id, n=max(1, min(int(limit), 10000)))
+    # Sin fact_claims, solo se usa una coincidencia EXACTA de proposición y un
+    # hablante resuelto a una parte. No se infiere por parecido ni por mención.
+    unlinked = rows(conn, """
+        SELECT f.id AS fact_id, cl.id AS claim_id, cl.text, cl.claim_type,
+               cl.claimant_party_id, cl.confidence,
+               sp.resolved_party_id AS speaker_party_id,
+               p.name AS party_name, p.role AS party_role,
+               'exact_proposition' AS source
+        FROM facts f
+        JOIN claims cl ON cl.case_id = f.case_id
+          AND lower(btrim(cl.text)) = lower(btrim(f.proposition))
+        LEFT JOIN LATERAL (
+          SELECT s2.resolved_party_id
+          FROM citations ci
+          JOIN transcript_segments ts ON ts.id = ci.segment_id
+          JOIN speakers s2 ON s2.id = ts.speaker_id
+          WHERE ci.target_type='claim' AND ci.target_id=cl.id
+            AND s2.resolved_party_id IS NOT NULL
+          LIMIT 1
+        ) sp ON true
+        LEFT JOIN parties p ON p.id = coalesce(cl.claimant_party_id, sp.resolved_party_id)
+        WHERE f.case_id = :c
+          AND cl.review_status <> 'REJECTED'
+          AND NOT EXISTS (SELECT 1 FROM fact_claims fc WHERE fc.fact_id = f.id)
+        ORDER BY f.id, cl.created_at
+        LIMIT :n
+    """, c=case_id, n=max(1, min(int(limit), 10000)))
+    claims = linked + unlinked
+    stats = {"claims": len(claims), "linked": len(linked), "exact_proposition": len(unlinked),
+             "inserted": 0, "updated": 0, "unchanged": 0,
+             "unknown": 0, "conflicts": 0, "dry_run": dry_run, "changes": []}
+    for claim in claims:
+        fact_id = str(claim["fact_id"])
+        party_id = claim.get("claimant_party_id") or claim.get("speaker_party_id")
+        position = infer_stance(str(claim.get("text") or ""),
+                                party_name=claim.get("party_name"),
+                                speaker_party_id=str(party_id) if party_id else None,
+                                target_party_id=str(party_id) if party_id else None)
+        if (position == "UNKNOWN" and party_id
+                and str(claim.get("claim_type") or "") == "party_assertion"):
+            # Una afirmación de la parte sobre el hecho, con hablante resuelto,
+            # es una alegación: ALLEGES. Nunca se eleva a ADMITS sin verbo.
+            position = "ALLEGES"
+        if position == "UNKNOWN":
+            stats["unknown"] += 1
+            continue
+        existing = one(conn, """
+            SELECT id, position FROM fact_positions
+            WHERE fact_id=:f AND party_id IS NOT DISTINCT FROM :p
+            ORDER BY created_at LIMIT 1
+        """, f=fact_id, p=str(party_id) if party_id else None)
+        if existing and str(existing.get("position")) not in {"UNKNOWN"}:
+            if str(existing.get("position")) != position:
+                stats["conflicts"] += 1
+            else:
+                stats["unchanged"] += 1
+            continue
+        citation = one(conn, """
+            SELECT id FROM citations WHERE target_type='claim' AND target_id=:cl
+            ORDER BY created_at LIMIT 1
+        """, cl=str(claim["claim_id"]))
+        change = {
+            "fact_id": fact_id, "claim_id": str(claim["claim_id"]),
+            "party_id": str(party_id) if party_id else None,
+            "party_name": claim.get("party_name"),
+            "from": (existing or {}).get("position") or "MISSING",
+            "to": position, "citation_id": str(citation["id"]) if citation else None,
+        }
+        if existing:
+            stats["updated"] += 1
+            if not dry_run:
+                conn.execute(text("""
+                    UPDATE fact_positions
+                    SET position=:pos, source_claim_id=:cl, source_citation_id=:ci,
+                        confidence=coalesce(confidence, :conf), updated_at=now()
+                    WHERE id=:id
+                """), {"pos": position, "cl": str(claim["claim_id"]),
+                       "ci": change["citation_id"],
+                       "conf": claim.get("confidence") if claim.get("confidence") is not None else 0.60,
+                       "id": str(existing["id"])})
+        else:
+            stats["inserted"] += 1
+            if not dry_run:
+                side = side_for_role(claim.get("party_role")) if party_id else "NO_ATRIBUIDO"
+                conn.execute(text("""
+                    INSERT INTO fact_positions
+                      (organization_id, case_id, fact_id, party_id, side, position,
+                       source_claim_id, source_citation_id, confidence, created_by)
+                    VALUES (:o,:c,:f,:p,:s,:pos,:cl,:ci,:conf,:u)
+                """), {"o": org_id, "c": case_id, "f": fact_id, "p": str(party_id) if party_id else None,
+                       "s": side, "pos": position, "cl": str(claim["claim_id"]),
+                       "ci": change["citation_id"],
+                       "conf": claim.get("confidence") if claim.get("confidence") is not None else 0.60,
+                       "u": actor_id})
+        if len(stats["changes"]) < 200:
+            stats["changes"].append(change)
+    return stats
+
+
 def ensure_positions_from_parties(conn: Connection, org_id: str, case_id: str,
                                   fact: dict[str, Any], actor_id: str | None = None) -> int:
     """Si no hay claims vinculados, atribuye el hecho a las partes nombradas.
@@ -276,9 +517,13 @@ def ensure_positions_from_parties(conn: Connection, org_id: str, case_id: str,
 
 
 def rebuild_case(conn: Connection, org_id: str, case_id: str, actor_id: str | None = None,
-                 *, limit: int = 1000) -> dict[str, int]:
+                 *, limit: int = 1000) -> dict[str, Any]:
     facts = rows(conn, "SELECT * FROM facts WHERE case_id = :c ORDER BY id LIMIT :n",
                  c=case_id, n=max(1, min(int(limit), 5000)))
+    # Primero posiciones explícitas (alega/niega/admite) desde claims con cita.
+    # Después las heurísticas existentes, que nunca convierten UNKNOWN en ADMITS.
+    extraction = extract_positions_from_claims(conn, org_id, case_id, actor_id,
+                                               dry_run=False, limit=max(limit * 8, 1000))
     changed = 0
     revisions = 0
     for fact in facts:
@@ -287,6 +532,12 @@ def rebuild_case(conn: Connection, org_id: str, case_id: str, actor_id: str | No
         if fact.get("review_status") in {"ACCEPTED", "EDITED"}:
             continue
         proof, basis, decision_id = _derive_proof(conn, fact)
+        if (proof in PROVEN_STATUSES
+                and str(fact.get("proof_status") or "") != proof
+                and not proof_transitions_allowed()):
+            # La lectura y los estados no probatorios siguen funcionando; no se
+            # promueve a ADMITTED/JUDICIALLY_PROVEN con el flag apagado.
+            continue
         if (proof != fact.get("proof_status") or basis != fact.get("proof_basis")
                 or str(decision_id) != str(fact.get("proven_by_decision_id"))):
             conn.execute(text("""
@@ -302,7 +553,13 @@ def rebuild_case(conn: Connection, org_id: str, case_id: str, actor_id: str | No
             _revision(conn, fact, actor_id=actor_id, reason="Reconciliacion automatica de prueba")
             changed += 1
             revisions += 1
-    return {"facts": len(facts), "changed": changed, "revisions": revisions}
+    return {"facts": len(facts), "changed": changed, "revisions": revisions,
+            "positions_linked": extraction.get("linked", 0),
+            "positions_exact": extraction.get("exact_proposition", 0),
+            "positions_inserted": extraction["inserted"],
+            "positions_updated": extraction["updated"],
+            "positions_unknown": extraction["unknown"],
+            "positions_conflicts": extraction["conflicts"]}
 
 
 def update_fact(conn: Connection, *, org_id: str, case_id: str, fact_id: str,
@@ -317,6 +574,7 @@ def update_fact(conn: Connection, *, org_id: str, case_id: str, fact_id: str,
         raise ValueError("version_conflict")
     if proof_status is not None and proof_status not in PROOF_STATUSES:
         raise ValueError("invalid_proof_status")
+    _assert_proof_transition_allowed(fact, proof_status)
     if positions is not None:
         for pos in positions:
             if pos.get("side") not in SIDES or pos.get("position") not in POSITIONS:

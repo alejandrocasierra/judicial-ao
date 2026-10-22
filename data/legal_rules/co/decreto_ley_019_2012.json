@@ -1,0 +1,38 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Decreto Ley 019 de 2012 - Supresión de Trámites",
+    "identifier": "15",
+    "title": "ARTÍCULO 15 - Decreto Ley 019 de 2012",
+    "text": "ARTÍCULO 15. ACCESO DE LAS AUTORIDADES A LOS REGISTROS PÚBLICOS. Las entidades públicas y las privadas que cumplan funciones públicas o presten servicios públicos pueden conectarse gratuitamente a los registros públicos que llevan las entidades encargadas de expedir los certificados de existencia y representación legal de las personas jurídicas, los certificados de tradición de bienes inmuebles, naves, aeronaves y vehículos y los certificados tributarios, en las condiciones y con las seguridades requeridas que establezca el reglamento La lectura de la información obviará la solicitud del certificado y servirá de prueba bajo la anotación del funcionario que efectúe la consulta.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_0019_2012.html",
+    "checksum": "cfec6441b34db78a5bac4d904a371c0d972823999a1d7cbed67972d001628c02",
+    "metadata": {
+      "source_label": "Decreto Ley 019 de 2012",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-15",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Decreto Ley 019 de 2012 - Supresión de Trámites",
+    "identifier": "18",
+    "title": "ARTÍCULO 18 - Decreto Ley 019 de 2012",
+    "text": "ARTÍCULO 18. VERIFICACIÓN DE LA HUELLA DACTILAR POR MEDIOS ELECTRÓNICOS. En los trámites y actuaciones que se cumplan ante las entidades públicas y los particulares que ejerzan funciones administrativas en los que se exija la obtención de la huella dactilar como medio de identificación inmediato de la persona, ésta se hará por medios electrónicos. Las referidas entidades y particulares contarán con los medios tecnológicos de interoperabilidad necesarios para cotejar la identidad del titular de la huella con la base de datos de la Registraduría Nacional del Estado Civil. Si el trámite no requiere de la identificación inmediata de la persona, la autoridad o el particular encargado de funciones administrativas coordinarán con la Registraduría Nacional del Estado Civil el mecanismo de verificación de la información requerida. Cuando por razones físicas la persona que pretenda identificarse no pueda imponer la huella dactilar o esta carezca de calidad suficiente para identificarla, la verificación de la identidad se hará mediante la comparación de su información biográfica con la que reposa en la base de datos de la Registraduría Nacional del Estado Civil. De igual forma se procederá para identificar a personas menores de siete (7) años, caso en el cual deberá acompañarse copia del Registro Civil de Nacimiento. La comprobación de identidad a través de la Registraduría Nacional del Estado Civil no tendrá costo para la entidad pública o el particular que ejerza funciones administrativas. PARÁGRAFO 1. La identificación mediante la obtención electrónica de la huella dactilar no excluye la presentación del documento de identidad. En caso de que la persona no tenga documento de identidad, el requisito se surtirá con la exhibición del comprobante del documento en trámite, expedido por la Registraduría Nacional del Estado Civil, el cual se presume auténtico. PARÁGRAFO 2. Cuando sea necesario, y con el fin de obtener la huella dactilar en sitios distintos a su sede operativa, las autoridades públicas o los particulares en ejercicio de funciones administrativas podrán incorporar mecanismos móviles de obtención electrónica remota de la huella dactilar. Las notarías del país están obligadas a contar con sistemas de obtención electrónica remota de la huella dactilar. PARÁGRAFO 3. Para los efectos de este artículo, entiéndase que el documento de identidad es la cédula de ciudadanía, la cédula de extranjería, la tarjeta de identidad o el pasaporte si el nacional que se identifica se encuentra en el exterior. PARÁGRAFO 4. Los particulares que prestan servicios públicos podrán incorporar mecanismos de obtención electrónica de la huella dactilar de usuarios, clientes o consumidores cuando resulte indispensable para evitar suplantaciones o fraudes, e ínter-operar con la base de datos de la Registraduría Nacional del Estado Civil para verificar su identidad. PARÁGRAFO TRANSITORIO. Las obligaciones a que se refiere este artículo serán exigibles a las autoridades públicas y a los particulares que cumplan funciones administrativas a partir de las siguientes fechas: 1. Para las autoridades o particulares que cumplen funciones administrativas en los distritos y municipios de categoría especial, primera y segunda, así como para las oficinas consulares de la República de Colombia, a partir del 1 de julio de 2012. 2. Para las autoridades o particulares que cumplen funciones administrativas, ubicados en los distritos y municipios de categoría tercera y cuarta, a partir del 1 de enero de 2013. 3. Para las autoridades o particulares que cumplen funciones administrativas, ubicados en los distritos y municipios de categoría quinta y sexta, a partir del 1 de julio de 2013. 4. Para el Instituto Nacional Penitenciario y Carcelario INPEC, a partir del 1o. de julio de 2013.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_0019_2012.html",
+    "checksum": "0c82b960dae569770e1d3db3160e5d6c2a5c047e1c0c7c8917899fa359238635",
+    "metadata": {
+      "source_label": "Decreto Ley 019 de 2012",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-18",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

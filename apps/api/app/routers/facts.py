@@ -16,16 +16,19 @@ router = APIRouter(prefix="/cases/{case_id}", tags=["facts"])
 
 
 @router.get("/facts")
-def list_facts(case_id: UUID, proof: str = "proven", side: str | None = None,
+def list_facts(case_id: UUID, proof: str = "all", side: str | None = None,
                party_id: UUID | None = None, issue_id: UUID | None = None,
-               q: str | None = None, limit: int = 200,
+               q: str | None = None, limit: int = 200, envelope: bool = False,
                p: Principal = Depends(current_principal)):
+    """Lista hechos. El contrato histórico es una lista; `envelope=true` permite
+    a la UI pedir `{facts: [...]}` sin romper clientes anteriores."""
     case_access(p, case_id, "case.read")
     with tx(p.org_id, p.user_id) as conn:
-        return {"facts": party_facts.list_facts(
+        facts = party_facts.list_facts(
             conn, str(case_id), proof=proof, side=side,
             party_id=str(party_id) if party_id else None,
-            issue_id=str(issue_id) if issue_id else None, q=q, limit=limit)}
+            issue_id=str(issue_id) if issue_id else None, q=q, limit=limit)
+        return {"facts": facts} if envelope else facts
 
 
 @router.get("/facts/export")
@@ -63,6 +66,27 @@ def rebuild_facts(case_id: UUID, request: Request, p: Principal = Depends(curren
     return {"job_id": str(job["id"]), "status": job["status"], "reused": job.get("reused", False)}
 
 
+@router.post("/facts/extract-positions")
+def extract_positions(case_id: UUID, request: Request, dry_run: bool = True,
+                      limit: int = 5000, p: Principal = Depends(current_principal)):
+    """Extrae alega/niega/admite desde claims con cita.
+
+    `dry_run=true` (por defecto) solo reporta los cambios. No convierte UNKNOWN
+    en ADMITS: exige verbo explícito y hablante identificado.
+    """
+    case_access(p, case_id, "facts.write")
+    with tx(p.org_id, p.user_id) as conn:
+        result = party_facts.extract_positions_from_claims(
+            conn, str(p.org_id), str(case_id), str(p.user_id),
+            dry_run=dry_run, limit=limit)
+        audit.record(conn, org_id=p.org_id, actor_id=p.user_id,
+                     action="facts.extract_positions", entity_type="case", entity_id=str(case_id),
+                     after={"dry_run": dry_run, "inserted": result["inserted"],
+                            "updated": result["updated"], "unknown": result["unknown"]},
+                     request=request)
+    return result
+
+
 @router.get("/facts/{fact_id}")
 def get_fact(case_id: UUID, fact_id: UUID, p: Principal = Depends(current_principal)):
     case_access(p, case_id, "case.read")
@@ -98,6 +122,10 @@ def update_fact(case_id: UUID, fact_id: UUID, body: FactUpdateIn, request: Reque
                 fact_code=body.fact_code)
         except LookupError as exc:
             raise AppError("FACT_NOT_FOUND", 404) from exc
+        except party_facts.ProofStatusDisabled as exc:
+            raise AppError("FACTS_PROOF_DISABLED", 409, {
+                "detail": "La transición a un estado probatorio está deshabilitada. "
+                          "Activa FACTS_PROOF_ENABLED tras migrar y backfillear."}) from exc
         except ValueError as exc:
             raise AppError("FACT_VALIDATION_ERROR", 422, {"detail": str(exc)}) from exc
         audit.record(conn, org_id=p.org_id, actor_id=p.user_id, action="fact.updated",

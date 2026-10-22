@@ -1,0 +1,17 @@
+{
+  "name": "judicial-ai-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Playwright E2E para los módulos legales (Expediente, Hechos, Auditoría)",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "install:browsers": "playwright install chromium",
+    "report": "playwright show-report artifacts/html"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^20.19.0",
+    "typescript": "^5.9.0"
+  }
+}

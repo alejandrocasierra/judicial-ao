@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/second_opinion.schema.json",
+  "title": "second_opinion",
+  "description": "Respuesta de GET /v1/cases/{case_id}/second-opinions/{run_id}: una corrida de second_opinion_runs con sus claims comparados y findings. Conserva la fase ciega: el primer modelo no aparece en este contrato como entrada.",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "required": [
+    "id",
+    "organization_id",
+    "case_id",
+    "status",
+    "responder_model_run_id",
+    "verifier_model_name",
+    "tokens_in",
+    "tokens_out",
+    "cost"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "organization_id": { "type": "string", "format": "uuid" },
+    "case_id": { "type": "string", "format": "uuid" },
+    "audit_id": { "type": ["string", "null"], "format": "uuid" },
+    "chat_message_id": { "type": ["string", "null"], "format": "uuid" },
+    "responder_model_run_id": { "type": ["string", "null"], "format": "uuid" },
+    "verifier_model_id": { "type": ["string", "null"], "format": "uuid" },
+    "verifier_provider": { "type": ["string", "null"] },
+    "verifier_model_name": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"] },
+    "verdict": {
+      "type": ["string", "null"],
+      "enum": ["AGREE", "PARTIAL", "DISAGREE", "INCONCLUSIVE", null],
+      "description": "Nulo mientras la corrida no termina; nunca se publica un veredicto sin comparacion."
+    },
+    "summary": { "type": ["string", "null"] },
+    "output": { "type": "object" },
+    "model_run_id": { "type": ["string", "null"], "format": "uuid" },
+    "tokens_in": { "type": "integer", "minimum": 0 },
+    "tokens_out": { "type": "integer", "minimum": 0 },
+    "cost": { "type": "number", "minimum": 0 },
+    "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
+    "error_code": { "type": ["string", "null"] },
+    "error_detail": { "type": ["string", "null"] },
+    "idempotency_key": { "type": ["string", "null"], "maxLength": 64 },
+    "created_by": { "type": ["string", "null"], "format": "uuid" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "started_at": { "type": ["string", "null"], "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+    "claims": { "type": "array", "items": { "$ref": "#/$defs/claim" } },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "COMPLETED" } }, "required": ["status"] },
+      "then": {
+        "required": ["verdict"],
+        "properties": { "verdict": { "type": "string", "enum": ["AGREE", "PARTIAL", "DISAGREE", "INCONCLUSIVE"] } }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["FAILED", "CANCELLED"] } }, "required": ["status"] },
+      "then": { "required": ["error_code"] }
+    }
+  ],
+  "$defs": {
+    "claim": {
+      "type": "object",
+      "required": ["run_id", "claim_index", "claim_text", "claim_hash", "status", "comparison"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "run_id": { "type": "string", "format": "uuid" },
+        "claim_index": { "type": "integer", "minimum": 0 },
+        "claim_text": { "type": "string", "minLength": 1 },
+        "claim_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "citations": { "type": "array", "items": { "type": "object" } },
+        "status": { "enum": ["SUPPORTED", "UNSUPPORTED", "CONTRADICTED", "NEEDS_REVIEW"] },
+        "comparison": { "enum": ["MATCH", "MISSING", "EXTRA", "CONTRADICTED", "UNCERTAIN"] },
+        "reasons": { "type": "array", "items": { "type": "object" } }
+      },
+      "additionalProperties": true
+    },
+    "finding": {
+      "type": "object",
+      "required": ["run_id", "code", "severity", "message"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "run_id": { "type": "string", "format": "uuid" },
+        "claim_index": { "type": ["integer", "null"], "minimum": 0 },
+        "code": {
+          "enum": [
+            "MODEL_DISAGREEMENT",
+            "MISSING_CITATION",
+            "EXTRA_CLAIM",
+            "DIFFERENT_NUMBER",
+            "DIFFERENT_PARTY",
+            "DIFFERENT_LEGAL_RULE",
+            "DIFFERENT_CONTRADICTION",
+            "INCONCLUSIVE"
+          ]
+        },
+        "severity": { "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+        "message": { "type": "string", "minLength": 1 },
+        "metadata": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

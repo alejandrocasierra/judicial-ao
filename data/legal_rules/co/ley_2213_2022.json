@@ -1,0 +1,56 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Ley 2213 de 2022 - Uso de Tecnologías de la Información",
+    "identifier": "3",
+    "title": "ARTÍCULO 3 - Ley 2213 de 2022",
+    "text": "ARTÍCULO 3o. DEBERES DE LOS SUJETOS PROCESALES EN RELACIÓN CON LAS TECNOLOGÍAS DE LA INFORMACIÓN Y LAS COMUNICACIONES. Es deber de los sujetos procesales, realizar sus actuaciones y asistir a las audiencias y diligencias a través de medios tecnológicos. Para el efecto deberán suministrar a la autoridad judicial competente, y a todos los demás sujetos procesales, los canales digitales elegidos para los fines del proceso o trámite y enviar a través de estos un ejemplar de todos los memoriales o actuaciones que realicen, simultáneamente con copia incorporada al mensaje enviado a la autoridad judicial. Identificados los canales digitales elegidos, desde allí se originarán todas las actuaciones y desde estos se surtirán todas las notificaciones, mientras no se informe un nuevo canal. Es deber de los sujetos procesales, en desarrollo de lo previsto en el artículo 78 numeral 5 del Código General del Proceso, comunicar cualquier cambio de dirección o medio electrónico, so pena de que las notificaciones se sigan surtiendo válidamente en la anterior. Todos los sujetos procesales cumplirán los deberes constitucionales y legales para colaborar solidariamente con la buena marcha del servicio público de administración de justicia. La autoridad judicial competente adoptará las medidas necesarias para garantizar su cumplimiento.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_2213_2022.html",
+    "checksum": "63ee5731c2761bdf173af39d76317068b6e960e52001f5c9b6a4bd4f5745e635",
+    "metadata": {
+      "source_label": "Ley 2213 de 2022",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-3",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 2213 de 2022 - Uso de Tecnologías de la Información",
+    "identifier": "9",
+    "title": "ARTÍCULO 9 - Ley 2213 de 2022",
+    "text": "ARTÍCULO 9o. NOTIFICACIÓN POR ESTADO Y TRASLADOS. Las notificaciones por estado se fijarán virtualmente, con inserción de la providencia, y no será necesario imprimirlos, ni firmarlos por el secretario, ni dejar constancia con firma al pie de la providencia respectiva. No obstante, no se insertarán en el estado electrónico las providencias que decretan medidas cautelares o hagan mención a menores, o cuando la autoridad judicial así lo disponga por estar sujetas a reserva legal. De la misma forma podrán surtirse los traslados que deban hacerse por fuera de audiencia. Los ejemplares de los estados y traslados virtuales se conservarán en línea para consulta permanente por cualquier interesado. PARÁGRAFO. Cuando una parte acredite haber enviado un escrito del cual deba correrse traslado a los demás sujetos procesales, mediante la remisión de la copia por un canal digital, se prescindirá del traslado por Secretaría, el cual se entenderá realizado a los dos (2) días hábiles siguientes al del envío del mensaje y el término respectivo empezará a contarse cuando el iniciador recepcione acuse de recibo o se pueda por otro medio constatar el acceso del destinatario al mensaje.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_2213_2022.html",
+    "checksum": "b73e8b4558f491c0a2173490c6ccbb7009bf2834cb3dfb90647f4a201dba383a",
+    "metadata": {
+      "source_label": "Ley 2213 de 2022",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-9",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 2213 de 2022 - Uso de Tecnologías de la Información",
+    "identifier": "10",
+    "title": "ARTÍCULO 10 - Ley 2213 de 2022",
+    "text": "ARTÍCULO 10. EMPLAZAMIENTO PARA NOTIFICACIÓN PERSONAL. <Apartes subrayados CONDICIONALMENTE exequibles> Los emplazamientos que deban realizarse en aplicación del artículo 108 del Código General del Proceso se harán [únicamente] en el registro nacional de personas emplazadas, [sin necesidad de publicación en un medio escrito].",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_2213_2022.html",
+    "checksum": "4885fa62b0e92e4ee50f0c5aeeea25e6fc3139c389d64f719ecab88f26e9ec08",
+    "metadata": {
+      "source_label": "Ley 2213 de 2022",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-10",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

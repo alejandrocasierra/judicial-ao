@@ -43,3 +43,6 @@ Se agregaron a `case_tools` y al servidor MCP, siempre como lectura:
 solo devuelven la fuente/regla para que el agente razone. La segunda opinion y
 la extraccion de hechos tienen allowlists de solo lectura; no pueden escribir
 `facts`, `claims`, `evidence`, `documents` ni `legal_rules`.
+
+Mapa de esas tools y sus tablas: [`architecture/04-data-model.html`](architecture/04-data-model.html)
+y [`architecture/00-system-context.html`](architecture/00-system-context.html).

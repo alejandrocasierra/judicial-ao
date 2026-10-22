@@ -1,0 +1,20 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Decreto 2150 de 1995 - Supresión de Trámites y Firma Mecánica",
+    "identifier": "12",
+    "title": "ARTÍCULO 12 - Decreto 2150 de 1995",
+    "text": "ARTÍCULO 12. FIRMA MECÁNICA. Los jefes de las entidades que integran la Administración Pública podrán hacer uso, bajo su responsabilidad, de la firma que procede de algún medio mecánico, en tratándose de firmas masivas. En tal caso, previamente mediante acto administrativo de carácter general, deberá informar sobre el particular y sobre las características del medio mecánico.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_2150_1995.html",
+    "checksum": "0414a96a2b02003746f1bf487816c889f234fba1fa9d8d5b494f0f466f6e937c",
+    "metadata": {
+      "source_label": "Decreto 2150 de 1995",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-12",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

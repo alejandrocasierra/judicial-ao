@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.judicial-ai.local/legal_audit.schema.json",
+  "title": "legal_audit",
+  "description": "Respuesta de GET /v1/cases/{case_id}/audits/{audit_id}: una fila de answer_audits con sus claims, citas y findings. Los conteos y estados reflejan lo persistido; no se recalcula nada aqui.",
+  "x-schema-version": "1.0",
+  "type": "object",
+  "required": [
+    "id",
+    "organization_id",
+    "case_id",
+    "status",
+    "mode",
+    "claims_total",
+    "claims_supported",
+    "claims_blocked",
+    "findings_critical",
+    "claims",
+    "citations",
+    "findings"
+  ],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "organization_id": { "type": "string", "format": "uuid" },
+    "case_id": { "type": "string", "format": "uuid" },
+    "chat_message_id": { "type": ["string", "null"], "format": "uuid" },
+    "model_run_id": { "type": ["string", "null"], "format": "uuid" },
+    "policy_id": { "type": ["string", "null"], "format": "uuid" },
+    "question": { "type": "string" },
+    "answer_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "answer_excerpt": { "type": ["string", "null"] },
+    "status": {
+      "enum": ["PASSED", "WARNING", "BLOCKED", "NEEDS_REVIEW", "ERROR"],
+      "description": "PASSED publica; WARNING publica con limites; BLOCKED no publica; NEEDS_REVIEW exige humano; ERROR es fallo tecnico."
+    },
+    "mode": { "enum": ["STRICT", "BALANCED", "ADVISORY"] },
+    "claims_total": { "type": "integer", "minimum": 0 },
+    "claims_supported": { "type": "integer", "minimum": 0 },
+    "claims_blocked": { "type": "integer", "minimum": 0 },
+    "findings_critical": { "type": "integer", "minimum": 0 },
+    "evidence_hash": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+    "evidence_snapshot": {
+      "type": "array",
+      "items": { "type": "object" },
+      "description": "Handles y fuente truncada usados en la auditoria."
+    },
+    "details": { "type": "object" },
+    "pipeline_version": { "type": "string" },
+    "prompt_version": { "type": ["string", "null"] },
+    "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
+    "idempotency_key": { "type": ["string", "null"], "maxLength": 64 },
+    "created_by": { "type": ["string", "null"], "format": "uuid" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "claims": { "type": "array", "items": { "$ref": "#/$defs/claim" } },
+    "citations": { "type": "array", "items": { "$ref": "#/$defs/citation" } },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "PASSED" } } },
+      "then": {
+        "properties": { "findings_critical": { "const": 0 } },
+        "description": "Un audit PASSED no puede tener hallazgos criticos persistidos."
+      }
+    }
+  ],
+  "$defs": {
+    "claim": {
+      "type": "object",
+      "required": ["claim_index", "claim_text", "claim_hash", "claim_type", "status", "auditor"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "audit_id": { "type": "string", "format": "uuid" },
+        "claim_index": { "type": "integer", "minimum": 0 },
+        "claim_text": { "type": "string", "minLength": 1 },
+        "claim_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "claim_type": {
+          "enum": ["FACT", "LEGAL_CONCLUSION", "PROCEDURAL", "PARTY_ALLEGATION", "INFERENCE"]
+        },
+        "citation_handles": { "type": "array", "items": { "type": "string" } },
+        "status": { "enum": ["SUPPORTED", "UNSUPPORTED", "CONTRADICTED", "NEEDS_REVIEW"] },
+        "grounding_score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "missing_numbers": { "type": "array", "items": { "type": "string" } },
+        "missing_dates": { "type": "array", "items": { "type": "string" } },
+        "missing_parties": { "type": "array", "items": { "type": "string" } },
+        "legal_rule_ids": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+        "reasons": { "type": "array", "items": { "type": "object" } },
+        "auditor": { "enum": ["DETERMINISTIC", "JUDGE"] }
+      },
+      "additionalProperties": true
+    },
+    "citation": {
+      "type": "object",
+      "required": ["audit_id", "valid", "reasons"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "audit_id": { "type": "string", "format": "uuid" },
+        "citation_id": { "type": ["string", "null"], "format": "uuid" },
+        "valid": { "type": "boolean" },
+        "reasons": { "type": "array", "items": { "type": "string" } },
+        "source_type": { "type": ["string", "null"] },
+        "source_id": { "type": ["string", "null"], "format": "uuid" },
+        "page_number": { "type": ["integer", "null"], "minimum": 1 },
+        "segment_id": { "type": ["string", "null"], "format": "uuid" },
+        "quote_hash": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" }
+      },
+      "additionalProperties": true
+    },
+    "finding": {
+      "type": "object",
+      "required": ["audit_id", "code", "severity", "message", "blocking"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "audit_id": { "type": "string", "format": "uuid" },
+        "claim_index": { "type": ["integer", "null"], "minimum": 0 },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{2,63}$",
+          "description": "Catalogo del plan 4.3, p. ej. CITATION_MISSING o LEGAL_RULE_MISSING."
+        },
+        "severity": { "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+        "message": { "type": "string", "minLength": 1 },
+        "source_type": { "type": ["string", "null"] },
+        "source_id": { "type": ["string", "null"], "format": "uuid" },
+        "blocking": { "type": "boolean" },
+        "metadata": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

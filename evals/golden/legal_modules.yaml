@@ -1,0 +1,77 @@
+version: 1
+description: >-
+  Golden set legal determinista. Ejecuta el gate real (legal_guard.audit) y la
+  segunda opinión persistida contra la base local. No usa LLM ni credenciales
+  secretas; requiere PostgreSQL con el corpus importado.
+fixtures:
+  organization_id: b4e6d687-89b0-4b79-a0cc-69bd3532a7e9
+  case_id: 38865959-8d5f-44e4-bbc8-1226bd345b00
+  # Página 65: menciona a las partes y el radicado 2018-361.
+  valid_citation:
+    document_id: 4b8093b1-d24e-4684-b303-200ff7ae8550
+    page_number: 65
+  # Página 102: NO menciona a José Rueda Avellaneda (solo al abogado y a INVERFAST).
+  citation_without_claimant:
+    document_id: 57d0c44d-6835-47ab-ad8a-bc3275c55b65
+    page_number: 102
+  second_opinion_run_id: 65cc66b1-25e3-40f2-9e45-efc916ae24b6
+cases:
+  - id: L-01
+    name: norma existente
+    kind: legal_guard
+    claim: "El artículo 422 del Código General del Proceso regula el mandamiento ejecutivo."
+    citation: valid_citation
+    expected_status: SUPPORTED
+    expected_reasons_include: []
+    expected_reasons_exclude: [LEGAL_RULE_MISSING, CITATION_UNRESOLVED]
+
+  - id: L-02
+    name: norma inexistente
+    kind: legal_guard
+    claim: "El artículo 9999 del Código General del Proceso regula el mandamiento ejecutivo."
+    citation: valid_citation
+    expected_status: UNSUPPORTED
+    expected_reasons_include: [LEGAL_RULE_MISSING]
+
+  - id: L-03
+    name: cifra inventada
+    kind: legal_guard
+    claim: "En el proceso 2018-361 el demandante es José Rueda Avellaneda y la deuda es de $99.999.999.999."
+    citation: valid_citation
+    expected_status: UNSUPPORTED
+    expected_reasons_include: [NUMBER_MISMATCH]
+
+  - id: L-04
+    name: fecha inventada
+    kind: legal_guard
+    claim: "En el proceso 2018-361 el demandante es José Rueda Avellaneda y la audiencia fue el 5 de mayo de 2031."
+    citation: valid_citation
+    expected_status: UNSUPPORTED
+    expected_reasons_include: [DATE_MISMATCH]
+
+  - id: L-05
+    name: parte inventada
+    kind: legal_guard
+    claim: "José Rueda Avellaneda presentó la demanda ejecutiva."
+    citation: citation_without_claimant
+    expected_status: NEEDS_REVIEW
+    expected_reasons_include: [PARTY_MISMATCH]
+
+  - id: L-06
+    name: cita válida
+    kind: legal_guard
+    claim: "En el proceso 2018-361 el demandante es José Rueda Avellaneda."
+    citation: valid_citation
+    expected_status: SUPPORTED
+    expected_reasons_include: []
+    expected_reasons_exclude: [CITATION_UNRESOLVED, CITATION_MISSING]
+
+  - id: L-07
+    name: segunda opinión
+    kind: second_opinion
+    run_id: second_opinion_run_id
+    expected_status: COMPLETED
+    expected_verdict: PARTIAL
+    require_distinct_verifier: true
+    expected_min_tokens_in: 1
+    expected_min_claims: 1

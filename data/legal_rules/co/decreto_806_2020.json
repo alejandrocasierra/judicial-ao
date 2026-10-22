@@ -1,0 +1,20 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Decreto 806 de 2020 - Notificaciones Electrónicas",
+    "identifier": "8",
+    "title": "ARTÍCULO 8 - Decreto 806 de 2020",
+    "text": "ARTÍCULO 8o. NOTIFICACIONES PERSONALES. <Artículo subrogado por el artículo 8 de la Ley 2213 de 2022> Las notificaciones que deban hacerse personalmente también podrán efectuarse con el envío de la providencia respectiva como mensaje de datos a la dirección electrónica o sitio que suministre el interesado en que se realice la notificación, sin necesidad del envío de previa citación o aviso físico o virtual. Los anexos que deban entregarse para un traslado se enviarán por el mismo medio. El interesado afirmará bajo la gravedad del juramento, que se entenderá prestado con la petición, que la dirección electrónica o sitio suministrado corresponde al utilizado por la persona a notificar, informará la forma como la obtuvo y allegará las evidencias correspondientes, particularmente las comunicaciones remitidas a la persona por notificar. <Inciso CONDICIONALMENTE exequible> La notificación personal se entenderá realizada una vez transcurridos dos días hábiles siguientes al envío del mensaje y los términos empezarán a correr a partir del día siguiente al de la notificación. Para los fines de esta norma se podrán implementar o utilizar sistemas de confirmación del recibo de los correos electrónicos o mensajes de datos. Cuando exista discrepancia sobre la forma en que se practicó la notificación, la parte que se considere afectada deberá manifestar bajo la gravedad del juramento, al solicitar la declaratoria de nulidad de lo actuado, que no se enteró de la providencia, además de cumplir con lo dispuesto en los artículos 132 a 138 del Código General del Proceso. PARÁGRAFO 1o. Lo previsto en este artículo se aplicará cualquiera sea la naturaleza de la actuación, incluidas las pruebas extraprocesales o del proceso, sea este declarativo, declarativo especial, monitorio, ejecutivo o cualquier otro. PARÁGRAFO 2o. La autoridad judicial, de oficio o a petición de parte, podrá solicitar información de las direcciones electrónicas o sitios de la parte por notificar que estén en las Cámaras de Comercio, superintendencias, entidades públicas o privadas, o utilizar aquellas que estén informadas en páginas web o en redes sociales.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/decreto_0806_2020.html",
+    "checksum": "bf14599f8bd41688cc1f653a0d979b78acefa9d92e4faa898823eeea120439b4",
+    "metadata": {
+      "source_label": "Decreto 806 de 2020",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-8",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]

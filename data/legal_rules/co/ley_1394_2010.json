@@ -1,0 +1,56 @@
+[
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1394 de 2010 - Arancel Judicial",
+    "identifier": "6",
+    "title": "ARTÍCULO 6 - Ley 1394 de 2010",
+    "text": "ARTÍCULO 6o. BASE GRAVABLE. El Arancel Judicial se calculará sobre los siguientes valores: a) Condenas por suma de dinero. Del valor total efectivamente recaudado por parte del demandante. En los procesos ejecutivos donde concurran medidas cautelares sobre bienes a rematar, se tomará como base gravable una vez efectuado el remate el valor establecido como pago total o parcial a favor del demandante. b) Condenas por obligaciones de dar y de hacer. Del valor total a pagar como resultado de la liquidación elaborada por el juzgado. c) Transacción o conciliación. Del valor de los pagos, o de la estimación de los bienes o prestaciones que se hayan determinado por las partes en el acuerdo de transacción o conciliación judicial que ponga fin al proceso ejecutivo. PARÁGRAFO. Para afectos de la liquidación se tendrán en cuenta las adiciones, aclaraciones o correcciones que se hagan conforme a lo establecido en los artículos 309 a 311 del Código de Procedimiento Civil.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1394_2010.html",
+    "checksum": "dd3a19542cfbd099a98ec9335aa76d15bdfb5cba78fce3d6c5ca676f745ed64c",
+    "metadata": {
+      "source_label": "Ley 1394 de 2010",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-6",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1394 de 2010 - Arancel Judicial",
+    "identifier": "7",
+    "title": "ARTÍCULO 7 - Ley 1394 de 2010",
+    "text": "ARTÍCULO 7o. TARIFA. La tarifa del arancel judicial es del dos por ciento (2%) de la base gravable. En los casos de terminación anticipada de procesos ejecutivos, la tarifa será del uno por ciento (1%) de la base gravable. <Inciso derogado por el artículo 118 de la Ley 1563 de 2012. Entra a regir a partir del 12 de octubre de 2012>",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1394_2010.html",
+    "checksum": "bc04186edd4ec2c5a5c889f1aaa9ff00dce17cfe2243060bf0ee9d18ebd2ad86",
+    "metadata": {
+      "source_label": "Ley 1394 de 2010",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-7",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  },
+  {
+    "jurisdiction": "co",
+    "source": "Ley 1394 de 2010 - Arancel Judicial",
+    "identifier": "8",
+    "title": "ARTÍCULO 8 - Ley 1394 de 2010",
+    "text": "ARTÍCULO 8o. LIQUIDACIÓN. El Arancel Judicial se liquidará por el juez, con base en las condenas impuestas y de conformidad en la presente ley. En todo caso, la parte demandante deberá reajustar el pago de arancel a la fecha en que se efectúe el pago definitivo. Cuando el arancel se cause como consecuencia de la terminación anticipada de los procesos ejecutivos, la liquidación se hará en el auto que admita la transacción o la conciliación.",
+    "version_date": "2026-10-15",
+    "official_url": "http://www.secretariasenado.gov.co/senado/basedoc/ley_1394_2010.html",
+    "checksum": "645b85dc17b0d472c45b07102c69686df0971af2e23be440e00aec7d05f97633",
+    "metadata": {
+      "source_label": "Ley 1394 de 2010",
+      "source_page_updated": "2026-10-15",
+      "retrieved_at": "2026-10-15T00:00:00+00:00",
+      "article_anchor": "art-8",
+      "extraction": "secretariasenado-basedoc/v1",
+      "builder": "scripts/build_legal_corpus.py"
+    }
+  }
+]
