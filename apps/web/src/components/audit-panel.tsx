@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, ShieldCheck, UserCheck } from "lucide-react";
@@ -199,7 +200,12 @@ export function AuditPanel({ caseId }: { caseId: string }) {
                     La segunda opinión se solicita desde una respuesta del chat.
                   </p>
                 )}
-                {requestSecond.isError && <p className="text-xs text-rose-600">No se pudo solicitar. Revisa el modelo de segunda opinión en Verificación.</p>}
+                {requestSecond.isError && <p className="text-xs text-rose-600">
+                  No se pudo solicitar. Revisa el modelo de segunda opinión en{" "}
+                  <Link className="underline underline-offset-2" href={`/dashboard/procesos/${caseId}/verificacion`}>
+                    Verificación
+                  </Link>.
+                </p>}
                 {latestRun && (
                   <div className="rounded-md border p-3 text-sm">
                     <div className="flex flex-wrap items-center gap-2">

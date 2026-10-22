@@ -68,20 +68,19 @@ ajena.
   instalada de Archify (3.0.1) no incluye el modo `erd`. Se dibujan claves y
   estados, no todas las columnas; las columnas secundarias están en las tarjetas
   y en las migraciones.
-- **04** cubre las migraciones `0055` a `0061`. La `0062` (gate semántico, precios
-  de modelo y evidencia de `EVIDENCE_SUPPORTED`) es de P1 y todavía no está
-  reflejada; al cerrarse hay que regenerar el diagrama.
-- **05** refleja la UI implementada al 2026-10-22: sidebar plana, tres pestañas
-  (`Expediente`, `Hechos`, `Auditoría`), `AuditBadge` por respuesta en el chat,
-  panel de auditoría y diff de segunda opinión en un diálogo. Lo que falta
-  (layout compartido, sidebar agrupada, pestaña de Cronología) está en la tarjeta
-  "Pendiente de UI". P1 sigue integrando componentes: si cambian, regenerar `05`.
+- **04** cubre las migraciones `0055` a `0063`, incluido el gate semántico, los
+  precios de modelo y la evidencia de `EVIDENCE_SUPPORTED`.
+- **05** refleja la UI implementada al 2026-10-22: sidebar plana, cuatro pestañas
+  (`Expediente`, `Hechos`, `Auditoría`, `Verificación`), `AuditBadge` por respuesta
+  en el chat, panel de auditoría, diff de segunda opinión y política de
+  verificación dentro del proceso. Lo que falta (layout compartido, sidebar
+  agrupada, pestaña de Cronología) está en la tarjeta "Pendiente de UI".
 - Ningún diagrama usa nombres, radicados ni cifras de expedientes reales. Las
   cifras de corpus y derivados viven en la auditoría, no en los diagramas.
 
 ## Fuente de verdad
 
-- Código y migraciones `0055` a `0061` (la `0062` está en curso por P1).
+- Código y migraciones `0055` a `0063`.
 - Plan: [`../PLAN_MODULOS_LEGALES_2026-10-22.md`](../PLAN_MODULOS_LEGALES_2026-10-22.md)
 - Contratos: [`../CONTRATOS_HARNESS_MODULOS_LEGALES.md`](../CONTRATOS_HARNESS_MODULOS_LEGALES.md)
 - Diseño: [`../GUIA_DISENO_MODULOS_LEGALES.md`](../GUIA_DISENO_MODULOS_LEGALES.md)

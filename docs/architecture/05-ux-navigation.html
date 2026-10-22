@@ -4980,7 +4980,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <div class="pulse-dot"></div>
         <h1>Navegacion de los modulos legales</h1>
       </div>
-      <p class="subtitle">UI real al 2026-10-22: sidebar plana, tres pestanas y panel de auditoria</p>
+      <p class="subtitle">UI real al 2026-10-22: sidebar plana, cuatro pestanas y verificacion dentro del proceso</p>
     </div>
 
 
@@ -4988,9 +4988,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / PLATE 04">
-      <svg viewBox="0 0 1238 534" data-layout-contract="readable-v2" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
+      <svg viewBox="0 0 1222 534" data-layout-contract="readable-v2" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
         <title id="archify-diagram-title">Navegacion de los modulos legales</title>
-        <desc id="archify-diagram-description">UI real al 2026-10-22: sidebar plana, tres pestanas y panel de auditoria</desc>
+        <desc id="archify-diagram-description">UI real al 2026-10-22: sidebar plana, cuatro pestanas y verificacion dentro del proceso</desc>
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -5014,13 +5014,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Swimlanes -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="1182" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="1166" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="74" class="t-dim" font-size="10" font-weight="600">01 / Sidebar global</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-1" x="40" y="178" width="1182" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-1" x="40" y="178" width="1166" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="200" class="t-dim" font-size="10" font-weight="600">02 / Proceso (pestanas)</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-2" x="40" y="304" width="1182" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-2" x="40" y="304" width="1166" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="326" class="t-dim" font-size="10" font-weight="600">03 / Chat y respuesta</text>
 
         <!-- Phase headers -->
@@ -5030,250 +5030,255 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 
         <!-- Edge paths -->
-        <path data-edge-from="procesos" data-edge-to="expediente" data-edge-label="abrir proceso" data-edge-key="0" data-edge-id="abrir" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="278,246;358.4,246" d="M 278 246 L 358.4 246" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="badge" data-edge-to="auditoria" data-edge-label="abrir panel" data-edge-key="1" data-edge-id="badge-audit" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="845.6,338;845.6,280" d="M 845.6 338 L 845.6 280" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="chats" data-edge-to="pregunta" data-edge-label="nuevo turno" data-edge-key="2" data-edge-id="chat-turno" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="278,372;378.4,372" d="M 278 372 L 378.4 372" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="sidebar" data-edge-to="chats" data-edge-label="chat" data-edge-key="3" data-edge-id="nav-chats" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="48,120;20,120;20,372;168,372" d="M 48 120 L 20 120 L 20 372 L 168 372" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="sidebar" data-edge-to="procesos" data-edge-label="Operacion" data-edge-key="4" data-edge-id="nav-procesos" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="158,120;223,120;223,212" d="M 158 120 L 223 120 L 223 212" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="sidebar" data-edge-to="verificacion" data-edge-label="admin" data-edge-key="5" data-edge-id="nav-verif" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="48,108;32,108;32,36;620,36;620,86" d="M 48 108 L 32 108 L 32 36 L 620 36 L 620 86" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="verificacion" data-edge-to="auditoria" data-edge-label="politica y modelo" data-edge-key="6" data-edge-id="pol-audit" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="695,120;845.6,120;845.6,212" d="M 695 120 L 845.6 120 L 845.6 212" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="respuesta" data-edge-to="badge" data-edge-label="audit_status" data-edge-key="7" data-edge-id="resp-badge" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="685,372;760.6,372" d="M 685 372 L 760.6 372" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="so_run" data-edge-to="diff" data-edge-label="comparacion" data-edge-key="8" data-edge-id="so-diff" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="1128.6,280;1128.6,338" d="M 1128.6 280 L 1128.6 338" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="auditoria" data-edge-to="so_run" data-edge-label="Solicitar segunda opinion" data-edge-key="9" data-edge-id="sol-so" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="915.6,246;1053.6,246" d="M 915.6 246 L 1053.6 246" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="hechos" data-edge-to="auditoria" data-edge-label="pestana" data-edge-key="10" data-edge-id="tab-audit" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="680,246;775.6,246" d="M 680 246 L 775.6 246" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="expediente" data-edge-to="hechos" data-edge-label="pestana" data-edge-key="11" data-edge-id="tab-hechos" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="508.4,246;560,246" d="M 508.4 246 L 560 246" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="pregunta" data-edge-to="respuesta" data-edge-label="gate legal" data-edge-key="12" data-edge-id="turno-resp" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="488.4,372;555,372" d="M 488.4 372 L 555 372" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="procesos" data-edge-to="expediente" data-edge-label="abrir proceso" data-edge-key="0" data-edge-id="abrir" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="148,246;228.39999999999998,246" d="M 148 246 L 228.39999999999998 246" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="badge" data-edge-to="auditoria" data-edge-label="abrir panel" data-edge-key="1" data-edge-id="badge-audit" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="784.8000000000001,372;710,372;710,296;635.2,296;635.2,280" d="M 784.8000000000001 372 L 710 372 L 710 296 L 635.2 296 L 635.2 280" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="chats" data-edge-to="pregunta" data-edge-label="nuevo turno" data-edge-key="2" data-edge-id="chat-turno" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="338.4,372;409.2,372" d="M 338.4 372 L 409.2 372" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="sidebar" data-edge-to="chats" data-edge-label="chat" data-edge-key="3" data-edge-id="nav-chats" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="48,120;20,120;20,372;238.39999999999998,372" d="M 48 120 L 20 120 L 20 372 L 238.39999999999998 372" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="sidebar" data-edge-to="procesos" data-edge-label="Operacion" data-edge-key="4" data-edge-id="nav-procesos" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="48,132;32,132;32,300;98,300;98,280" d="M 48 132 L 32 132 L 32 300 L 98 300 L 98 280" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="verificacion" data-edge-to="auditoria" data-edge-label="politica y modelo" data-edge-key="5" data-edge-id="pol-audit" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="859.8000000000001,212;859.8000000000001,196;635.2,196;635.2,212" d="M 859.8000000000001 212 L 859.8000000000001 196 L 635.2 196 L 635.2 212" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="respuesta" data-edge-to="badge" data-edge-label="audit_status" data-edge-key="6" data-edge-id="resp-badge" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="635.2,406;635.2,422;859.8000000000001,422;859.8000000000001,406" d="M 635.2 406 L 635.2 422 L 859.8000000000001 422 L 859.8000000000001 406" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="so_run" data-edge-to="diff" data-edge-label="comparacion" data-edge-key="7" data-edge-id="so-diff" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="1122.8000000000002,280;1122.8000000000002,338" d="M 1122.8000000000002 280 L 1122.8000000000002 338" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="auditoria" data-edge-to="so_run" data-edge-label="Solicitar segunda opinion" data-edge-key="8" data-edge-id="sol-so" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="623.2,212;623.2,162;1122.8000000000002,162;1122.8000000000002,212" d="M 623.2 212 L 623.2 162 L 1122.8000000000002 162 L 1122.8000000000002 212" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="hechos" data-edge-to="auditoria" data-edge-label="pestana" data-edge-key="9" data-edge-id="tab-audit" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="509.2,246;575.2,246" d="M 509.2 246 L 575.2 246" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="expediente" data-edge-to="hechos" data-edge-label="pestana" data-edge-key="10" data-edge-id="tab-hechos" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="348.4,246;409.2,246" d="M 348.4 246 L 409.2 246" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="auditoria" data-edge-to="verificacion" data-edge-label="pestana" data-edge-key="11" data-edge-id="tab-verif" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="695.2,246;794.8000000000001,246" d="M 695.2 246 L 794.8000000000001 246" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="pregunta" data-edge-to="respuesta" data-edge-label="gate legal" data-edge-key="12" data-edge-id="turno-resp" data-composition-routing="workflow-v2-auto" data-edge-role="main" data-composition-points="509.2,372;575.2,372" d="M 509.2 372 L 575.2 372" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="verificacion" data-edge-to="so_run" data-edge-label="solicitar segunda opinion" data-edge-key="13" data-edge-id="verif-so" data-composition-routing="workflow-v2-auto" data-edge-role="branch" data-composition-points="924.8000000000001,246;1062.8000000000002,246" d="M 924.8000000000001 246 L 1062.8000000000002 246" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
 
         <!-- Nodes -->
-        <g id="node-sidebar" data-node-id="sidebar" data-node-label="Sidebar" tabindex="0" role="button" aria-label="Focus Sidebar, 12 entradas, Sidebar global" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="12 entradas" data-node-tag="256 px" data-node-context="Sidebar global">
-          <title>Sidebar · 12 entradas · Sidebar global · 256 px</title>
-          <rect x="48" y="86" width="110" height="68" rx="6" class="c-mask"/>
-          <rect x="48" y="86" width="110" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+        <g id="node-sidebar" data-node-id="sidebar" data-node-label="Sidebar" tabindex="0" role="button" aria-label="Focus Sidebar, 11 entradas, Sidebar global" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="11 entradas" data-node-tag="256 px" data-node-context="Sidebar global">
+          <title>Sidebar · 11 entradas · Sidebar global · 256 px</title>
+          <rect x="48" y="86" width="100" height="68" rx="6" class="c-mask"/>
+          <rect x="48" y="86" width="100" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(54 92) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="103" y="107" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Sidebar</text>
-          <text data-detail="context" x="103" y="124" class="t-muted" font-size="8" text-anchor="middle">12 entradas</text>
-        <text data-detail="fine" x="103" y="142" class="t-frontend" font-size="7" text-anchor="middle">256 px</text>
-        </g>
-
-        <g id="node-verificacion" data-node-id="verificacion" data-node-label="Verificacion" tabindex="0" role="button" aria-label="Focus Verificacion, politica y modelo, Sidebar global" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="politica y modelo" data-node-tag="admin" data-node-context="Sidebar global">
-          <title>Verificacion · politica y modelo · Sidebar global · admin</title>
-          <rect x="545" y="86" width="150" height="68" rx="6" class="c-mask"/>
-          <rect x="545" y="86" width="150" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(551 92) scale(0.6875)">
-            <rect x="2" y="3" width="12" height="10" rx="2"/>
-            <path d="M2 6.5h12"/>
-            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
-            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="620" y="107" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Verificacion</text>
-          <text data-detail="context" x="620" y="124" class="t-muted" font-size="8" text-anchor="middle">politica y modelo</text>
-        <text data-detail="fine" x="620" y="142" class="t-frontend" font-size="7" text-anchor="middle">admin</text>
+          <text data-node-label="" data-detail-anchor="" x="98" y="107" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Sidebar</text>
+          <text data-detail="context" x="98" y="124" class="t-muted" font-size="8" text-anchor="middle">11 entradas</text>
+        <text data-detail="fine" x="98" y="142" class="t-frontend" font-size="7" text-anchor="middle">256 px</text>
         </g>
 
         <g id="node-procesos" data-node-id="procesos" data-node-label="Procesos" tabindex="0" role="button" aria-label="Focus Procesos, lista de casos, Proceso (pestanas)" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="lista de casos" data-node-tag="entrada" data-node-context="Proceso (pestanas)">
           <title>Procesos · lista de casos · Proceso (pestanas) · entrada</title>
-          <rect x="168" y="212" width="110" height="68" rx="6" class="c-mask"/>
-          <rect x="168" y="212" width="110" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(174 218) scale(0.6875)">
+          <rect x="48" y="212" width="100" height="68" rx="6" class="c-mask"/>
+          <rect x="48" y="212" width="100" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(54 218) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="223" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Procesos</text>
-          <text data-detail="context" x="223" y="250" class="t-muted" font-size="8" text-anchor="middle">lista de casos</text>
-        <text data-detail="fine" x="223" y="268" class="t-frontend" font-size="7" text-anchor="middle">entrada</text>
+          <text data-node-label="" data-detail-anchor="" x="98" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Procesos</text>
+          <text data-detail="context" x="98" y="250" class="t-muted" font-size="8" text-anchor="middle">lista de casos</text>
+        <text data-detail="fine" x="98" y="268" class="t-frontend" font-size="7" text-anchor="middle">entrada</text>
         </g>
 
         <g id="node-expediente" data-node-id="expediente" data-node-label="Expediente" tabindex="0" role="button" aria-label="Focus Expediente, documentos y partes, Proceso (pestanas)" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="documentos y partes" data-node-tag="pestana" data-node-context="Proceso (pestanas)">
           <title>Expediente · documentos y partes · Proceso (pestanas) · pestana</title>
-          <rect x="358.4" y="212" width="150" height="68" rx="6" class="c-mask"/>
-          <rect x="358.4" y="212" width="150" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(364.4 218) scale(0.6875)">
+          <rect x="228.39999999999998" y="212" width="120" height="68" rx="6" class="c-mask"/>
+          <rect x="228.39999999999998" y="212" width="120" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(234.39999999999998 218) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="433.4" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Expediente</text>
-          <text data-detail="context" x="433.4" y="250" class="t-muted" font-size="8" text-anchor="middle">documentos y partes</text>
-        <text data-detail="fine" x="433.4" y="268" class="t-frontend" font-size="7" text-anchor="middle">pestana</text>
+          <text data-node-label="" data-detail-anchor="" x="288.4" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Expediente</text>
+          <text data-detail="context" x="288.4" y="250" class="t-muted" font-size="8" text-anchor="middle">documentos y partes</text>
+        <text data-detail="fine" x="288.4" y="268" class="t-frontend" font-size="7" text-anchor="middle">pestana</text>
         </g>
 
         <g id="node-hechos" data-node-id="hechos" data-node-label="Hechos" tabindex="0" role="button" aria-label="Focus Hechos, 4 vistas, Proceso (pestanas)" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="4 vistas" data-node-tag="pestana" data-node-context="Proceso (pestanas)">
           <title>Hechos · 4 vistas · Proceso (pestanas) · pestana</title>
-          <rect x="560" y="212" width="120" height="68" rx="6" class="c-mask"/>
-          <rect x="560" y="212" width="120" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(566 218) scale(0.6875)">
+          <rect x="409.2" y="212" width="100" height="68" rx="6" class="c-mask"/>
+          <rect x="409.2" y="212" width="100" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(415.2 218) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="620" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Hechos</text>
-          <text data-detail="context" x="620" y="250" class="t-muted" font-size="8" text-anchor="middle">4 vistas</text>
-        <text data-detail="fine" x="620" y="268" class="t-frontend" font-size="7" text-anchor="middle">pestana</text>
+          <text data-node-label="" data-detail-anchor="" x="459.2" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Hechos</text>
+          <text data-detail="context" x="459.2" y="250" class="t-muted" font-size="8" text-anchor="middle">4 vistas</text>
+        <text data-detail="fine" x="459.2" y="268" class="t-frontend" font-size="7" text-anchor="middle">pestana</text>
         </g>
 
         <g id="node-auditoria" data-node-id="auditoria" data-node-label="Auditoria" tabindex="0" role="button" aria-label="Focus Auditoria, claims y findings, Proceso (pestanas)" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="claims y findings" data-node-tag="pestana" data-node-context="Proceso (pestanas)">
           <title>Auditoria · claims y findings · Proceso (pestanas) · pestana</title>
-          <rect x="775.6" y="212" width="140" height="68" rx="6" class="c-mask"/>
-          <rect x="775.6" y="212" width="140" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(781.6 218) scale(0.6875)">
+          <rect x="575.2" y="212" width="120" height="68" rx="6" class="c-mask"/>
+          <rect x="575.2" y="212" width="120" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(581.2 218) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="845.6" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Auditoria</text>
-          <text data-detail="context" x="845.6" y="250" class="t-muted" font-size="8" text-anchor="middle">claims y findings</text>
-        <text data-detail="fine" x="845.6" y="268" class="t-frontend" font-size="7" text-anchor="middle">pestana</text>
+          <text data-node-label="" data-detail-anchor="" x="635.2" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Auditoria</text>
+          <text data-detail="context" x="635.2" y="250" class="t-muted" font-size="8" text-anchor="middle">claims y findings</text>
+        <text data-detail="fine" x="635.2" y="268" class="t-frontend" font-size="7" text-anchor="middle">pestana</text>
+        </g>
+
+        <g id="node-verificacion" data-node-id="verificacion" data-node-label="Verificacion" tabindex="0" role="button" aria-label="Focus Verificacion, politica y modelo, Proceso (pestanas)" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="politica y modelo" data-node-tag="pestana" data-node-context="Proceso (pestanas)">
+          <title>Verificacion · politica y modelo · Proceso (pestanas) · pestana</title>
+          <rect x="794.8000000000001" y="212" width="130" height="68" rx="6" class="c-mask"/>
+          <rect x="794.8000000000001" y="212" width="130" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(800.8000000000001 218) scale(0.6875)">
+            <rect x="2" y="3" width="12" height="10" rx="2"/>
+            <path d="M2 6.5h12"/>
+            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="859.8000000000001" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Verificacion</text>
+          <text data-detail="context" x="859.8000000000001" y="250" class="t-muted" font-size="8" text-anchor="middle">politica y modelo</text>
+        <text data-detail="fine" x="859.8000000000001" y="268" class="t-frontend" font-size="7" text-anchor="middle">pestana</text>
         </g>
 
         <g id="node-so_run" data-node-id="so_run" data-node-label="Segunda opinion" tabindex="0" role="button" aria-label="Focus Segunda opinion, worker asincrono, Proceso (pestanas)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="worker asincrono" data-node-tag="run" data-node-context="Proceso (pestanas)">
           <title>Segunda opinion · worker asincrono · Proceso (pestanas) · run</title>
-          <rect x="1053.6" y="212" width="150" height="68" rx="6" class="c-mask"/>
-          <rect x="1053.6" y="212" width="150" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1059.6 218) scale(0.6875)">
+          <rect x="1062.8000000000002" y="212" width="120" height="68" rx="6" class="c-mask"/>
+          <rect x="1062.8000000000002" y="212" width="120" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1068.8000000000002 218) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1128.6" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Segunda opinion</text>
-          <text data-detail="context" x="1128.6" y="250" class="t-muted" font-size="8" text-anchor="middle">worker asincrono</text>
-        <text data-detail="fine" x="1128.6" y="268" class="t-backend" font-size="7" text-anchor="middle">run</text>
+          <text data-node-label="" data-detail-anchor="" x="1122.8000000000002" y="244.2" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Segunda opinion</text>
+          <text data-detail="context" x="1122.8000000000002" y="259.1" class="t-muted" font-size="8" text-anchor="middle">worker asincrono</text>
+        <text data-detail="fine" x="1122.8000000000002" y="271.9" class="t-backend" font-size="7" text-anchor="middle">run</text>
         </g>
 
         <g id="node-chats" data-node-id="chats" data-node-label="Chats IA" tabindex="0" role="button" aria-label="Focus Chats IA, chat global, Chat y respuesta" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="chat global" data-node-tag="entrada" data-node-context="Chat y respuesta">
           <title>Chats IA · chat global · Chat y respuesta · entrada</title>
-          <rect x="168" y="338" width="110" height="68" rx="6" class="c-mask"/>
-          <rect x="168" y="338" width="110" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(174 344) scale(0.6875)">
+          <rect x="238.39999999999998" y="338" width="100" height="68" rx="6" class="c-mask"/>
+          <rect x="238.39999999999998" y="338" width="100" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(244.39999999999998 344) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="223" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Chats IA</text>
-          <text data-detail="context" x="223" y="376" class="t-muted" font-size="8" text-anchor="middle">chat global</text>
-        <text data-detail="fine" x="223" y="394" class="t-frontend" font-size="7" text-anchor="middle">entrada</text>
+          <text data-node-label="" data-detail-anchor="" x="288.4" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Chats IA</text>
+          <text data-detail="context" x="288.4" y="376" class="t-muted" font-size="8" text-anchor="middle">chat global</text>
+        <text data-detail="fine" x="288.4" y="394" class="t-frontend" font-size="7" text-anchor="middle">entrada</text>
         </g>
 
         <g id="node-pregunta" data-node-id="pregunta" data-node-label="Pregunta" tabindex="0" role="button" aria-label="Focus Pregunta, widget, Chat y respuesta" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="widget" data-node-tag="turno" data-node-context="Chat y respuesta">
           <title>Pregunta · widget · Chat y respuesta · turno</title>
-          <rect x="378.4" y="338" width="110" height="68" rx="6" class="c-mask"/>
-          <rect x="378.4" y="338" width="110" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(384.4 344) scale(0.6875)">
+          <rect x="409.2" y="338" width="100" height="68" rx="6" class="c-mask"/>
+          <rect x="409.2" y="338" width="100" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(415.2 344) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="433.4" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Pregunta</text>
-          <text data-detail="context" x="433.4" y="376" class="t-muted" font-size="8" text-anchor="middle">widget</text>
-        <text data-detail="fine" x="433.4" y="394" class="t-frontend" font-size="7" text-anchor="middle">turno</text>
+          <text data-node-label="" data-detail-anchor="" x="459.2" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Pregunta</text>
+          <text data-detail="context" x="459.2" y="376" class="t-muted" font-size="8" text-anchor="middle">widget</text>
+        <text data-detail="fine" x="459.2" y="394" class="t-frontend" font-size="7" text-anchor="middle">turno</text>
         </g>
 
         <g id="node-respuesta" data-node-id="respuesta" data-node-label="Respuesta" tabindex="0" role="button" aria-label="Focus Respuesta, citas y audit_id, Chat y respuesta" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="citas y audit_id" data-node-tag="turno" data-node-context="Chat y respuesta">
           <title>Respuesta · citas y audit_id · Chat y respuesta · turno</title>
-          <rect x="555" y="338" width="130" height="68" rx="6" class="c-mask"/>
-          <rect x="555" y="338" width="130" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(561 344) scale(0.6875)">
+          <rect x="575.2" y="338" width="120" height="68" rx="6" class="c-mask"/>
+          <rect x="575.2" y="338" width="120" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(581.2 344) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="620" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Respuesta</text>
-          <text data-detail="context" x="620" y="376" class="t-muted" font-size="8" text-anchor="middle">citas y audit_id</text>
-        <text data-detail="fine" x="620" y="394" class="t-frontend" font-size="7" text-anchor="middle">turno</text>
+          <text data-node-label="" data-detail-anchor="" x="635.2" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Respuesta</text>
+          <text data-detail="context" x="635.2" y="376" class="t-muted" font-size="8" text-anchor="middle">citas y audit_id</text>
+        <text data-detail="fine" x="635.2" y="394" class="t-frontend" font-size="7" text-anchor="middle">turno</text>
         </g>
 
         <g id="node-badge" data-node-id="badge" data-node-label="AuditBadge" tabindex="0" role="button" aria-label="Focus AuditBadge, verificado o bloqueado, Chat y respuesta" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="verificado o bloqueado" data-node-tag="por mensaje" data-node-context="Chat y respuesta">
           <title>AuditBadge · verificado o bloqueado · Chat y respuesta · por mensaje</title>
-          <rect x="760.6" y="338" width="170" height="68" rx="6" class="c-mask"/>
-          <rect x="760.6" y="338" width="170" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(766.6 344) scale(0.6875)">
+          <rect x="784.8000000000001" y="338" width="150" height="68" rx="6" class="c-mask"/>
+          <rect x="784.8000000000001" y="338" width="150" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(790.8000000000001 344) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="845.6" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">AuditBadge</text>
-          <text data-detail="context" x="845.6" y="376" class="t-muted" font-size="8" text-anchor="middle">verificado o bloqueado</text>
-        <text data-detail="fine" x="845.6" y="394" class="t-frontend" font-size="7" text-anchor="middle">por mensaje</text>
+          <text data-node-label="" data-detail-anchor="" x="859.8000000000001" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">AuditBadge</text>
+          <text data-detail="context" x="859.8000000000001" y="376" class="t-muted" font-size="8" text-anchor="middle">verificado o bloqueado</text>
+        <text data-detail="fine" x="859.8000000000001" y="394" class="t-frontend" font-size="7" text-anchor="middle">por mensaje</text>
         </g>
 
         <g id="node-diff" data-node-id="diff" data-node-label="Diff por claim" tabindex="0" role="button" aria-label="Focus Diff por claim, dialogo de comparacion, Chat y respuesta" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="dialogo de comparacion" data-node-tag="segunda opinion" data-node-context="Chat y respuesta">
           <title>Diff por claim · dialogo de comparacion · Chat y respuesta · segunda opinion</title>
-          <rect x="1043.6" y="338" width="170" height="68" rx="6" class="c-mask"/>
-          <rect x="1043.6" y="338" width="170" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(1049.6 344) scale(0.6875)">
+          <rect x="1047.8000000000002" y="338" width="150" height="68" rx="6" class="c-mask"/>
+          <rect x="1047.8000000000002" y="338" width="150" height="68" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(1053.8000000000002 344) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1128.6" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Diff por claim</text>
-          <text data-detail="context" x="1128.6" y="376" class="t-muted" font-size="8" text-anchor="middle">dialogo de comparacion</text>
-        <text data-detail="fine" x="1128.6" y="394" class="t-frontend" font-size="7" text-anchor="middle">segunda opinion</text>
+          <text data-node-label="" data-detail-anchor="" x="1122.8000000000002" y="359" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Diff por claim</text>
+          <text data-detail="context" x="1122.8000000000002" y="376" class="t-muted" font-size="8" text-anchor="middle">dialogo de comparacion</text>
+        <text data-detail="fine" x="1122.8000000000002" y="394" class="t-frontend" font-size="7" text-anchor="middle">segunda opinion</text>
         </g>
 
         <!-- Edge labels -->
         <g data-detail="context" data-edge-from="procesos" data-edge-to="expediente" data-edge-label="abrir proceso" data-edge-key="0" data-edge-id="abrir">
-          <rect x="282" y="226" width="72.4" height="14" rx="3" class="c-mask"/>
-          <text x="318.2" y="236" class="t-edge-default" font-size="8" text-anchor="middle">abrir proceso</text>
+          <rect x="152" y="226" width="72.4" height="14" rx="3" class="c-mask"/>
+          <text x="188.2" y="236" class="t-edge-default" font-size="8" text-anchor="middle">abrir proceso</text>
         </g>
         <g data-detail="context" data-edge-from="badge" data-edge-to="auditoria" data-edge-label="abrir panel" data-edge-key="1" data-edge-id="badge-audit">
-          <rect x="814.2" y="299" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="845.6" y="309" class="t-edge-default" font-size="8" text-anchor="middle">abrir panel</text>
+          <rect x="716.0000000000001" y="352" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="747.4000000000001" y="362" class="t-edge-default" font-size="8" text-anchor="middle">abrir panel</text>
         </g>
         <g data-detail="context" data-edge-from="chats" data-edge-to="pregunta" data-edge-label="nuevo turno" data-edge-key="2" data-edge-id="chat-turno">
-          <rect x="296.8" y="352" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="328.2" y="362" class="t-edge-default" font-size="8" text-anchor="middle">nuevo turno</text>
+          <rect x="342.4" y="352" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="373.79999999999995" y="362" class="t-edge-default" font-size="8" text-anchor="middle">nuevo turno</text>
         </g>
         <g data-detail="context" data-edge-from="sidebar" data-edge-to="chats" data-edge-label="chat" data-edge-key="3" data-edge-id="nav-chats">
-          <rect x="79" y="352" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="94" y="362" class="t-edge-default" font-size="8" text-anchor="middle">chat</text>
+          <rect x="114.19999999999999" y="352" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="129.2" y="362" class="t-edge-default" font-size="8" text-anchor="middle">chat</text>
         </g>
         <g data-detail="context" data-edge-from="sidebar" data-edge-to="procesos" data-edge-label="Operacion" data-edge-key="4" data-edge-id="nav-procesos">
-          <rect x="163.9" y="100" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
-          <text x="190.5" y="110" class="t-edge-default" font-size="8" text-anchor="middle">Operacion</text>
+          <rect x="38.400000000000006" y="280" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
+          <text x="65" y="290" class="t-edge-default" font-size="8" text-anchor="middle">Operacion</text>
         </g>
-        <g data-detail="context" data-edge-from="sidebar" data-edge-to="verificacion" data-edge-label="admin" data-edge-key="5" data-edge-id="nav-verif">
-          <rect x="309" y="16" width="34" height="14" rx="3" class="c-mask"/>
-          <text x="326" y="26" class="t-edge-default" font-size="8" text-anchor="middle">admin</text>
+        <g data-detail="context" data-edge-from="verificacion" data-edge-to="auditoria" data-edge-label="politica y modelo" data-edge-key="5" data-edge-id="pol-audit">
+          <rect x="701.7" y="176" width="91.6" height="14" rx="3" class="c-mask"/>
+          <text x="747.5" y="186" class="t-edge-default" font-size="8" text-anchor="middle">politica y modelo</text>
         </g>
-        <g data-detail="context" data-edge-from="verificacion" data-edge-to="auditoria" data-edge-label="politica y modelo" data-edge-key="6" data-edge-id="pol-audit">
-          <rect x="724.5" y="100" width="91.6" height="14" rx="3" class="c-mask"/>
-          <text x="770.3" y="110" class="t-edge-default" font-size="8" text-anchor="middle">politica y modelo</text>
+        <g data-detail="context" data-edge-from="respuesta" data-edge-to="badge" data-edge-label="audit_status" data-edge-key="6" data-edge-id="resp-badge">
+          <rect x="713.7" y="402" width="67.6" height="14" rx="3" class="c-mask"/>
+          <text x="747.5" y="412" class="t-edge-default" font-size="8" text-anchor="middle">audit_status</text>
         </g>
-        <g data-detail="context" data-edge-from="respuesta" data-edge-to="badge" data-edge-label="audit_status" data-edge-key="7" data-edge-id="resp-badge">
-          <rect x="689" y="352" width="67.6" height="14" rx="3" class="c-mask"/>
-          <text x="722.8" y="362" class="t-edge-default" font-size="8" text-anchor="middle">audit_status</text>
+        <g data-detail="context" data-edge-from="so_run" data-edge-to="diff" data-edge-label="comparacion" data-edge-key="7" data-edge-id="so-diff">
+          <rect x="1091.4" y="299" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="1122.8000000000002" y="309" class="t-edge-default" font-size="8" text-anchor="middle">comparacion</text>
         </g>
-        <g data-detail="context" data-edge-from="so_run" data-edge-to="diff" data-edge-label="comparacion" data-edge-key="8" data-edge-id="so-diff">
-          <rect x="1097.1999999999998" y="299" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="1128.6" y="309" class="t-edge-default" font-size="8" text-anchor="middle">comparacion</text>
+        <g data-detail="context" data-edge-from="auditoria" data-edge-to="so_run" data-edge-label="Solicitar segunda opinion" data-edge-key="8" data-edge-id="sol-so">
+          <rect x="808.0000000000001" y="142" width="130" height="14" rx="3" class="c-mask"/>
+          <text x="873.0000000000001" y="152" class="t-edge-default" font-size="8" text-anchor="middle">Solicitar segunda opinion</text>
         </g>
-        <g data-detail="context" data-edge-from="auditoria" data-edge-to="so_run" data-edge-label="Solicitar segunda opinion" data-edge-key="9" data-edge-id="sol-so">
-          <rect x="919.5999999999999" y="226" width="130" height="14" rx="3" class="c-mask"/>
-          <text x="984.5999999999999" y="236" class="t-edge-default" font-size="8" text-anchor="middle">Solicitar segunda opinion</text>
+        <g data-detail="context" data-edge-from="hechos" data-edge-to="auditoria" data-edge-label="pestana" data-edge-key="9" data-edge-id="tab-audit">
+          <rect x="520.4000000000001" y="226" width="43.6" height="14" rx="3" class="c-mask"/>
+          <text x="542.2" y="236" class="t-edge-default" font-size="8" text-anchor="middle">pestana</text>
         </g>
-        <g data-detail="context" data-edge-from="hechos" data-edge-to="auditoria" data-edge-label="pestana" data-edge-key="10" data-edge-id="tab-audit">
-          <rect x="706" y="226" width="43.6" height="14" rx="3" class="c-mask"/>
-          <text x="727.8" y="236" class="t-edge-default" font-size="8" text-anchor="middle">pestana</text>
+        <g data-detail="context" data-edge-from="expediente" data-edge-to="hechos" data-edge-label="pestana" data-edge-key="10" data-edge-id="tab-hechos">
+          <rect x="356.99999999999994" y="226" width="43.6" height="14" rx="3" class="c-mask"/>
+          <text x="378.79999999999995" y="236" class="t-edge-default" font-size="8" text-anchor="middle">pestana</text>
         </g>
-        <g data-detail="context" data-edge-from="expediente" data-edge-to="hechos" data-edge-label="pestana" data-edge-key="11" data-edge-id="tab-hechos">
-          <rect x="512.4000000000001" y="226" width="43.6" height="14" rx="3" class="c-mask"/>
-          <text x="534.2" y="236" class="t-edge-default" font-size="8" text-anchor="middle">pestana</text>
+        <g data-detail="context" data-edge-from="auditoria" data-edge-to="verificacion" data-edge-label="pestana" data-edge-key="11" data-edge-id="tab-verif">
+          <rect x="723.2" y="226" width="43.6" height="14" rx="3" class="c-mask"/>
+          <text x="745" y="236" class="t-edge-default" font-size="8" text-anchor="middle">pestana</text>
         </g>
         <g data-detail="context" data-edge-from="pregunta" data-edge-to="respuesta" data-edge-label="gate legal" data-edge-key="12" data-edge-id="turno-resp">
-          <rect x="492.70000000000005" y="352" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="521.7" y="362" class="t-edge-default" font-size="8" text-anchor="middle">gate legal</text>
+          <rect x="513.2" y="352" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="542.2" y="362" class="t-edge-default" font-size="8" text-anchor="middle">gate legal</text>
+        </g>
+        <g data-detail="context" data-edge-from="verificacion" data-edge-to="so_run" data-edge-label="solicitar segunda opinion" data-edge-key="13" data-edge-id="verif-so">
+          <rect x="928.8000000000002" y="226" width="130" height="14" rx="3" class="c-mask"/>
+          <text x="993.8000000000002" y="236" class="t-edge-default" font-size="8" text-anchor="middle">solicitar segunda opinion</text>
         </g>
 
         <!-- Legend -->
@@ -5471,7 +5476,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         </div>
         <ul>
           <li>Sidebar -&gt; Procesos -&gt; Expediente</li>
-          <li>Pestanas Expediente, Hechos y Auditoria dentro del proceso</li>
+          <li>Pestanas Expediente, Hechos, Auditoria y Verificacion dentro del proceso</li>
           <li>El badge de cada respuesta abre el panel de auditoria</li>
           <li>El panel permite solicitar segunda opinion y abre el diff por claim</li>
         </ul>

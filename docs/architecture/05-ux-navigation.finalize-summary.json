@@ -7,13 +7,13 @@
   "quality": "showcase",
   "specification": {
     "path": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.json",
-    "sha256": "d361cd8ab5ba483cb870987eeb46dc8e0f34b1867ce1b5a7b519d4f3e042635d",
-    "bytes": 5160
+    "sha256": "8324fa7f45abc6bb25d86f273a4be7c1022cbb0b590923439ce6b2bf5616528d",
+    "bytes": 7061
   },
   "artifact": {
     "path": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.html",
-    "sha256": "b76cba6c2de750aa8a54fe9232e0c6fa9644152e0075a2ba4275d1b43b8cb6bf",
-    "bytes": 768420
+    "sha256": "7db82413199bd5306f2db856d5a1014d423bf77b2ed53f368468627c0e5ef4b6",
+    "bytes": 770305
   },
   "gates": {
     "validate": "pass",
@@ -28,9 +28,9 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2\\05-ux-navigation.finalize.json",
-    "summaryReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2\\05-ux-navigation.finalize-summary.json",
-    "browserCheckReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2\\05-ux-navigation.browser-check.json"
+    "receipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.finalize.json",
+    "summaryReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.browser-check.json"
   },
   "update": {
     "status": "update_available",
@@ -45,11 +45,12 @@
     "eventKey": "archify@sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
   },
   "visualReview": "not-requested",
-  "durationMs": 4558,
+  "durationMs": 3186,
   "visualReviewRecommendation": {
     "action": "inspect-route-readability",
     "signals": {
-      "routesOverSuggestedBends": 1
+      "routesOverSuggestedBends": 2,
+      "routesOverSuggestedStretch": 1
     },
     "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
     "affectedRoutes": {
@@ -57,21 +58,34 @@
       "detours": [
         {
           "relationship": {
-            "id": "nav-verif",
-            "from": "sidebar",
-            "to": "verificacion",
-            "label": "admin",
-            "collectionIndex": 5,
-            "artifactIndex": 6
+            "id": "badge-audit",
+            "from": "badge",
+            "to": "auditoria",
+            "label": "abrir panel",
+            "collectionIndex": 1,
+            "artifactIndex": 2
           },
           "bends": 3,
-          "stretch": 1.222
+          "stretch": 1
+        },
+        {
+          "relationship": {
+            "id": "nav-procesos",
+            "from": "sidebar",
+            "to": "procesos",
+            "label": "Operacion",
+            "collectionIndex": 4,
+            "artifactIndex": 5
+          },
+          "bends": 3,
+          "stretch": 1.364
         }
       ],
       "truncated": false
     },
     "hints": [
-      "sidebar → verificacion needs 3 bends: move node sidebar or verificacion so they share a row or column with matching centers, or sit diagonally with a clear corner."
+      "badge → auditoria needs 3 bends: move node badge or auditoria so they share a row or column with matching centers, or sit diagonally with a clear corner.",
+      "sidebar → procesos needs 3 bends: move node sidebar or procesos so they share a row or column with matching centers, or sit diagonally with a clear corner."
     ],
     "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
   }

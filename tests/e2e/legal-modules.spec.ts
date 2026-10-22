@@ -1,7 +1,7 @@
 import { test, expect, gotoCase } from "./fixtures";
 
 test.describe("módulos legales: pestañas y navegación", () => {
-  test("Expediente/Hechos/Auditoría están presentes y navegan", async ({ page }) => {
+  test("Expediente/Hechos/Auditoría/Verificación están presentes y navegan", async ({ page }) => {
     await gotoCase(page);
     const tabs = page.getByRole("navigation", { name: "Secciones del proceso" });
     await expect(tabs.getByRole("link", { name: "Expediente" })).toHaveAttribute(
@@ -25,6 +25,17 @@ test.describe("módulos legales: pestañas y navegación", () => {
       page.getByRole("heading", { name: "Auditoría legal" }),
     ).toBeVisible();
     await expect(tabs.getByRole("link", { name: "Auditoría" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+
+    await tabs.getByRole("link", { name: "Verificación" }).click();
+    await expect(page).toHaveURL(/\/verificacion$/);
+    await expect(
+      page.getByRole("heading", { name: "Verificación del proceso" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("ID del proceso")).toHaveCount(0);
+    await expect(tabs.getByRole("link", { name: "Verificación" })).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -137,7 +148,7 @@ test.describe("panel de auditoría y segunda opinión", () => {
 });
 
 test.describe("responsive 360/768/1024/1440", () => {
-  test("las tres pestañas caben y no hay desbordamiento horizontal", async ({
+  test("las cuatro pestañas caben y no hay desbordamiento horizontal", async ({
     page,
   }) => {
     await gotoCase(page);
@@ -145,6 +156,7 @@ test.describe("responsive 360/768/1024/1440", () => {
     await expect(tabs.getByRole("link", { name: "Expediente" })).toBeVisible();
     await expect(tabs.getByRole("link", { name: "Hechos" })).toBeVisible();
     await expect(tabs.getByRole("link", { name: "Auditoría" })).toBeVisible();
+    await expect(tabs.getByRole("link", { name: "Verificación" })).toBeVisible();
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,

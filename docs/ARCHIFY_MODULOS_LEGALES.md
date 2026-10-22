@@ -20,8 +20,8 @@ Dos notas de alcance:
   instalada de Archify no incluye el modo `erd`. Cubre `0055` a `0061`; la `0062`
   (gate semántico y precios de modelo) todavía no está reflejada.
 - `05` refleja la UI implementada al 2026-10-22, no la propuesta: sidebar plana,
-  tres pestañas y sin badge de auditoría en el chat. La brecha está declarada en
-  el propio diagrama y en la guía de diseño.
+  cuatro pestañas y con badge de auditoría en el chat. La verificación vive
+  dentro del proceso, no en el sidebar global.
 
 La fuente de verdad sigue siendo el código y las migraciones. Los diagramas explican, no reemplazan.
 
@@ -167,7 +167,7 @@ Estilo:
 
 Elementos:
 - Sidebar con grupos Operación/Administración.
-- Proceso con tabs Expediente/Hechos/Auditoría/Cronología.
+- Proceso con tabs Expediente/Hechos/Auditoría/Verificación.
 - Chat global con badge de auditoría.
 - Flujo de segunda opinión.
 - Wireframes desktop/tablet/mobile.

@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
-  "receiptId": "8523d19d-13c7-415d-bde3-89731f48e256",
+  "receiptId": "bec2c5ac-2530-4a71-9cf0-8870d4ad9d27",
   "status": "current",
   "command": "deliver",
   "type": "workflow",
   "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.json",
   "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.html",
   "specification": {
-    "sha256": "d361cd8ab5ba483cb870987eeb46dc8e0f34b1867ce1b5a7b519d4f3e042635d",
-    "bytes": 5160
+    "sha256": "8324fa7f45abc6bb25d86f273a4be7c1022cbb0b590923439ce6b2bf5616528d",
+    "bytes": 7061
   },
   "artifact": {
-    "sha256": "b76cba6c2de750aa8a54fe9232e0c6fa9644152e0075a2ba4275d1b43b8cb6bf",
-    "bytes": 768420
+    "sha256": "7db82413199bd5306f2db856d5a1014d423bf77b2ed53f368468627c0e5ef4b6",
+    "bytes": 770305
   }
 }

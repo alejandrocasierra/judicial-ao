@@ -3,50 +3,296 @@
   "diagram_type": "workflow",
   "meta": {
     "title": "Navegacion de los modulos legales",
-    "subtitle": "UI real al 2026-10-22: sidebar plana, tres pestanas y panel de auditoria",
+    "subtitle": "UI real al 2026-10-22: sidebar plana, cuatro pestanas y verificacion dentro del proceso",
     "output": "docs/architecture/05-ux-navigation.html",
     "quality_profile": "showcase",
     "visual_preset": "classic"
   },
   "lanes": [
-    { "id": "nav", "label": "Sidebar global" },
-    { "id": "proceso", "label": "Proceso (pestanas)" },
-    { "id": "chat", "label": "Chat y respuesta" }
+    {
+      "id": "nav",
+      "label": "Sidebar global"
+    },
+    {
+      "id": "proceso",
+      "label": "Proceso (pestanas)"
+    },
+    {
+      "id": "chat",
+      "label": "Chat y respuesta"
+    }
   ],
-  "mainPath": ["sidebar", "procesos", "expediente", "hechos", "auditoria", "so_run"],
+  "mainPath": [
+    "sidebar",
+    "procesos",
+    "expediente",
+    "hechos",
+    "auditoria",
+    "verificacion",
+    "so_run"
+  ],
   "nodes": [
-    { "id": "sidebar", "lane": "nav", "col": 0, "type": "frontend", "label": "Sidebar", "sublabel": "12 entradas", "tag": "256 px", "width": 110 },
-    { "id": "verificacion", "lane": "nav", "col": 3, "type": "frontend", "label": "Verificacion", "sublabel": "politica y modelo", "tag": "admin", "width": 150 },
-    { "id": "procesos", "lane": "proceso", "col": 1, "type": "frontend", "label": "Procesos", "sublabel": "lista de casos", "tag": "entrada", "width": 110 },
-    { "id": "expediente", "lane": "proceso", "col": 2, "type": "frontend", "label": "Expediente", "sublabel": "documentos y partes", "tag": "pestana", "width": 150 },
-    { "id": "hechos", "lane": "proceso", "col": 3, "type": "frontend", "label": "Hechos", "sublabel": "4 vistas", "tag": "pestana", "width": 120 },
-    { "id": "auditoria", "lane": "proceso", "col": 4, "type": "frontend", "label": "Auditoria", "sublabel": "claims y findings", "tag": "pestana", "width": 140 },
-    { "id": "so_run", "lane": "proceso", "col": 5, "type": "backend", "label": "Segunda opinion", "sublabel": "worker asincrono", "tag": "run", "width": 150 },
-    { "id": "chats", "lane": "chat", "col": 1, "type": "frontend", "label": "Chats IA", "sublabel": "chat global", "tag": "entrada", "width": 110 },
-    { "id": "pregunta", "lane": "chat", "col": 2, "type": "frontend", "label": "Pregunta", "sublabel": "widget", "tag": "turno", "width": 110 },
-    { "id": "respuesta", "lane": "chat", "col": 3, "type": "frontend", "label": "Respuesta", "sublabel": "citas y audit_id", "tag": "turno", "width": 130 },
-    { "id": "badge", "lane": "chat", "col": 4, "type": "frontend", "label": "AuditBadge", "sublabel": "verificado o bloqueado", "tag": "por mensaje", "width": 170 },
-    { "id": "diff", "lane": "chat", "col": 5, "type": "frontend", "label": "Diff por claim", "sublabel": "dialogo de comparacion", "tag": "segunda opinion", "width": 170 }
+    {
+      "id": "sidebar",
+      "lane": "nav",
+      "col": 0,
+      "type": "frontend",
+      "label": "Sidebar",
+      "sublabel": "11 entradas",
+      "tag": "256 px",
+      "width": 100
+    },
+    {
+      "id": "procesos",
+      "lane": "proceso",
+      "col": 0,
+      "type": "frontend",
+      "label": "Procesos",
+      "sublabel": "lista de casos",
+      "tag": "entrada",
+      "width": 100
+    },
+    {
+      "id": "expediente",
+      "lane": "proceso",
+      "col": 1,
+      "type": "frontend",
+      "label": "Expediente",
+      "sublabel": "documentos y partes",
+      "tag": "pestana",
+      "width": 120
+    },
+    {
+      "id": "hechos",
+      "lane": "proceso",
+      "col": 2,
+      "type": "frontend",
+      "label": "Hechos",
+      "sublabel": "4 vistas",
+      "tag": "pestana",
+      "width": 100
+    },
+    {
+      "id": "auditoria",
+      "lane": "proceso",
+      "col": 3,
+      "type": "frontend",
+      "label": "Auditoria",
+      "sublabel": "claims y findings",
+      "tag": "pestana",
+      "width": 120
+    },
+    {
+      "id": "so_run",
+      "lane": "proceso",
+      "col": 5,
+      "type": "backend",
+      "label": "Segunda opinion",
+      "sublabel": "worker asincrono",
+      "tag": "run",
+      "width": 120
+    },
+    {
+      "id": "chats",
+      "lane": "chat",
+      "col": 1,
+      "type": "frontend",
+      "label": "Chats IA",
+      "sublabel": "chat global",
+      "tag": "entrada",
+      "width": 100
+    },
+    {
+      "id": "pregunta",
+      "lane": "chat",
+      "col": 2,
+      "type": "frontend",
+      "label": "Pregunta",
+      "sublabel": "widget",
+      "tag": "turno",
+      "width": 100
+    },
+    {
+      "id": "respuesta",
+      "lane": "chat",
+      "col": 3,
+      "type": "frontend",
+      "label": "Respuesta",
+      "sublabel": "citas y audit_id",
+      "tag": "turno",
+      "width": 120
+    },
+    {
+      "id": "badge",
+      "lane": "chat",
+      "col": 4,
+      "type": "frontend",
+      "label": "AuditBadge",
+      "sublabel": "verificado o bloqueado",
+      "tag": "por mensaje",
+      "width": 150
+    },
+    {
+      "id": "diff",
+      "lane": "chat",
+      "col": 5,
+      "type": "frontend",
+      "label": "Diff por claim",
+      "sublabel": "dialogo de comparacion",
+      "tag": "segunda opinion",
+      "width": 150
+    },
+    {
+      "id": "verificacion",
+      "lane": "proceso",
+      "col": 4,
+      "type": "frontend",
+      "label": "Verificacion",
+      "sublabel": "politica y modelo",
+      "tag": "pestana",
+      "width": 130
+    }
   ],
   "edges": [
-    { "id": "nav-procesos", "from": "sidebar", "to": "procesos", "label": "Operacion", "role": "main" },
-    { "id": "nav-chats", "from": "sidebar", "to": "chats", "label": "chat", "role": "branch" },
-    { "id": "nav-verif", "from": "sidebar", "to": "verificacion", "label": "admin", "role": "branch" },
-    { "id": "abrir", "from": "procesos", "to": "expediente", "label": "abrir proceso", "role": "main" },
-    { "id": "tab-hechos", "from": "expediente", "to": "hechos", "label": "pestana", "role": "main" },
-    { "id": "tab-audit", "from": "hechos", "to": "auditoria", "label": "pestana", "role": "main" },
-    { "id": "chat-turno", "from": "chats", "to": "pregunta", "label": "nuevo turno", "role": "main" },
-    { "id": "turno-resp", "from": "pregunta", "to": "respuesta", "label": "gate legal", "role": "main" },
-    { "id": "resp-badge", "from": "respuesta", "to": "badge", "label": "audit_status", "role": "branch" },
-    { "id": "badge-audit", "from": "badge", "to": "auditoria", "label": "abrir panel", "role": "branch" },
-    { "id": "sol-so", "from": "auditoria", "to": "so_run", "label": "Solicitar segunda opinion", "role": "main" },
-    { "id": "so-diff", "from": "so_run", "to": "diff", "label": "comparacion", "role": "branch" },
-    { "id": "pol-audit", "from": "verificacion", "to": "auditoria", "label": "politica y modelo", "role": "branch" }
+    {
+      "id": "nav-procesos",
+      "from": "sidebar",
+      "to": "procesos",
+      "label": "Operacion",
+      "role": "main"
+    },
+    {
+      "id": "nav-chats",
+      "from": "sidebar",
+      "to": "chats",
+      "label": "chat",
+      "role": "branch"
+    },
+    {
+      "id": "abrir",
+      "from": "procesos",
+      "to": "expediente",
+      "label": "abrir proceso",
+      "role": "main"
+    },
+    {
+      "id": "tab-hechos",
+      "from": "expediente",
+      "to": "hechos",
+      "label": "pestana",
+      "role": "main"
+    },
+    {
+      "id": "tab-audit",
+      "from": "hechos",
+      "to": "auditoria",
+      "label": "pestana",
+      "role": "main"
+    },
+    {
+      "id": "chat-turno",
+      "from": "chats",
+      "to": "pregunta",
+      "label": "nuevo turno",
+      "role": "main"
+    },
+    {
+      "id": "turno-resp",
+      "from": "pregunta",
+      "to": "respuesta",
+      "label": "gate legal",
+      "role": "main"
+    },
+    {
+      "id": "resp-badge",
+      "from": "respuesta",
+      "to": "badge",
+      "label": "audit_status",
+      "role": "branch"
+    },
+    {
+      "id": "badge-audit",
+      "from": "badge",
+      "to": "auditoria",
+      "label": "abrir panel",
+      "role": "branch"
+    },
+    {
+      "id": "sol-so",
+      "from": "auditoria",
+      "to": "so_run",
+      "label": "Solicitar segunda opinion",
+      "role": "main"
+    },
+    {
+      "id": "so-diff",
+      "from": "so_run",
+      "to": "diff",
+      "label": "comparacion",
+      "role": "branch"
+    },
+    {
+      "id": "pol-audit",
+      "from": "verificacion",
+      "to": "auditoria",
+      "label": "politica y modelo",
+      "role": "branch"
+    },
+    {
+      "id": "tab-verif",
+      "from": "auditoria",
+      "to": "verificacion",
+      "label": "pestana",
+      "role": "main"
+    },
+    {
+      "id": "verif-so",
+      "from": "verificacion",
+      "to": "so_run",
+      "label": "solicitar segunda opinion",
+      "role": "branch"
+    }
   ],
   "cards": [
-    { "dot": "emerald", "title": "Recorrido principal", "items": ["Sidebar -> Procesos -> Expediente", "Pestanas Expediente, Hechos y Auditoria dentro del proceso", "El badge de cada respuesta abre el panel de auditoria", "El panel permite solicitar segunda opinion y abre el diff por claim"] },
-    { "dot": "amber", "title": "Responsive", "items": ["Tablet y movil: las pestanas hacen scroll horizontal, no se cortan", "Hechos y auditoria se leen como tarjetas, no como tabla encogida", "El diff se apila por columnas en pantallas estrechas", "La guia exige 360, 768, 1024 y 1440 px"] },
-    { "dot": "cyan", "title": "Estados obligatorios", "items": ["Sin hechos: Aun no hay hechos extraidos y boton Reconstruir hechos", "Sin auditorias: panel vacio, no un error", "Badge: verificado, advertencia, bloqueado o sin auditar", "Run: pendiente, analizando, completada, fallo o cancelada"] },
-    { "dot": "rose", "title": "Pendiente de UI (handoff P1)", "items": ["No hay layout.tsx de proceso; las pestanas se insertan por pagina", "El sidebar sigue plano; la guia propone grupos Operacion y Administracion", "La Cronologia sigue siendo un dialogo desde Expediente, no una pestana", "Si P1 cambia componentes o estados, regenerar este diagrama"] }
+    {
+      "dot": "emerald",
+      "title": "Recorrido principal",
+      "items": [
+        "Sidebar -> Procesos -> Expediente",
+        "Pestanas Expediente, Hechos, Auditoria y Verificacion dentro del proceso",
+        "El badge de cada respuesta abre el panel de auditoria",
+        "El panel permite solicitar segunda opinion y abre el diff por claim"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Responsive",
+      "items": [
+        "Tablet y movil: las pestanas hacen scroll horizontal, no se cortan",
+        "Hechos y auditoria se leen como tarjetas, no como tabla encogida",
+        "El diff se apila por columnas en pantallas estrechas",
+        "La guia exige 360, 768, 1024 y 1440 px"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Estados obligatorios",
+      "items": [
+        "Sin hechos: Aun no hay hechos extraidos y boton Reconstruir hechos",
+        "Sin auditorias: panel vacio, no un error",
+        "Badge: verificado, advertencia, bloqueado o sin auditar",
+        "Run: pendiente, analizando, completada, fallo o cancelada"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Pendiente de UI (handoff P1)",
+      "items": [
+        "No hay layout.tsx de proceso; las pestanas se insertan por pagina",
+        "El sidebar sigue plano; la guia propone grupos Operacion y Administracion",
+        "La Cronologia sigue siendo un dialogo desde Expediente, no una pestana",
+        "Si P1 cambia componentes o estados, regenerar este diagrama"
+      ]
+    }
   ]
 }

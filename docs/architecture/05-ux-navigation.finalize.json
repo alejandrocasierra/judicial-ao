@@ -5,16 +5,16 @@
   "status": "pass",
   "type": "workflow",
   "quality": "showcase",
-  "startedAt": "2026-10-22T16:18:12.472Z",
+  "startedAt": "2026-10-22T17:40:55.733Z",
   "specification": {
     "path": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.json",
-    "sha256": "d361cd8ab5ba483cb870987eeb46dc8e0f34b1867ce1b5a7b519d4f3e042635d",
-    "bytes": 5160
+    "sha256": "8324fa7f45abc6bb25d86f273a4be7c1022cbb0b590923439ce6b2bf5616528d",
+    "bytes": 7061
   },
   "artifact": {
     "path": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.html",
-    "sha256": "b76cba6c2de750aa8a54fe9232e0c6fa9644152e0075a2ba4275d1b43b8cb6bf",
-    "bytes": 768420
+    "sha256": "7db82413199bd5306f2db856d5a1014d423bf77b2ed53f368468627c0e5ef4b6",
+    "bytes": 770305
   },
   "stages": {
     "validate": {
@@ -38,8 +38,8 @@
         "ok": true,
         "command": "validate",
         "specification": {
-          "sha256": "d361cd8ab5ba483cb870987eeb46dc8e0f34b1867ce1b5a7b519d4f3e042635d",
-          "bytes": 5160
+          "sha256": "8324fa7f45abc6bb25d86f273a4be7c1022cbb0b590923439ce6b2bf5616528d",
+          "bytes": 7061
         },
         "validation": {
           "checksPassed": 9,
@@ -54,7 +54,7 @@
     "deliver": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 1308,
+      "durationMs": 914,
       "command": [
         "C:\\Program Files\\nodejs\\node.exe",
         "C:\\Users\\ale13\\.agents\\skills\\archify\\bin\\archify.mjs",
@@ -68,19 +68,19 @@
       ],
       "receipt": {
         "schemaVersion": 1,
-        "receiptId": "8523d19d-13c7-415d-bde3-89731f48e256",
+        "receiptId": "bec2c5ac-2530-4a71-9cf0-8870d4ad9d27",
         "ok": true,
         "command": "deliver",
         "type": "workflow",
         "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.json",
         "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.html",
         "specification": {
-          "sha256": "d361cd8ab5ba483cb870987eeb46dc8e0f34b1867ce1b5a7b519d4f3e042635d",
-          "bytes": 5160
+          "sha256": "8324fa7f45abc6bb25d86f273a4be7c1022cbb0b590923439ce6b2bf5616528d",
+          "bytes": 7061
         },
         "artifact": {
-          "sha256": "b76cba6c2de750aa8a54fe9232e0c6fa9644152e0075a2ba4275d1b43b8cb6bf",
-          "bytes": 768420
+          "sha256": "7db82413199bd5306f2db856d5a1014d423bf77b2ed53f368468627c0e5ef4b6",
+          "bytes": 770305
         },
         "validation": {
           "checksPassed": 9,
@@ -106,7 +106,7 @@
     "check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 294,
+      "durationMs": 210,
       "command": [
         "C:\\Program Files\\nodejs\\node.exe",
         "C:\\Users\\ale13\\.agents\\skills\\archify\\bin\\archify.mjs",
@@ -118,8 +118,8 @@
         "ok": true,
         "file": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.html",
         "artifact": {
-          "sha256": "b76cba6c2de750aa8a54fe9232e0c6fa9644152e0075a2ba4275d1b43b8cb6bf",
-          "bytes": 768420
+          "sha256": "7db82413199bd5306f2db856d5a1014d423bf77b2ed53f368468627c0e5ef4b6",
+          "bytes": 770305
         },
         "checks": [
           {
@@ -186,16 +186,16 @@
             "containerBorderRuns": 0,
             "labelRouteClearanceIssues": 0,
             "labelCanvasOverflowIssues": 0,
-            "minLabelRouteClearance": 60.6,
+            "minLabelRouteClearance": 14,
             "desktopReadabilityIssues": 0,
             "viewportHeightIssues": 0,
-            "minProjectedNodeTextPx": 6.009693053311794,
+            "minProjectedNodeTextPx": 6.088379705400982,
             "maxBends": 3,
-            "routesOverSuggestedBends": 1,
-            "maxStretch": 1.222,
-            "routesOverSuggestedStretch": 0,
+            "routesOverSuggestedBends": 2,
+            "maxStretch": 1.364,
+            "routesOverSuggestedStretch": 1,
             "minSegmentPx": 16,
-            "minInteriorSegmentPx": 72,
+            "minInteriorSegmentPx": 66,
             "shortSegmentCount": 0,
             "shortEndpointSegmentCount": 0,
             "shortInteriorSegmentCount": 0,
@@ -212,15 +212,27 @@
             "detours": [
               {
                 "relationship": {
-                  "id": "nav-verif",
-                  "from": "sidebar",
-                  "to": "verificacion",
-                  "label": "admin",
-                  "collectionIndex": 5,
-                  "artifactIndex": 6
+                  "id": "badge-audit",
+                  "from": "badge",
+                  "to": "auditoria",
+                  "label": "abrir panel",
+                  "collectionIndex": 1,
+                  "artifactIndex": 2
                 },
                 "bends": 3,
-                "stretch": 1.222
+                "stretch": 1
+              },
+              {
+                "relationship": {
+                  "id": "nav-procesos",
+                  "from": "sidebar",
+                  "to": "procesos",
+                  "label": "Operacion",
+                  "collectionIndex": 4,
+                  "artifactIndex": 5
+                },
+                "bends": 3,
+                "stretch": 1.364
               }
             ]
           },
@@ -243,28 +255,26 @@
               "id": "sidebar"
             },
             "minimumSourceTextPx": 8,
-            "minimumProjectedTextPx": 6.009693053311794,
-            "semanticTextCount": 37
+            "minimumProjectedTextPx": 6.088379705400982,
+            "semanticTextCount": 38
           },
           "issues": []
         },
         "provenance": "current",
-        "deliveryReceiptId": "8523d19d-13c7-415d-bde3-89731f48e256"
+        "deliveryReceiptId": "bec2c5ac-2530-4a71-9cf0-8870d4ad9d27"
       }
     },
     "browser-check": {
       "status": "pass",
       "exitCode": 0,
-      "durationMs": 1506,
+      "durationMs": 1133,
       "command": [
         "C:\\Program Files\\nodejs\\node.exe",
         "C:\\Users\\ale13\\.agents\\skills\\archify\\bin\\archify.mjs",
         "browser-check",
         "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.html",
         "--json",
-        "--require-provenance",
-        "--out-dir",
-        "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2"
+        "--require-provenance"
       ],
       "execution": "in-process",
       "receipt": {
@@ -275,11 +285,11 @@
         "status": "pass",
         "visualReview": "not-requested",
         "provenance": "current",
-        "deliveryReceiptId": "8523d19d-13c7-415d-bde3-89731f48e256",
+        "deliveryReceiptId": "bec2c5ac-2530-4a71-9cf0-8870d4ad9d27",
         "artifact": {
           "path": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.html",
-          "sha256": "b76cba6c2de750aa8a54fe9232e0c6fa9644152e0075a2ba4275d1b43b8cb6bf",
-          "bytes": 768420
+          "sha256": "7db82413199bd5306f2db856d5a1014d423bf77b2ed53f368468627c0e5ef4b6",
+          "bytes": 770305
         },
         "state": {
           "detail": "read",
@@ -316,42 +326,42 @@
                 "bodyPaddingPx": 12,
                 "headerPx": 78,
                 "diagramChromePx": 78,
-                "svgPx": 581,
+                "svgPx": 588,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 115,
-                  "nodeCount": 2,
+                  "heightPx": 117,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 74,
+                  "nodeSpanPx": 75,
                   "spaceAboveNodesPx": 37,
                   "spaceBelowNodesPx": 4
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 115,
-                  "nodeCount": 5,
+                  "heightPx": 117,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 74,
+                  "nodeSpanPx": 75,
                   "spaceAboveNodesPx": 37,
                   "spaceBelowNodesPx": 4
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 115,
+                  "heightPx": 117,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -360,7 +370,7 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 74,
+                  "nodeSpanPx": 75,
                   "spaceAboveNodesPx": 37,
                   "spaceBelowNodesPx": 4
                 }
@@ -368,7 +378,7 @@
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -410,42 +420,42 @@
                 "bodyPaddingPx": 64,
                 "headerPx": 86,
                 "diagramChromePx": 84,
-                "svgPx": 650,
+                "svgPx": 658,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 129,
-                  "nodeCount": 2,
+                  "heightPx": 131,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 83,
-                  "spaceAboveNodesPx": 41,
+                  "nodeSpanPx": 84,
+                  "spaceAboveNodesPx": 42,
                   "spaceBelowNodesPx": 5
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 129,
-                  "nodeCount": 5,
+                  "heightPx": 131,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 83,
-                  "spaceAboveNodesPx": 41,
+                  "nodeSpanPx": 84,
+                  "spaceAboveNodesPx": 42,
                   "spaceBelowNodesPx": 5
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 129,
+                  "heightPx": 131,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -454,15 +464,15 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 83,
-                  "spaceAboveNodesPx": 41,
+                  "nodeSpanPx": 84,
+                  "spaceAboveNodesPx": 42,
                   "spaceBelowNodesPx": 5
                 }
               ],
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -504,42 +514,42 @@
                 "bodyPaddingPx": 64,
                 "headerPx": 86,
                 "diagramChromePx": 84,
-                "svgPx": 788,
+                "svgPx": 798,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 156,
-                  "nodeCount": 2,
+                  "heightPx": 158,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 100,
-                  "spaceAboveNodesPx": 50,
+                  "nodeSpanPx": 102,
+                  "spaceAboveNodesPx": 51,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 156,
-                  "nodeCount": 5,
+                  "heightPx": 158,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 100,
-                  "spaceAboveNodesPx": 50,
+                  "nodeSpanPx": 102,
+                  "spaceAboveNodesPx": 51,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 156,
+                  "heightPx": 158,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -548,15 +558,15 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 100,
-                  "spaceAboveNodesPx": 50,
+                  "nodeSpanPx": 102,
+                  "spaceAboveNodesPx": 51,
                   "spaceBelowNodesPx": 6
                 }
               ],
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -598,42 +608,42 @@
                 "bodyPaddingPx": 64,
                 "headerPx": 94,
                 "diagramChromePx": 94,
-                "svgPx": 807,
+                "svgPx": 817,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 160,
-                  "nodeCount": 2,
+                  "heightPx": 162,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 103,
-                  "spaceAboveNodesPx": 51,
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 52,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 160,
-                  "nodeCount": 5,
+                  "heightPx": 162,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 103,
-                  "spaceAboveNodesPx": 51,
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 52,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 160,
+                  "heightPx": 162,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -642,15 +652,15 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 103,
-                  "spaceAboveNodesPx": 51,
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 52,
                   "spaceBelowNodesPx": 6
                 }
               ],
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -745,42 +755,42 @@
                 "bodyPaddingPx": 12,
                 "headerPx": 78,
                 "diagramChromePx": 78,
-                "svgPx": 581,
+                "svgPx": 588,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 115,
-                  "nodeCount": 2,
+                  "heightPx": 117,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 74,
+                  "nodeSpanPx": 75,
                   "spaceAboveNodesPx": 37,
                   "spaceBelowNodesPx": 4
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 115,
-                  "nodeCount": 5,
+                  "heightPx": 117,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 74,
+                  "nodeSpanPx": 75,
                   "spaceAboveNodesPx": 37,
                   "spaceBelowNodesPx": 4
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 115,
+                  "heightPx": 117,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -789,7 +799,7 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 74,
+                  "nodeSpanPx": 75,
                   "spaceAboveNodesPx": 37,
                   "spaceBelowNodesPx": 4
                 }
@@ -797,7 +807,7 @@
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -839,42 +849,42 @@
                 "bodyPaddingPx": 64,
                 "headerPx": 86,
                 "diagramChromePx": 84,
-                "svgPx": 650,
+                "svgPx": 658,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 129,
-                  "nodeCount": 2,
+                  "heightPx": 131,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 83,
-                  "spaceAboveNodesPx": 41,
+                  "nodeSpanPx": 84,
+                  "spaceAboveNodesPx": 42,
                   "spaceBelowNodesPx": 5
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 129,
-                  "nodeCount": 5,
+                  "heightPx": 131,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 83,
-                  "spaceAboveNodesPx": 41,
+                  "nodeSpanPx": 84,
+                  "spaceAboveNodesPx": 42,
                   "spaceBelowNodesPx": 5
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 129,
+                  "heightPx": 131,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -883,15 +893,15 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 83,
-                  "spaceAboveNodesPx": 41,
+                  "nodeSpanPx": 84,
+                  "spaceAboveNodesPx": 42,
                   "spaceBelowNodesPx": 5
                 }
               ],
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -933,42 +943,42 @@
                 "bodyPaddingPx": 64,
                 "headerPx": 86,
                 "diagramChromePx": 84,
-                "svgPx": 788,
+                "svgPx": 798,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 156,
-                  "nodeCount": 2,
+                  "heightPx": 158,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 100,
-                  "spaceAboveNodesPx": 50,
+                  "nodeSpanPx": 102,
+                  "spaceAboveNodesPx": 51,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 156,
-                  "nodeCount": 5,
+                  "heightPx": 158,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 100,
-                  "spaceAboveNodesPx": 50,
+                  "nodeSpanPx": 102,
+                  "spaceAboveNodesPx": 51,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 156,
+                  "heightPx": 158,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -977,15 +987,15 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 100,
-                  "spaceAboveNodesPx": 50,
+                  "nodeSpanPx": 102,
+                  "spaceAboveNodesPx": 51,
                   "spaceBelowNodesPx": 6
                 }
               ],
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -1027,42 +1037,42 @@
                 "bodyPaddingPx": 64,
                 "headerPx": 94,
                 "diagramChromePx": 94,
-                "svgPx": 807,
+                "svgPx": 817,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 160,
-                  "nodeCount": 2,
+                  "heightPx": 162,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 103,
-                  "spaceAboveNodesPx": 51,
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 52,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 160,
-                  "nodeCount": 5,
+                  "heightPx": 162,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 103,
-                  "spaceAboveNodesPx": 51,
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 52,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 160,
+                  "heightPx": 162,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -1071,15 +1081,15 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 103,
-                  "spaceAboveNodesPx": 51,
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 52,
                   "spaceBelowNodesPx": 6
                 }
               ],
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -1126,42 +1136,42 @@
                 "bodyPaddingPx": 12,
                 "headerPx": 78,
                 "diagramChromePx": 78,
-                "svgPx": 581,
+                "svgPx": 588,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 115,
-                  "nodeCount": 2,
+                  "heightPx": 117,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 74,
+                  "nodeSpanPx": 75,
                   "spaceAboveNodesPx": 37,
                   "spaceBelowNodesPx": 4
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 115,
-                  "nodeCount": 5,
+                  "heightPx": 117,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 74,
+                  "nodeSpanPx": 75,
                   "spaceAboveNodesPx": 37,
                   "spaceBelowNodesPx": 4
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 115,
+                  "heightPx": 117,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -1170,7 +1180,7 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 74,
+                  "nodeSpanPx": 75,
                   "spaceAboveNodesPx": 37,
                   "spaceBelowNodesPx": 4
                 }
@@ -1178,7 +1188,7 @@
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -1220,42 +1230,42 @@
                 "bodyPaddingPx": 64,
                 "headerPx": 86,
                 "diagramChromePx": 84,
-                "svgPx": 650,
+                "svgPx": 658,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 129,
-                  "nodeCount": 2,
+                  "heightPx": 131,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 83,
-                  "spaceAboveNodesPx": 41,
+                  "nodeSpanPx": 84,
+                  "spaceAboveNodesPx": 42,
                   "spaceBelowNodesPx": 5
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 129,
-                  "nodeCount": 5,
+                  "heightPx": 131,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 83,
-                  "spaceAboveNodesPx": 41,
+                  "nodeSpanPx": 84,
+                  "spaceAboveNodesPx": 42,
                   "spaceBelowNodesPx": 5
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 129,
+                  "heightPx": 131,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -1264,15 +1274,15 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 83,
-                  "spaceAboveNodesPx": 41,
+                  "nodeSpanPx": 84,
+                  "spaceAboveNodesPx": 42,
                   "spaceBelowNodesPx": 5
                 }
               ],
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -1314,42 +1324,42 @@
                 "bodyPaddingPx": 64,
                 "headerPx": 86,
                 "diagramChromePx": 84,
-                "svgPx": 788,
+                "svgPx": 798,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 156,
-                  "nodeCount": 2,
+                  "heightPx": 158,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 100,
-                  "spaceAboveNodesPx": 50,
+                  "nodeSpanPx": 102,
+                  "spaceAboveNodesPx": 51,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 156,
-                  "nodeCount": 5,
+                  "heightPx": 158,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 100,
-                  "spaceAboveNodesPx": 50,
+                  "nodeSpanPx": 102,
+                  "spaceAboveNodesPx": 51,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 156,
+                  "heightPx": 158,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -1358,15 +1368,15 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 100,
-                  "spaceAboveNodesPx": 50,
+                  "nodeSpanPx": 102,
+                  "spaceAboveNodesPx": 51,
                   "spaceBelowNodesPx": 6
                 }
               ],
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -1408,42 +1418,42 @@
                 "bodyPaddingPx": 64,
                 "headerPx": 94,
                 "diagramChromePx": 94,
-                "svgPx": 807,
+                "svgPx": 817,
                 "cardsPx": 0,
                 "viewBoxHeight": 534
               },
-              "viewBoxWidth": 1238,
+              "viewBoxWidth": 1222,
               "workflowLanes": [
                 {
                   "frameId": "lane-0",
-                  "heightPx": 160,
-                  "nodeCount": 2,
+                  "heightPx": 162,
+                  "nodeCount": 1,
                   "nodeIds": [
-                    "sidebar",
-                    "verificacion"
+                    "sidebar"
                   ],
-                  "nodeSpanPx": 103,
-                  "spaceAboveNodesPx": 51,
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 52,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-1",
-                  "heightPx": 160,
-                  "nodeCount": 5,
+                  "heightPx": 162,
+                  "nodeCount": 6,
                   "nodeIds": [
                     "procesos",
                     "expediente",
                     "hechos",
                     "auditoria",
+                    "verificacion",
                     "so_run"
                   ],
-                  "nodeSpanPx": 103,
-                  "spaceAboveNodesPx": 51,
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 52,
                   "spaceBelowNodesPx": 6
                 },
                 {
                   "frameId": "lane-2",
-                  "heightPx": 160,
+                  "heightPx": 162,
                   "nodeCount": 5,
                   "nodeIds": [
                     "chats",
@@ -1452,15 +1462,15 @@
                     "badge",
                     "diff"
                   ],
-                  "nodeSpanPx": 103,
-                  "spaceAboveNodesPx": 51,
+                  "nodeSpanPx": 104,
+                  "spaceAboveNodesPx": 52,
                   "spaceBelowNodesPx": 6
                 }
               ],
               "minimumProjectedNodeTextPx": 8,
               "minimumProjectedNonEdgeTextPx": 8,
               "minimumProjectedEdgeTextPx": 8,
-              "minimumProjectedNodeText": "12 entradas",
+              "minimumProjectedNodeText": "11 entradas",
               "minimumProjectedNodeTextDetail": "context",
               "minimumProjectedNodeTextOwner": {
                 "kind": "node",
@@ -1488,7 +1498,6 @@
           "contactSheet": null
         },
         "sidecars": {
-          "directory": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2",
           "receipt": "05-ux-navigation.browser-check.json",
           "files": []
         }
@@ -1497,13 +1506,13 @@
   },
   "diagnostics": [],
   "evidence": {
-    "receipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2\\05-ux-navigation.finalize.json",
-    "summaryReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2\\05-ux-navigation.finalize-summary.json",
-    "browserCheckReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.review-2\\05-ux-navigation.browser-check.json"
+    "receipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.finalize.json",
+    "summaryReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.finalize-summary.json",
+    "browserCheckReceipt": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\05-ux-navigation.browser-check.json"
   },
   "visualReview": "not-requested",
-  "finishedAt": "2026-10-22T16:18:17.031Z",
-  "durationMs": 4558,
+  "finishedAt": "2026-10-22T17:40:58.920Z",
+  "durationMs": 3186,
   "update": {
     "status": "update_available",
     "installedVersion": "3.0.1",

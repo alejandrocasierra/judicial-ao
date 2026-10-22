@@ -8,6 +8,7 @@ const tabs = [
   { key: "", label: "Expediente" },
   { key: "hechos", label: "Hechos" },
   { key: "auditoria", label: "Auditoría" },
+  { key: "verificacion", label: "Verificación" },
 ];
 
 export function ProcessTabs({ caseId }: { caseId: string }) {

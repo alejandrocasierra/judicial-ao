@@ -86,10 +86,10 @@ Reglas:
 
 ### 4.1 Sidebar global
 
-**Implementado (2026-10-22):** una lista plana de 12 entradas, sin grupos, en el
+**Implementado (2026-10-22):** una lista plana de 11 entradas, sin grupos, en el
 orden actual: Dashboard, Usuarios, Roles y permisos, Correos, Agentes, Skills,
-Modelos IA, Verificación, Procesos, Chats IA, Backups, Alertas. `Verificación`
-sigue siendo la política y los modelos de segunda opinión.
+Modelos IA, Procesos, Chats IA, Backups, Alertas. `Verificación` no está en el
+sidebar global: vive dentro de cada proceso.
 
 **Propuesta pendiente (no implementada):** agrupar en Operación y Administración.
 
@@ -106,7 +106,6 @@ ADMINISTRACIÓN
   Agentes
   Skills
   Modelos IA
-  Verificación
   Backups
   Alertas
 ```
@@ -119,15 +118,16 @@ ADMINISTRACIÓN
 
 ### 4.2 Pestañas del proceso
 
-**Implementado:** tres pestañas, con scroll horizontal en pantallas estrechas.
+**Implementado:** cuatro pestañas, con scroll horizontal en pantallas estrechas.
 
 ```text
-[Expediente] [Hechos] [Auditoría]
+[Expediente] [Hechos] [Auditoría] [Verificación]
 ```
 
 - `Expediente`: carpetas, archivos, documentos, visor OCR/ASR.
 - `Hechos`: ledger por parte.
 - `Auditoría`: auditorías del proceso, segunda opinión y diff por claim.
+- `Verificación`: política del gate y modelo de segunda opinión del proceso abierto.
 - `Cronología`: **no es una pestaña**; sigue siendo el diálogo de timeline que se
   abre desde Expediente.
 - En móvil, scroll horizontal con indicador de borde; no se apilan.
@@ -153,7 +153,7 @@ Mapa de navegación con el estado real: [`architecture/05-ux-navigation.html`](a
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ Proceso · radicado · estado           [Partes] [Subir]       │
-│ [Expediente] [Hechos] [Auditoría]                            │
+│ [Expediente] [Hechos] [Auditoría] [Verificación]                            │
 ├──────────────────────────────────────────────────────────────┤
 │ Hechos del proceso                       [Filtros] [Reconstruir]│
 │ [Probados] [Con prueba] [Discutidos] [Todos]                  │
@@ -250,9 +250,10 @@ Mapa de navegación con el estado real: [`architecture/05-ux-navigation.html`](a
 
 ### 5.6 Administración de verificación
 
-- Ruta `/dashboard/verificacion`.
+- Ruta `/dashboard/procesos/[caseId]/verificacion`.
+- No pide UUID: usa el proceso abierto en la URL.
 - Secciones:
-  - Política global: modo, bloqueos, umbrales, segunda opinión.
+  - Política del proceso: modo, bloqueos, umbrales, segunda opinión.
   - Modelos: respondedor vs verificador; validación de modelo distinto.
   - Rules: lista de códigos y severidades, solo lectura.
   - Estado: últimas auditorías, errores, costo.
@@ -266,9 +267,8 @@ Mapa de navegación con el estado real: [`architecture/05-ux-navigation.html`](a
 **Estado de implementación (2026-10-22):** existen `ProcessTabs`, `FactsBoard`,
 `ProofBadge`, `AuditPanel`, `AuditBadge` (badge por respuesta en el chat) y
 `SecondOpinionDiff` (diálogo de comparación). `FactCard`, `PartyPositionBadge` y
-`FactDetailSheet` están resueltos dentro de `FactsBoard`; `SecondOpinionDialog` y
-`VerificationPolicyForm` están resueltos dentro de `AuditPanel` y la página
-`/dashboard/verificacion`. La tabla describe el contrato de componente, no la
+`FactDetailSheet` están resueltos dentro de `FactsBoard`; `VerificationPolicyForm`
+vive en la pestaña del proceso. La tabla describe el contrato de componente, no la
 lista de archivos.
 
 | Componente | Props mínimas | Estados |
