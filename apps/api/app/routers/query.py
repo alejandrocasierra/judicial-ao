@@ -25,7 +25,7 @@ from app.core.i18n import negotiate, t
 from app.providers.llm import get_llm
 from app.schemas import QueryIn
 from app.security.deps import Principal, case_access, current_principal
-from app.services import (agent, answering, audit, cache, case_tools, compose,
+from app.services import (agent, answering, audit, cache, case_tools, compose, legal_guard,
                           deadline as deadline_mod, evidence_labels, intent as intent_service,
                           intent_profile, metrics, query_hints, query_rewrite, ratelimit,
                           role_answer, skills, text_terms, verification)
@@ -370,7 +370,8 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                history: list[dict] | None = None, hints: list[str] | None = None,
                ocr_mode: str | None = None, asr_mode: str | None = None,
                intent_decision=None, emit=None, deadline=None, seed_items: list[dict] | None = None,
-               background=None, verify_mode: str | None = None) -> dict:
+               background=None, verify_mode: str | None = None,
+               persist_audit: bool = True) -> dict:
     from app.providers.llm import get_llm_for_model
 
     try:
@@ -617,6 +618,32 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         known = {str(u.get("text")) for u in (validated.get("unsupported_claims") or [])}
         validated["unsupported_claims"] = list(validated.get("unsupported_claims") or []) + [
             u for u in revalidated["unsupported_claims"] if str(u.get("text")) not in known]
+
+    # GATE LEGAL: se ejecuta antes del juez semantico y antes del compositor.
+    # Si la migracion 0055 no esta aplicada, no rompe el turno; se registra el
+    # error y se conserva el comportamiento anterior.
+    guard_result: dict | None = None
+    if s.LEGAL_GUARD_ENABLED:
+        try:
+            with tx(p.org_id, p.user_id) as gc:
+                guard_result = legal_guard.audit(
+                    gc, org_id=str(p.org_id), case_id=str(case_id),
+                    question=body.question, answer=raw_text or "",
+                    claims=validated.get("claims") or [], items=items)
+            if guard_result.get("claims"):
+                validated["claims"] = guard_result.get("approved_claims") or []
+                blocked = [c for c in guard_result["claims"] if c.get("status") == "UNSUPPORTED"]
+                if blocked:
+                    validated["uncertainties"] = list(validated.get("uncertainties") or []) + [
+                        "Se omitieron afirmaciones sin soporte legal verificable."
+                    ]
+                for limit in guard_result.get("limits") or []:
+                    if limit not in (validated.get("uncertainties") or []):
+                        validated["uncertainties"] = list(validated.get("uncertainties") or []) + [limit]
+        except Exception as exc:  # noqa: BLE001 - el gate es defensivo
+            log.warning("legal guard unavailable: %s", exc)
+            guard_result = None
+
     mode = verify_mode or s.VERIFY_MODE
     if verify_mode is None and mode == "sync" and body.strategy != "agent":
         # En RAG general la afirmación ya se validó contra la página/segmento
@@ -785,11 +812,13 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                       "uncertainties": composed.uncertainties, "answer_kind": composed.answer_kind,
                       "intent": intent_value, "degraded": degraded,
                       "degraded_reason": degraded_reason,
+                      "audit_status": (guard_result or {}).get("status"),
                       "elapsed_ms": deadline.elapsed_ms(), "timings": dict(deadline.timings),
                       "tool_calls": tool_calls}
     validation_payload = {"schema_valid": validated.get("schema_valid", True),
                           "unsupported": len(validated["unsupported_claims"]),
-                          "answer_kind": composed.answer_kind}
+                          "answer_kind": composed.answer_kind,
+                          "legal_audit": (guard_result or {}).get("status")}
     if semantic_verdicts:
         validation_payload["semantic_verdicts"] = semantic_verdicts
 
@@ -802,6 +831,17 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                   out=json.dumps(output_payload, ensure_ascii=False, default=str),
                   val=json.dumps(validation_payload, ensure_ascii=False, default=str),
                   ti=result.tokens_in, to=result.tokens_out, u=p.user_id)
+        audit_id = None
+        if guard_result is not None and persist_audit:
+            try:
+                audit_id = legal_guard.persist(
+                    c, org_id=str(p.org_id), case_id=str(case_id),
+                    question=body.question, answer=composed.answer,
+                    result=guard_result, model_run_id=str(run["id"]),
+                    actor_id=str(p.user_id), pipeline_version=s.PIPELINE_VERSION,
+                    prompt_version=prompt_version)
+            except Exception as exc:  # noqa: BLE001 - no invalida la respuesta
+                log.warning("legal audit persist failed: %s", exc)
         c.execute(text("UPDATE cases SET spent_llm_tokens = spent_llm_tokens + :n WHERE id = :c"),
                   {"n": result.tokens_in + result.tokens_out, "c": str(case_id)})
         handle_to_cit: dict[str, str] = {}
@@ -907,6 +947,8 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     _safe_emit(emit, "done", {"answer_kind": composed.answer_kind, "degraded": degraded,
                               "degraded_reason": degraded_reason, "intent": intent_value,
                               "citations": len(citations), "elapsed_ms": deadline.elapsed_ms(),
+                              "audit_status": (guard_result or {}).get("status"),
+                              "audit_id": audit_id,
                               "timings": dict(deadline.timings)})
     response = {"answer": composed.answer, "answer_kind": composed.answer_kind,
                 "intent": intent_value, "degraded": degraded,
@@ -922,6 +964,11 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                 "corrections_done": corrections_done,
                 "pending_correction": corrections_pending[0] if corrections_pending else None,
                 "model_run_id": str(run["id"]), "evidence_count": len(items),
+                "audit_id": audit_id,
+                "audit_status": (guard_result or {}).get("status"),
+                "audit_findings": (guard_result or {}).get("findings") or [],
+                "audit_limits": (guard_result or {}).get("limits") or [],
+                "_guard_result": guard_result,
                 "occurrences": [], "occurrences_term": term, "occurrences_note": note}
     if answer_key and not degraded and not body.attachments:
         try:

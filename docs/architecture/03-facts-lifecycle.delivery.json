@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "96a2232c-eb49-45f8-a353-5e74987ccdf9",
+  "status": "current",
+  "command": "deliver",
+  "type": "lifecycle",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\03-facts-lifecycle.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\03-facts-lifecycle.html",
+  "specification": {
+    "sha256": "4480d6e2b7c5a0945bb6c3d52d0df6a5f4fc235f91bbe8ef504d8c9bff887a57",
+    "bytes": 2902
+  },
+  "artifact": {
+    "sha256": "9f3f28910793f0931f34adeaa60e9d5ba06ba4fbc5347969ff73ae5ce4e65fb0",
+    "bytes": 760764
+  }
+}

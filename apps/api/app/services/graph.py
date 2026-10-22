@@ -129,9 +129,12 @@ def build_case_graph(conn: Connection, org_id: str, case_id: str, actor_id: str 
     claims = rows(conn, "SELECT id, text FROM claims WHERE case_id = :c", c=case_id)
     for x in claims:
         _insert_node(conn, org_id, case_id, "Claim", "claims", str(x["id"]), x["text"][:200])
-    facts = rows(conn, "SELECT id, proposition FROM facts WHERE case_id = :c", c=case_id)
+    facts = rows(conn, "SELECT id, proposition, proof_status, is_proven, fact_code FROM facts WHERE case_id = :c", c=case_id)
     for x in facts:
-        _insert_node(conn, org_id, case_id, "Fact", "facts", str(x["id"]), x["proposition"][:200])
+        _insert_node(conn, org_id, case_id, "Fact", "facts", str(x["id"]), x["proposition"][:200],
+                     {"proof_status": x.get("proof_status") or "ALLEGED",
+                      "is_proven": bool(x.get("is_proven")),
+                      "fact_code": x.get("fact_code")})
     events = rows(conn, "SELECT id, description FROM events WHERE case_id = :c", c=case_id)
     for x in events:
         _insert_node(conn, org_id, case_id, "Event", "events", str(x["id"]), x["description"][:200])
@@ -202,6 +205,24 @@ def build_case_graph(conn: Connection, org_id: str, case_id: str, actor_id: str 
             et = "ASSERTS" if fc["stance"] == "asserts" else "REFUTES"
             _insert_edge(conn, org_id, case_id, src, tgt, et, "EXTRACTED")
 
+    # Aristas: posiciones de parte (Party ALLEGES/DENIES/ADMITS Fact)
+    try:
+        positions = rows(conn, """
+            SELECT fp.party_id, fp.fact_id, fp.side, fp.position
+            FROM fact_positions fp JOIN facts f ON f.id = fp.fact_id
+            WHERE f.case_id = :c AND fp.party_id IS NOT NULL
+        """, c=case_id)
+        for pos in positions:
+            src = _node_id(conn, case_id, "parties", str(pos["party_id"]))
+            tgt = _node_id(conn, case_id, "facts", str(pos["fact_id"]))
+            if src and tgt:
+                edge_type = {"ALLEGES": "ALLEGES", "DENIES": "DENIES", "ADMITS": "ADMITS"}.get(
+                    pos["position"], "POSITION_ON")
+                _insert_edge(conn, org_id, case_id, src, tgt, edge_type, "EXTRACTED",
+                             metadata={"side": pos["side"], "position": pos["position"]})
+    except Exception:  # noqa: BLE001 - grafo tolerante a esquemas previos
+        log.debug("fact_positions graph edges skipped", exc_info=True)
+
     # Aristas: evidence_links (Evidence SUPPORTS/REFUTES/ABOUT Fact)
     els = rows(conn, """
         SELECT el.evidence_id, el.fact_id, el.stance
@@ -226,12 +247,19 @@ def build_case_graph(conn: Connection, org_id: str, case_id: str, actor_id: str 
             _insert_edge(conn, org_id, case_id, b, a, "CONTRADICTS", "EXTRACTED", confidence=1.0)
 
     # Aristas: decisiones determinan facts
-    det_facts = rows(conn, "SELECT id, determined_by_decision_id FROM facts WHERE case_id = :c AND determined_by_decision_id IS NOT NULL", c=case_id)
+    det_facts = rows(conn, """SELECT id, determined_by_decision_id, proven_by_decision_id,
+                                     proof_status FROM facts WHERE case_id = :c
+                              AND (determined_by_decision_id IS NOT NULL OR proven_by_decision_id IS NOT NULL)""",
+                     c=case_id)
     for f in det_facts:
-        src = _node_id(conn, case_id, "decisions", str(f["determined_by_decision_id"]))
+        decision_id = f.get("proven_by_decision_id") or f.get("determined_by_decision_id")
+        src = _node_id(conn, case_id, "decisions", str(decision_id))
         tgt = _node_id(conn, case_id, "facts", str(f["id"]))
         if src and tgt:
-            _insert_edge(conn, org_id, case_id, src, tgt, "DECIDES", "EXTRACTED", confidence=1.0)
+            _insert_edge(conn, org_id, case_id, src, tgt,
+                         "DECISION_PROVES_FACT" if f.get("proof_status") == "JUDICIALLY_PROVEN" else "DECIDES",
+                         "EXTRACTED", confidence=1.0,
+                         metadata={"proof_status": f.get("proof_status")})
 
     # Aristas: participantes (entities) PARTICIPATED_IN eventos
     evts = rows(conn, "SELECT id, participants FROM events WHERE case_id = :c", c=case_id)

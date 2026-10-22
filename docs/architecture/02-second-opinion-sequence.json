@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Segunda opinion: respuesta independiente y comparacion",
+    "output": "docs/architecture/02-second-opinion-sequence.html",
+    "quality_profile": "showcase",
+    "viewBox": [1080, 680],
+    "column_fit": "spread",
+    "animation": "trace"
+  },
+  "participants": [
+    { "id": "ui", "type": "frontend", "label": "Auditoria UI", "sublabel": "proceso" },
+    { "id": "api", "type": "backend", "label": "API", "sublabel": "crea run" },
+    { "id": "db", "type": "database", "label": "PostgreSQL", "sublabel": "runs + audits" },
+    { "id": "worker", "type": "backend", "label": "Worker", "sublabel": "default queue" },
+    { "id": "model", "type": "cloud", "label": "Modelo B", "sublabel": "distinto del respondedor" }
+  ],
+  "segments": [
+    { "from": 130, "to": 230, "label": "Solicitud" },
+    { "from": 240, "to": 390, "label": "Fase 1: ciega" },
+    { "from": 400, "to": 540, "label": "Fase 2: comparacion" }
+  ],
+  "messages": [
+    { "id": "request", "from": "ui", "to": "api", "y": 160, "label": "solicitar segunda opinion", "variant": "emphasis" },
+    { "id": "ensure", "from": "api", "to": "db", "y": 170, "label": "answer_audit + run QUEUED", "variant": "default" },
+    { "id": "job", "from": "api", "to": "worker", "y": 200, "label": "job second_opinion", "variant": "dashed" },
+    { "id": "run", "from": "worker", "to": "db", "y": 245, "label": "RUNNING", "variant": "default" },
+    { "id": "independent", "from": "worker", "to": "model", "y": 275, "label": "pregunta + evidencia (sin respuesta A)", "variant": "emphasis" },
+    { "id": "claims", "from": "model", "to": "worker", "y": 305, "label": "claims + citas + incertidumbres", "variant": "return" },
+    { "id": "compare", "from": "worker", "to": "model", "y": 350, "label": "comparar A vs B", "variant": "security" },
+    { "id": "verdict", "from": "model", "to": "worker", "y": 380, "label": "AGREE / PARTIAL / DISAGREE", "variant": "return" },
+    { "id": "persist", "from": "worker", "to": "db", "y": 430, "label": "claims + findings + verdict", "variant": "default" },
+    { "id": "read", "from": "ui", "to": "api", "y": 470, "label": "GET run", "variant": "default" },
+    { "id": "show", "from": "api", "to": "ui", "y": 500, "label": "lado a lado", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "api", "from": 135, "to": 205, "type": "backend" },
+    { "participant": "worker", "from": 200, "to": 435, "type": "backend" },
+    { "participant": "model", "from": 270, "to": 385, "type": "cloud" },
+    { "participant": "db", "from": 165, "to": 175, "type": "database" },
+    { "participant": "db", "from": 240, "to": 250, "type": "database" },
+    { "participant": "db", "from": 425, "to": 440, "type": "database" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Independencia", "items": ["La fase 1 no recibe la respuesta original", "El modelo debe ser distinto del respondedor", "No hay tools de escritura"] },
+    { "dot": "amber", "title": "Asincronia", "items": ["El chat no espera al verificador", "El run es cancelable e idempotente", "Costo y latencia quedan registrados"] },
+    { "dot": "rose", "title": "Revision", "items": ["DISAGREE critico -> NEEDS_REVIEW", "La UI muestra diferencias por claim", "El humano decide el override"] }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Judicial AI: contexto de los modulos legales",
+    "output": "docs/architecture/00-system-context.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "user", "type": "external", "label": "Abogado / revisor", "sublabel": "navegador", "pos": [30, 300], "size": [140, 60] },
+    { "id": "web", "type": "frontend", "label": "Web Next.js", "sublabel": "proceso, hechos, auditoria", "pos": [230, 300], "size": [150, 64] },
+    { "id": "api", "type": "backend", "label": "API FastAPI", "sublabel": "gate legal + APIs", "pos": [450, 300], "size": [150, 64] },
+    { "id": "worker", "type": "backend", "label": "Celery workers", "sublabel": "segunda opinion / hechos", "pos": [450, 470], "size": [150, 64] },
+    { "id": "db", "type": "database", "label": "PostgreSQL + pgvector", "sublabel": "RLS, chunks, grafo", "pos": [680, 300], "size": [170, 64] },
+    { "id": "redis", "type": "messagebus", "label": "Redis", "sublabel": "colas", "pos": [680, 470], "size": [130, 60] },
+    { "id": "mcp", "type": "security", "label": "MCP tools", "sublabel": "solo lectura", "pos": [680, 140], "size": [130, 60], "tag": "allowlist" },
+    { "id": "llm", "type": "cloud", "label": "Modelos LLM", "sublabel": "respondedor / verificador", "pos": [910, 300], "size": [150, 64] }
+  ],
+  "connections": [
+    { "id": "open", "from": "user", "to": "web", "label": "HTTPS" },
+    { "id": "api-call", "from": "web", "to": "api", "label": "REST / SSE", "variant": "emphasis" },
+    { "id": "sql", "from": "api", "to": "db", "label": "SQL + RLS" },
+    { "id": "enqueue", "from": "api", "to": "redis", "label": "job", "variant": "dashed" },
+    { "id": "worker-job", "from": "redis", "to": "worker", "label": "consume" },
+    { "id": "worker-db", "from": "worker", "to": "db", "label": "estado / resultados", "variant": "dashed" },
+    { "id": "gate-llm", "from": "api", "to": "llm", "label": "responder + juez" },
+    { "id": "audit-llm", "from": "worker", "to": "llm", "label": "segunda opinion", "variant": "dashed" },
+    { "id": "mcp-read", "from": "mcp", "to": "db", "label": "lectura", "variant": "security" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Gate", "items": ["Toda respuesta nueva pasa por legal_guard", "Un CRITICAL bloquea el claim afectado"] },
+    { "dot": "cyan", "title": "Proceso", "items": ["cases es la demanda/proceso", "Carpetas, documentos y chunks scoped por case_id"] },
+    { "dot": "rose", "title": "Aislamiento", "items": ["RLS en cada tabla nueva", "Auditores y segunda opinion sin tools de escritura"] }
+  ]
+}

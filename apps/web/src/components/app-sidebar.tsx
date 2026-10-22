@@ -14,6 +14,7 @@ import {
   HardDrive,
   LayoutDashboard,
   Scale,
+  ShieldCheck,
   Bell,
   X,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const navItems = [
   { href: "/dashboard/agents", label: "Agentes", icon: Bot },
   { href: "/dashboard/skills", label: "Skills", icon: Wrench },
   { href: "/dashboard/models", label: "Modelos IA", icon: Cpu },
+  { href: "/dashboard/verificacion", label: "Verificación", icon: ShieldCheck },
   { href: "/dashboard/procesos", label: "Procesos", icon: FolderKanban },
   { href: "/dashboard/chats", label: "Chats IA", icon: MessageSquare },
   { href: "/dashboard/backups", label: "Backups", icon: HardDrive },

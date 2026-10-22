@@ -83,7 +83,7 @@ class DeletionRequestIn(Strict):
 class ProcessIn(Strict):
     job_types: list[Literal["document_ocr", "document_classification", "media_asr", "media_diarize", "legal_extraction",
                             "embedding", "indexing", "graph_build", "file_ingest", "xlsx_ingest",
-                            "procedural_links"]] = Field(min_length=1, max_length=10)
+                            "procedural_links", "second_opinion", "facts_build"]] = Field(min_length=1, max_length=10)
 
 
 class FolderCreate(Strict):
@@ -247,6 +247,63 @@ class ChatMessageIn(Strict):
 # Mismos valores que `services.intent.Intent`; un test los mantiene sincronizados
 # (schemas no importa servicios: se mantiene libre de dependencias de dominio).
 IntentValue = Literal["navegar", "dato", "analisis", "procedimental", "agregacion", "lectura", "correccion"]
+
+
+class FactPositionIn(Strict):
+    party_id: UUID | None = None
+    side: Literal["DEMANDANTE", "DEMANDADO", "TERCERO", "NO_ATRIBUIDO"]
+    position: Literal["ALLEGES", "DENIES", "ADMITS", "UNKNOWN"]
+    source_claim_id: UUID | None = None
+    source_citation_id: UUID | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+
+
+class FactUpdateIn(Strict):
+    expected_version: int = Field(ge=1)
+    reason: str = Field(min_length=3, max_length=1000)
+    proposition: str | None = Field(default=None, min_length=3, max_length=4000)
+    proof_status: Literal["ALLEGED", "ADMITTED", "EVIDENCE_SUPPORTED",
+                          "JUDICIALLY_PROVEN", "DISPUTED", "REJECTED", "UNRESOLVED"] | None = None
+    issue_id: UUID | None = None
+    fact_code: str | None = Field(default=None, max_length=80)
+    positions: list[FactPositionIn] | None = Field(default=None, max_length=50)
+
+    _v = field_validator("proposition", "fact_code")(_no_control)
+
+
+class FactReviewIn(Strict):
+    action: Literal["ACCEPT", "EDIT", "REJECT", "FLAG"]
+    reason: str = Field(min_length=3, max_length=1000)
+    changes: dict = Field(default_factory=dict)
+
+
+class AuditReviewIn(Strict):
+    action: Literal["ACCEPT", "EDIT", "REJECT", "FLAG"]
+    reason: str = Field(min_length=3, max_length=1000)
+    changes: dict = Field(default_factory=dict)
+
+
+class VerificationPolicyIn(Strict):
+    mode: Literal["STRICT", "BALANCED", "ADVISORY"] | None = None
+    require_primary_citation: bool | None = None
+    require_legal_norm: bool | None = None
+    block_on_unsupported: bool | None = None
+    block_on_numbers: bool | None = None
+    block_on_parties: bool | None = None
+    block_on_legal_conclusion: bool | None = None
+    require_second_opinion: bool | None = None
+    second_opinion_enabled: bool | None = None
+    second_opinion_model_id: UUID | None = None
+    auto_second_opinion: Literal["NEVER", "ANALYSIS", "ALL", "STRICT_ONLY"] | None = None
+    max_unsupported_claims: int | None = Field(default=None, ge=0, le=100)
+    min_ocr_confidence: float | None = Field(default=None, ge=0, le=1)
+    min_asr_confidence: float | None = Field(default=None, ge=0, le=1)
+
+
+class SecondOpinionReviewIn(Strict):
+    action: Literal["ACCEPT", "EDIT", "REJECT", "FLAG"]
+    reason: str = Field(min_length=3, max_length=1000)
+    changes: dict = Field(default_factory=dict)
 
 
 class IntentFeedbackIn(Strict):

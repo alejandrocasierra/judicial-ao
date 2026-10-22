@@ -34,8 +34,8 @@ from app.schemas import ChatMessageIn, ChatSessionIn, IntentFeedbackIn, QueryIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import (audit, case_tools, claim_seed, contradiction_seed, correction,
                           deadline as deadline_mod, entity_seed, evidence_carryover,
-                          evidence_labels, intent as intent_service, intent_profile, memory,
-                          occurrences, party_answer, query_hints, ratelimit, role_answer,
+                          evidence_labels, intent as intent_service, intent_profile, legal_guard,
+                          memory, occurrences, party_answer, query_hints, ratelimit, role_answer,
                           text_terms)
 from app.services.case_tools import ToolContext
 from app.routers.query import _attachment_file_cards, _run_query, _safe_emit
@@ -690,7 +690,8 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
         return _run_query(case_id, query_body, request, p, locale, case, s,
                           history=history, hints=hints, ocr_mode=ocr_mode, asr_mode=asr_mode,
                           intent_decision=decision, emit=emit, deadline=deadline,
-                          seed_items=_merge_seed(carryover, seed), background=background)
+                          seed_items=_merge_seed(carryover, seed), background=background,
+                          persist_audit=False)
 
     if body.strategy == "agent":
         result = _query("agent")
@@ -799,6 +800,34 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
         title = session["title"] or body.content[:80]
         c.execute(text("UPDATE chat_sessions SET title = :t, updated_at = now() WHERE id = :s"),
                   {"t": title, "s": str(session_id)})
+        guard_result = result.pop("_guard_result", None)
+        # Una respuesta cacheada puede venir de una version anterior del cache
+        # sin `_guard_result`. Se reaudita contra el model_run persistido para
+        # que el audit_id corresponda a ESTE mensaje y no al anterior.
+        if guard_result is None and result.get("cached"):
+            result.pop("audit_id", None)
+            result.pop("audit_status", None)
+        if guard_result is None and result.get("cached") and result.get("model_run_id"):
+            try:
+                reaudit = legal_guard.audit_message(
+                    c, org_id=str(p.org_id), case_id=str(case_id),
+                    message_id=str(assistant_msg["id"]), actor_id=str(p.user_id))
+                if reaudit:
+                    result["audit_id"] = reaudit.get("audit_id")
+                    result["audit_status"] = reaudit.get("status")
+            except Exception as exc:  # noqa: BLE001
+                log.warning("cached chat re-audit failed: %s", exc)
+        elif guard_result is not None:
+            try:
+                result["audit_id"] = legal_guard.persist(
+                    c, org_id=str(p.org_id), case_id=str(case_id),
+                    question=body.content, answer=str(result.get("answer") or ""),
+                    result=guard_result, model_run_id=result.get("model_run_id"),
+                    chat_message_id=str(assistant_msg["id"]), actor_id=str(p.user_id),
+                    pipeline_version=s.PIPELINE_VERSION)
+                result["audit_status"] = guard_result.get("status")
+            except Exception as exc:  # noqa: BLE001 - no invalida la respuesta
+                log.warning("chat legal audit persist failed: %s", exc)
     _update_summary(s, p, session_id, session)
     return {"user_message": user_msg, "assistant_message": assistant_msg, **result}
 

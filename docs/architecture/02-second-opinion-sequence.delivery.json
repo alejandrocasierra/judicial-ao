@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "9b152625-b097-48d6-8354-6340167c9704",
+  "status": "current",
+  "command": "deliver",
+  "type": "sequence",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\02-second-opinion-sequence.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\02-second-opinion-sequence.html",
+  "specification": {
+    "sha256": "48214bb52cfa2afda4580fe12e7b4d15bfc0329c03f3cc50b8c395261957038e",
+    "bytes": 3335
+  },
+  "artifact": {
+    "sha256": "0a6d5a431ffbe700e94e75b854001c8dba98f01137fa8b2a69ffc94cfa3f09de",
+    "bytes": 757989
+  }
+}

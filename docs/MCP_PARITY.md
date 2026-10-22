@@ -27,3 +27,19 @@ Un cliente MCP (Claude Code, Cursor) recibe **evidencia estructurada** y decide
 su propia presentación. Si se necesita el formato del chat, se usa el endpoint
 HTTP `/v1/cases/{id}/chats/{sid}/messages/stream`, no MCP. Esta separación evita
 dos compositores divergentes y mantiene una sola política de citas.
+
+---
+
+## Tools de los modulos legales (2026-10-22)
+
+Se agregaron a `case_tools` y al servidor MCP, siempre como lectura:
+
+- `get_fact`
+- `list_facts`
+- `verify_citation`
+- `lookup_legal_rule`
+
+`verify_citation` y `lookup_legal_rule` no sustituyen al gate deterministico:
+solo devuelven la fuente/regla para que el agente razone. La segunda opinion y
+la extraccion de hechos tienen allowlists de solo lectura; no pueden escribir
+`facts`, `claims`, `evidence`, `documents` ni `legal_rules`.

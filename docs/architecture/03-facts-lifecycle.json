@@ -1,0 +1,40 @@
+{
+  "schema_version": 2,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Hecho: de alegacion a hecho probado",
+    "output": "docs/architecture/03-facts-lifecycle.html",
+    "quality_profile": "showcase",
+    "visual_preset": "signal-flow"
+  },
+  "lanes": [
+    { "id": "main", "label": "Estados del hecho" },
+    { "id": "support", "label": "Prueba y decision" },
+    { "id": "review", "label": "Revision humana" },
+    { "id": "terminal", "label": "Salidas" }
+  ],
+  "states": [
+    { "id": "alleged", "type": "start", "label": "Alegado", "sublabel": "sin prueba", "lane": "main", "col": 0, "step": "01", "tag": "inicio" },
+    { "id": "supported", "type": "active", "label": "Con prueba", "sublabel": "evidencia admisible", "lane": "main", "col": 1, "step": "02", "tag": "no probado" },
+    { "id": "disputed", "type": "decision", "label": "Discutido", "sublabel": "dos versiones", "lane": "main", "col": 2, "step": "03", "tag": "conflicto" },
+    { "id": "admitted", "type": "success", "label": "Admitido", "sublabel": "parte admite", "lane": "main", "col": 3, "step": "04", "tag": "probado" },
+    { "id": "judicial", "type": "success", "label": "Probado judicialmente", "sublabel": "decision + documento", "lane": "main", "col": 4, "step": "05", "tag": "probado" },
+    { "id": "rejected", "type": "failure", "label": "Rechazado", "sublabel": "decision o evidencia", "lane": "terminal", "col": 2, "tag": "terminal" },
+    { "id": "unresolved", "type": "waiting", "label": "Sin resolver", "sublabel": "falta informacion", "lane": "terminal", "col": 3, "tag": "revision" }
+  ],
+  "transitions": [
+    { "from": "alleged", "to": "supported", "label": "evidencia" },
+    { "from": "supported", "to": "disputed", "label": "contradiccion", "variant": "security" },
+    { "from": "supported", "to": "admitted", "label": "admission", "variant": "emphasis" },
+    { "from": "supported", "to": "judicial", "label": "decision", "variant": "emphasis" },
+    { "from": "disputed", "to": "judicial", "label": "decision", "variant": "emphasis" },
+    { "from": "disputed", "to": "rejected", "label": "descarte", "variant": "security", "labelDy": 25 },
+    { "from": "alleged", "to": "unresolved", "label": "sin fuente", "variant": "dashed" },
+    { "from": "admitted", "to": "judicial", "label": "decision posterior", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Solo dos estados publican", "items": ["ADMITTED exige posicion ADMITS", "JUDICIALLY_PROVEN exige decision y documento", "is_proven se calcula en la base"] },
+    { "dot": "amber", "title": "Con prueba no es probado", "items": ["EVIDENCE_SUPPORTED queda en su propia pestana", "El modelo no puede elevar el estado", "La revision humana exige motivo"] },
+    { "dot": "rose", "title": "Trazabilidad", "items": ["Cada cambio crea fact_revisions", "El original no se borra", "Legal hold bloquea la purga"] }
+  ]
+}

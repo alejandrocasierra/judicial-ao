@@ -17,6 +17,7 @@ import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
 import { PartiesButton } from "@/components/parties-panel";
 import { TimelineDialog } from "@/components/timeline-dialog";
+import { ProcessTabs } from "@/components/process-tabs";
 import {
   Folder, FolderOpen, FolderPlus, Upload, ChevronRight, ArrowLeft,
   FileText, FileSpreadsheet, FileImage, Video, File as FileIcon,
@@ -326,6 +327,8 @@ export default function ProcesoDetallePage() {
           </Button>
         </div>
       </div>
+
+      <ProcessTabs caseId={caseId} />
 
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
         <button className="hover:text-foreground" onClick={() => setCurrentFolder(null)}>Raíz del proceso</button>

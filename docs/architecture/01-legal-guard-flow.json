@@ -1,0 +1,56 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Gate legal: de la pregunta a la respuesta publicada",
+    "output": "docs/architecture/01-legal-guard-flow.html",
+    "quality_profile": "showcase",
+    "visual_preset": "signal-flow",
+    "viewBox": [1050, 652]
+  },
+  "lanes": [
+    { "id": "ui", "label": "Entrada y salida" },
+    { "id": "retrieval", "label": "Evidencia" },
+    { "id": "guard", "label": "Gate deterministico" },
+    { "id": "judge", "label": "Juez y publicacion", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "ask", "label": "Pregunta", "fromCol": 0, "toCol": 1 },
+    { "id": "check", "label": "Verificar", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "publish", "label": "Publicar o bloquear", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    { "id": "evidence", "label": "Solo fuentes del caso", "lane": "retrieval", "fromCol": 1, "toCol": 2, "variant": "dashed" },
+    { "id": "critical", "label": "CRITICAL bloquea", "lane": "judge", "fromCol": 4, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": ["question", "retrieve", "claims", "citations", "numbers", "compose", "audit", "ui"],
+  "nodes": [
+    { "id": "question", "lane": "ui", "col": 0, "type": "external", "label": "Pregunta", "sublabel": "usuario", "width": 130 },
+    { "id": "ui", "lane": "ui", "col": 5, "type": "frontend", "label": "Respuesta + badge", "sublabel": "audit_status", "width": 140 },
+    { "id": "retrieve", "lane": "retrieval", "col": 1, "type": "database", "label": "Retrieval", "sublabel": "pgvector + FTS + grafo", "width": 145 },
+    { "id": "claims", "lane": "guard", "col": 2, "type": "backend", "label": "Claims + citas", "sublabel": "handles E1..En", "width": 140 },
+    { "id": "citations", "lane": "guard", "col": 3, "type": "backend", "label": "Citas y cifras", "sublabel": "pagina / segmento + match", "width": 145 },
+    { "id": "numbers", "lane": "guard", "col": 4, "type": "backend", "label": "Partes y normas", "sublabel": "ficha + legal_rules", "width": 145 },
+    { "id": "decision", "lane": "judge", "col": 2, "type": "security", "label": "Decision / contrad.", "sublabel": "fuente primaria", "width": 165 },
+    { "id": "judge", "lane": "judge", "col": 3, "type": "backend", "label": "Juez semantico", "sublabel": "modelo distinto", "width": 135 },
+    { "id": "compose", "lane": "judge", "col": 4, "type": "backend", "label": "Compositor", "sublabel": "solo claims aprobados", "width": 140 },
+    { "id": "audit", "lane": "judge", "col": 5, "type": "database", "label": "answer_audit", "sublabel": "hallazgos + fuentes", "width": 135 }
+  ],
+  "edges": [
+    { "id": "ask-retrieve", "from": "question", "to": "retrieve", "label": "pregunta", "variant": "emphasis" },
+    { "id": "retrieve-claims", "from": "retrieve", "to": "claims", "label": "evidencia", "variant": "default" },
+    { "id": "claims-citations", "from": "claims", "to": "citations", "variant": "emphasis" },
+    { "id": "citations-numbers", "from": "citations", "to": "numbers", "variant": "default" },
+    { "id": "numbers-decision", "from": "numbers", "to": "decision", "variant": "security" },
+    { "id": "decision-judge", "from": "decision", "to": "judge", "variant": "default" },
+    { "id": "judge-compose", "from": "judge", "to": "compose", "variant": "emphasis" },
+    { "id": "compose-audit", "from": "compose", "to": "audit", "variant": "default" },
+    { "id": "audit-ui", "from": "audit", "to": "ui", "label": "publica / bloquea", "variant": "emphasis" },
+    { "id": "numbers-compose", "from": "numbers", "to": "compose", "label": "claims aprobados", "variant": "default" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Publicable", "items": ["Claim con cita primaria", "Cifras, fechas y partes coinciden", "Norma activa y decision con fuente"] },
+    { "dot": "rose", "title": "Bloqueo", "items": ["CRITICAL elimina el claim", "Si no queda ningun claim: insufficient", "El hallazgo queda persistido"] },
+    { "dot": "amber", "title": "Limite", "items": ["OCR/ASR bajo -> revision", "Contradiccion -> ambas versiones", "El juez no reemplaza al determinista"] }
+  ]
+}

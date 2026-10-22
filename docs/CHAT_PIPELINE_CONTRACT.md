@@ -564,3 +564,20 @@ una capa compartida.
 .\.venv\Scripts\python.exe -m ruff check apps tests scripts
 cd apps/web; npm run lint; npm run build
 ```
+
+---
+
+## 9. Gate legal y segunda opinion (2026-10-22)
+
+Toda respuesta nueva pasa por `legal_guard` antes de `compose.render`:
+
+- cita primaria resuelta a pagina o segmento;
+- cifras, fechas, montos y nombres;
+- partes y roles del expediente;
+- normas activas en `legal_rules`;
+- decisiones judiciales y contradicciones.
+
+El resultado se persiste en `answer_audits`; el mensaje devuelve `audit_id` y
+`audit_status`. Un hallazgo `CRITICAL` elimina el claim afectado; si no queda
+ningun claim, la respuesta es `insufficient`. La segunda opinion es asincrona,
+exige un modelo distinto y nunca escribe en el expediente.

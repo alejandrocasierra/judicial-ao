@@ -149,3 +149,8 @@ JSONL + Markdown + chunks + graph) from the process page.
 
 ### Security
 Multi-tenant **RLS**, **immutable evidence**, **grounded AI** (no model call without evidence), secrets never committed.
+
+### Módulos legales
+- Implementación: [`docs/IMPLEMENTACION_MODULOS_LEGALES_2026-10-22.md`](docs/IMPLEMENTACION_MODULOS_LEGALES_2026-10-22.md)
+- Arquitectura: [`docs/architecture/README.md`](docs/architecture/README.md)
+- Contratos de agentes/skills: [`docs/CONTRATOS_HARNESS_MODULOS_LEGALES.md`](docs/CONTRATOS_HARNESS_MODULOS_LEGALES.md)

@@ -262,6 +262,19 @@ class Settings(BaseSettings):
     # Modelo juez (ai_models.id). Si falta, usa LLM_ROUTING["verification"] o el
     # proveedor por defecto. Se prefiere un modelo distinto al que respondió.
     VERIFY_MODEL_ID: str | None = None
+    # Gate legal deterministico (migraciones 0055-0058). Se puede apagar para
+    # entornos sin migrar; en local/produccion se activa tras el despliegue.
+    LEGAL_GUARD_ENABLED: bool = True
+    LEGAL_GUARD_MODE: Literal["STRICT", "BALANCED", "ADVISORY"] = "BALANCED"
+    LEGAL_GUARD_REQUIRE_SECOND_OPINION: bool = False
+    LEGAL_GUARD_MAX_ANSWER_CHARS: int = Field(default=20000, gt=0)
+    # Segunda opinion: apagada hasta que exista un modelo distinto configurado.
+    SECOND_OPINION_ENABLED: bool = True
+    SECOND_OPINION_MODEL_ID: str | None = None
+    SECOND_OPINION_MAX_COST: float = Field(default=1.0, ge=0)
+    SECOND_OPINION_TIMEOUT_SECONDS: int = Field(default=180, gt=0)
+    # Ledger de hechos por parte (migracion 0057).
+    FACTS_PROOF_ENABLED: bool = True
     # Reescribir la consulta con el historial (determinista + sinónimos; el LLM
     # opcional solo se usa si LLM_ROUTING define "query_rewrite").
     QUERY_REWRITE_ENABLED: bool = True

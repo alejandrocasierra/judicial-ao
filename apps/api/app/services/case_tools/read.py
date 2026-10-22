@@ -1437,3 +1437,80 @@ def get_timeline(conn: Connection, case_id: str, ctx: ToolContext, query: str | 
                  start_date: str | None = None, end_date: str | None = None, k: int = 15) -> list[dict[str, Any]]:
     return _timeline(conn, case_id, query, start_date, end_date, k)
 
+
+
+# ---------------------------------------------------------------------------
+# Herramientas de los modulos legales (solo lectura).
+# ---------------------------------------------------------------------------
+
+@register("get_fact",
+          "Lee un hecho del ledger con sus posiciones, evidencia y decision.",
+          {"fact_id": {"type": "string", "format": "uuid"}})
+def get_fact_tool(conn: Connection, case_id: str, ctx: ToolContext, fact_id: str) -> list[dict[str, Any]]:
+    from app.services import party_facts
+    fact = party_facts.get_fact(conn, case_id, str(fact_id), with_revisions=False)
+    if not fact:
+        return _err("Hecho no encontrado en este expediente")
+    return [{"handle": "F1", "source_type": "fact", "text": fact.get("proposition") or "",
+             "fact_id": str(fact.get("id")), "proof_status": fact.get("proof_status"),
+             "is_proven": bool(fact.get("is_proven")), "positions": fact.get("positions") or [],
+             "evidence": fact.get("evidence") or [], "decision": fact.get("decision")}]
+
+
+@register("list_facts",
+          "Lista hechos del ledger, opcionalmente filtrados por estado de prueba y parte.",
+          {"proof": {"type": "string", "default": "proven"},
+           "side": {"type": "string", "description": "DEMANDANTE, DEMANDADO, TERCERO"},
+           "q": {"type": "string"}, "limit": {"type": "integer", "default": 50}})
+def list_facts_tool(conn: Connection, case_id: str, ctx: ToolContext,
+                    proof: str = "proven", side: str | None = None, q: str | None = None,
+                    limit: int = 50) -> list[dict[str, Any]]:
+    from app.services import party_facts
+    facts = party_facts.list_facts(conn, case_id, proof=proof, side=side, q=q, limit=limit)
+    return [{"handle": f"F{i}", "source_type": "fact", "text": f.get("proposition") or "",
+             "fact_id": str(f.get("id")), "proof_status": f.get("proof_status"),
+             "is_proven": bool(f.get("is_proven")), "positions": f.get("positions") or []}
+            for i, f in enumerate(facts, 1)]
+
+
+@register("verify_citation",
+          "Verifica que una cita apunte a una pagina/segmento existente del mismo expediente.",
+          {"citation_id": {"type": "string", "format": "uuid"}})
+def verify_citation_tool(conn: Connection, case_id: str, ctx: ToolContext,
+                         citation_id: str) -> list[dict[str, Any]]:
+    from app.core.db import one
+    from app.services import citations as citations_service
+    citation = one(conn, "SELECT * FROM citations WHERE id=:i AND case_id=:c",
+                   i=str(citation_id), c=case_id)
+    if not citation:
+        return _err("Cita no encontrada en este expediente")
+    ok, reasons, source = citations_service.validate(conn, citation)
+    return [{"handle": "C1", "source_type": "citation", "text": str(source.get("excerpt") or ""),
+             "citation_id": str(citation_id), "valid": ok, "reasons": reasons,
+             "source": source}]
+
+
+@register("lookup_legal_rule",
+          "Busca una norma activa en legal_rules. Sin fila activa no se puede afirmar la norma.",
+          {"identifier": {"type": "string"},
+           "jurisdiction": {"type": "string", "default": ""},
+           "source": {"type": "string", "default": ""}})
+def lookup_legal_rule_tool(conn: Connection, case_id: str, ctx: ToolContext,
+                           identifier: str, jurisdiction: str = "",
+                           source: str = "") -> list[dict[str, Any]]:
+    from app.core.db import rows
+    rule_rows = rows(conn, """
+        SELECT id, jurisdiction, source, identifier, title, text, version_date, official_url
+        FROM legal_rules WHERE organization_id=:o AND is_active
+          AND (identifier ILIKE :q OR coalesce(title,'') ILIKE :q)
+          AND (:j = '' OR jurisdiction = :j)
+          AND (:s = '' OR source = :s)
+        ORDER BY version_date DESC NULLS LAST LIMIT 5
+    """, o=ctx.org_id, q=f"%{identifier}%", j=jurisdiction, s=source)
+    if not rule_rows:
+        return _err("Norma no verificada en legal_rules")
+    return [{"handle": f"L{i}", "source_type": "legal_rule", "text": r.get("text") or "",
+             "legal_rule_id": str(r.get("id")), "identifier": r.get("identifier"),
+             "jurisdiction": r.get("jurisdiction"), "source": r.get("source"),
+             "version_date": str(r.get("version_date") or "")}
+            for i, r in enumerate(rule_rows, 1)]

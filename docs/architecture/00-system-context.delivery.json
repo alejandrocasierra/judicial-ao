@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "c08ed9ce-bfeb-43c7-ad48-48e9e1e82d33",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\00-system-context.json",
+  "output": "C:\\Users\\ale13\\OneDrive\\Escritorio\\judicial-ai\\docs\\architecture\\00-system-context.html",
+  "specification": {
+    "sha256": "703898f2d206c88efebb0ecd97e540813d533a3aed4986d540a97d3642db7960",
+    "bytes": 2636
+  },
+  "artifact": {
+    "sha256": "c842c1b21bd8851f6b8e6883a25d585552765fff2d2e47ea99d22f0853ec5be7",
+    "bytes": 762196
+  }
+}

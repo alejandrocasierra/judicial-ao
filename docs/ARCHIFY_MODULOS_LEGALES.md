@@ -5,6 +5,8 @@
 **Base:** commit `963297c`  
 **Plan maestro:** [PLAN_MODULOS_LEGALES_2026-10-22.md](PLAN_MODULOS_LEGALES_2026-10-22.md)
 
+**Artefactos generados:** [`docs/architecture/README.md`](architecture/README.md) (4 diagramas Archify validados)
+
 ## 0. Estado actual
 
 No existe hoy una carpeta `docs/architecture/` ni artefactos Archify versionados en el repositorio. La arquitectura vive dispersa en `docs/SSD_Judicial_AI_Platform.md`, `docs/CHAT_PIPELINE_CONTRACT.md`, `docs/MCP_PARITY.md` y el código. Este plan crea la capa visual que faltaba, sin reescribir el SSD.

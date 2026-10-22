@@ -149,6 +149,81 @@ def ensure_asr_context_agent(conn: Connection, org_id: str, user_id: str | None)
     )
 
 
+LEGAL_SKILLS: list[tuple[str, str]] = [
+    ("Cita primaria", "Toda afirmacion debe resolver a una pagina o segmento del mismo expediente; sin cita no se publica."),
+    ("Cifras, fechas y montos", "Compara cada cifra, fecha, monto y porcentaje con el texto citado; no redondees ni conviertas."),
+    ("Partes y roles", "Valida nombres, alias y roles contra la ficha de partes; no crees partes."),
+    ("Norma y jurisdiccion", "Toda ley, codigo o articulo debe existir activo en legal_rules; si falta, se bloquea."),
+    ("Contradiccion en dos versiones", "Si hay dos versiones, muestra ambas o declara que no hay determinacion judicial."),
+    ("Decision judicial", "Un hecho probado exige decision judicial con documento fuente."),
+    ("Abstencion y limites", "Si la evidencia no alcanza, devuelve un limite explicito; no rellenes con memoria."),
+    ("Respuesta independiente", "Responde sin ver la respuesta del primer modelo."),
+    ("Comparacion probatoria", "Compara claims, citas, cifras y omisiones sin declarar una verdad unica."),
+    ("Posicion de parte", "Distingue alega, niega y admite; no atribuyas posiciones sin cita."),
+    ("Prueba admitida", "Distingue evidencia admisible de una simple alegacion."),
+    ("Hecho probado", "Aplica la taxonomia: solo ADMITTED y JUDICIALLY_PROVEN son probados."),
+    ("Revision humana", "Prepara el checklist de revision; no apruebes por el humano."),
+]
+
+LEGAL_AGENTS: list[tuple[str, str, list[str]]] = [
+    (
+        "Verificador legal",
+        "Auditas claims contra fuentes primarias, partes, normas y decisiones. No escribes en la base de datos. "
+        "Devuelves veredictos y hallazgos; un CRITICAL bloquea el claim.",
+        ["Cita primaria", "Cifras, fechas y montos", "Partes y roles", "Norma y jurisdiccion",
+         "Contradiccion en dos versiones", "Decision judicial", "Abstencion y limites"],
+    ),
+    (
+        "Auditor de segunda opinion",
+        "Respondes de forma independiente y luego comparas con la respuesta original. No ves la respuesta "
+        "original en la fase 1 y no tienes tools de escritura.",
+        ["Respuesta independiente", "Comparacion probatoria", "Cita primaria", "Norma y jurisdiccion"],
+    ),
+    (
+        "Analista de hechos",
+        "Extraes hechos candidatos y posiciones de parte. No declaras probado nada; solo preparas el ledger "
+        "para revision humana.",
+        ["Posicion de parte", "Prueba admitida", "Hecho probado", "Revision humana", "Cita primaria"],
+    ),
+]
+
+
+def ensure_legal_agents(conn: Connection, org_id: str, user_id: str | None) -> None:
+    """Crea (idempotente por nombre) los agentes de los modulos legales.
+
+    No depende de que la organizacion no tenga agentes: se ejecuta siempre y no
+    pisa prompts editados.
+    """
+    skill_ids: dict[str, str] = {}
+    for name, prompt in LEGAL_SKILLS:
+        existing = conn.execute(
+            text("SELECT id FROM skills WHERE organization_id=:o AND name=:n"),
+            {"o": org_id, "n": name},
+        ).first()
+        if existing:
+            skill_ids[name] = str(existing[0])
+        else:
+            row = conn.execute(
+                text("""INSERT INTO skills (organization_id, name, system_prompt, created_by, is_system)
+                        VALUES (:o,:n,:p,:u,true) RETURNING id"""),
+                {"o": org_id, "n": name, "p": prompt, "u": user_id},
+            ).first()
+            skill_ids[name] = str(row[0])
+    for name, prompt, skills in LEGAL_AGENTS:
+        exists = conn.execute(
+            text("SELECT 1 FROM agents WHERE organization_id=:o AND name=:n"),
+            {"o": org_id, "n": name},
+        ).first()
+        if exists:
+            continue
+        conn.execute(
+            text("""INSERT INTO agents (organization_id, name, system_prompt, skills, created_by, is_system, kind)
+                    VALUES (:o,:n,:p,:s,:u,true,'system')"""),
+            {"o": org_id, "n": name, "p": prompt,
+             "s": [skill_ids[x] for x in skills if x in skill_ids], "u": user_id},
+        )
+
+
 def ensure_task_agents(conn: Connection, org_id: str, user_id: str | None) -> None:
     """Crea (idempotente, por nombre) los agentes de procesamiento OCR/ASR con su
     skill enlazada. A diferencia del agente jurídico, se garantiza siempre: si el

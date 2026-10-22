@@ -454,11 +454,33 @@ def chunk_events(conn: Connection, org_id: str, case_id: str) -> list[dict[str, 
 
 
 def chunk_facts(conn: Connection, org_id: str, case_id: str) -> list[dict[str, Any]]:
-    records = rows(conn, "SELECT id, proposition, status FROM facts WHERE case_id = :c", c=case_id)
+    records = rows(conn, """
+        SELECT f.id, f.proposition, f.status, f.proof_status, f.proof_basis,
+               f.is_proven, f.fact_code, f.issue_id,
+               (SELECT coalesce(json_agg(json_build_object(
+                    'party_id', fp.party_id, 'side', fp.side, 'position', fp.position)),
+                  '[]'::json)
+                FROM fact_positions fp WHERE fp.fact_id = f.id) AS positions,
+               (SELECT coalesce(json_agg(json_build_object(
+                    'evidence_id', el.evidence_id, 'stance', el.stance)),
+                  '[]'::json)
+                FROM evidence_links el WHERE el.fact_id = f.id) AS evidence
+        FROM facts f WHERE f.case_id = :c
+    """, c=case_id)
     out: list[dict[str, Any]] = []
     for r in records:
         src = _source_for_target(conn, case_id, "fact", str(r["id"]))
-        ch = _structured_chunk(org_id, case_id, "paragraph", r["proposition"], {"status": r["status"]}, src)
+        meta = {
+            "status": r.get("status"),
+            "proof_status": r.get("proof_status") or "ALLEGED",
+            "proof_basis": r.get("proof_basis") or "NONE",
+            "is_proven": bool(r.get("is_proven")),
+            "fact_code": r.get("fact_code"),
+            "issue_id": str(r.get("issue_id")) if r.get("issue_id") else None,
+            "party_positions": r.get("positions") or [],
+            "evidence_links": r.get("evidence") or [],
+        }
+        ch = _structured_chunk(org_id, case_id, "fact", r["proposition"], meta, src)
         if ch:
             out.append(ch)
     return out
@@ -498,8 +520,12 @@ def chunk_evidence(conn: Connection, org_id: str, case_id: str) -> list[dict[str
 
 def chunk_legal_rules(conn: Connection, org_id: str, case_id: str) -> list[dict[str, Any]]:
     records = rows(conn, """
-        SELECT id, text, jurisdiction, source, identifier
-        FROM legal_rules WHERE case_id = :c""", c=case_id)
+        SELECT lr.id, lr.text, lr.jurisdiction, lr.source, lr.identifier
+        FROM legal_rules lr
+        JOIN cases c ON c.id = :c
+        WHERE lr.organization_id = c.organization_id
+          AND lr.jurisdiction = c.jurisdiction
+          AND lr.is_active""", c=case_id)
     out: list[dict[str, Any]] = []
     for r in records:
         src = _source_for_target(conn, case_id, "legal_rule", str(r["id"]))

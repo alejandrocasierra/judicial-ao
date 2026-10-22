@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from app.workers.handlers import document_classification, document_ocr, embedding, file_ingest, graph_build, indexing, legal_extraction, media_asr, media_diarize, procedural_links, xlsx_ingest
+from app.workers.handlers import (document_classification, document_ocr, embedding, facts_build,
+                                  file_ingest, graph_build, indexing, legal_extraction, media_asr,
+                                  media_diarize, procedural_links, second_opinion as second_opinion_handler,
+                                  xlsx_ingest)
 
 # Un handler recibe el job (dict de la fila `jobs`) y devuelve el resultado
 # que el executor persiste.
@@ -29,6 +32,8 @@ PENDING_PHASE = {
     "file_ingest": "procesos",
     "xlsx_ingest": "procesos",
     "procedural_links": "procesos",
+    "second_opinion": "modulos-legales",
+    "facts_build": "modulos-legales",
 }
 
 
@@ -57,6 +62,8 @@ HANDLERS: dict[str, Handler] = {
     "file_ingest": file_ingest.handle,
     "xlsx_ingest": xlsx_ingest.handle,
     "procedural_links": procedural_links.handle,
+    "second_opinion": second_opinion_handler.handle,
+    "facts_build": facts_build.handle,
 }
 
 for _jt in PENDING_PHASE:

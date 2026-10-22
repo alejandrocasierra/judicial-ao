@@ -5,9 +5,11 @@
 **Base verificada:** rama `main`, commit `963297c`  
 **Alcance:** tres módulos nuevos sobre el producto actual, sin reescribir el pipeline ni romper los cuatro casos cerrados.  
 **Documentos hermanos:**
+- [Implementación y evidencia](IMPLEMENTACION_MODULOS_LEGALES_2026-10-22.md)
 - [Contratos de harness](CONTRATOS_HARNESS_MODULOS_LEGALES.md)
 - [Guía de diseño web y responsive](GUIA_DISENO_MODULOS_LEGALES.md)
 - [Plan de diagramas Archify](ARCHIFY_MODULOS_LEGALES.md)
+- [Arquitectura generada](architecture/README.md)
 
 ---
 

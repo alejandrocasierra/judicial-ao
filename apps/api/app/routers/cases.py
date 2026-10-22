@@ -518,14 +518,6 @@ def claims(case_id: UUID, p: Principal = Depends(current_principal)):
         FROM claims cl LEFT JOIN parties pa ON pa.id = cl.claimant_party_id WHERE cl.case_id = :c ORDER BY cl.created_at""")
 
 
-@router.get("/{case_id}/facts")
-def facts(case_id: UUID, p: Principal = Depends(current_principal)):
-    return _list(case_id, p, """SELECT f.id, f.proposition, f.status, f.determined_by_decision_id, f.review_status, f.version,
-        (SELECT coalesce(json_agg(json_build_object('claim_id', fc.claim_id, 'stance', fc.stance)), '[]') FROM fact_claims fc WHERE fc.fact_id=f.id) AS claims,
-        (SELECT coalesce(json_agg(json_build_object('evidence_id', el.evidence_id, 'stance', el.stance)), '[]') FROM evidence_links el WHERE el.fact_id=f.id) AS evidence
-        FROM facts f WHERE f.case_id = :c""")
-
-
 @router.get("/{case_id}/evidence")
 def evidence(case_id: UUID, p: Principal = Depends(current_principal)):
     """Matriz de evidencia (SSD §108): el estado se deriva de vínculos, no de una puntuación."""

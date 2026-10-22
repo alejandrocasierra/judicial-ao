@@ -54,7 +54,17 @@
     "METHOD_NOT_ALLOWED": "El método HTTP no está permitido para este recurso.",
     "CHAT_NOT_FOUND": "Conversación no encontrada",
     "AGENT_NOT_FOUND": "Agente no encontrado",
-    "UNKNOWN_TOOL": "Herramienta no reconocida para este agente."
+    "UNKNOWN_TOOL": "Herramienta no reconocida para este agente.",
+    "AUDIT_CONTEXT_MISSING": "No hay contexto auditable para este mensaje.",
+    "AUDIT_NOT_FOUND": "Auditoría no encontrada.",
+    "FACT_NOT_FOUND": "Hecho no encontrado.",
+    "FACT_REVIEW_ERROR": "No se pudo revisar el hecho.",
+    "FACT_VALIDATION_ERROR": "El hecho no cumple las reglas de prueba.",
+    "MESSAGE_NOT_FOUND": "Mensaje no encontrado.",
+    "SECOND_OPINION_DISABLED": "La segunda opinión está deshabilitada.",
+    "SECOND_OPINION_NOT_FOUND": "Segunda opinión no encontrada.",
+    "SECOND_OPINION_MODEL_REQUIRED": "Configura un modelo distinto para la segunda opinión.",
+    "SECOND_OPINION_MODEL_MUST_DIFFER": "El modelo de segunda opinión debe ser distinto del respondedor."
   },
   "messages": {
     "insufficient_evidence": "No encontré la respuesta en las fuentes recuperadas. Busqué en documentos, transcripciones y grafo; puedo acotar la búsqueda por documento, fecha o nombre.",

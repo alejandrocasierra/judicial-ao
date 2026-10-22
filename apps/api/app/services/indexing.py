@@ -133,7 +133,7 @@ def index_structured(conn: Connection, org_id: str, case_id: str, actor_id: str 
     # Borrar solo chunks estructurados (no documentos ni media).
     conn.execute(text("""
         DELETE FROM chunks
-        WHERE case_id = :c AND chunk_type IN ('claim','timeline_event','paragraph',
+        WHERE case_id = :c AND chunk_type IN ('claim','timeline_event','paragraph','fact',
                                               'decision_reasoning','evidence_description','legal_rule')
     """), {"c": case_id})
     chunks: list[dict[str, Any]] = []

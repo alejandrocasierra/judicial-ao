@@ -54,7 +54,17 @@
     "METHOD_NOT_ALLOWED": "The HTTP method is not allowed for this resource.",
     "CHAT_NOT_FOUND": "Conversation not found",
     "AGENT_NOT_FOUND": "Agent not found",
-    "UNKNOWN_TOOL": "Tool not recognized for this agent."
+    "UNKNOWN_TOOL": "Tool not recognized for this agent.",
+    "AUDIT_CONTEXT_MISSING": "No auditable context for this message.",
+    "AUDIT_NOT_FOUND": "Audit not found.",
+    "FACT_NOT_FOUND": "Fact not found.",
+    "FACT_REVIEW_ERROR": "The fact could not be reviewed.",
+    "FACT_VALIDATION_ERROR": "The fact does not meet the proof rules.",
+    "MESSAGE_NOT_FOUND": "Message not found.",
+    "SECOND_OPINION_DISABLED": "Second opinion is disabled.",
+    "SECOND_OPINION_NOT_FOUND": "Second opinion not found.",
+    "SECOND_OPINION_MODEL_REQUIRED": "Configure a different model for the second opinion.",
+    "SECOND_OPINION_MODEL_MUST_DIFFER": "The second-opinion model must differ from the responder."
   },
   "messages": {
     "insufficient_evidence": "I could not find the answer in the retrieved sources. I searched documents, transcripts, and the graph; I can narrow it by document, date, or name.",

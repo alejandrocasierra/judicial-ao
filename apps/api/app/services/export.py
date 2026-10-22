@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.db import one, rows
 from app.services import markdown
 
-CKP_VERSION = "1.0"
+CKP_VERSION = "1.1"
 
 
 def _json_default(obj):
@@ -64,7 +64,10 @@ def build_package_files(conn: Connection, case_id: UUID) -> dict[str, bytes]:
           (SELECT count(*) FROM chunks WHERE case_id = :c) AS chunks,
           (SELECT count(*) FROM evidence WHERE case_id = :c) AS evidence,
           (SELECT count(*) FROM events WHERE case_id = :c AND kind = 'procedural') AS procedural_events,
-          (SELECT count(*) FROM event_relationships WHERE case_id = :c) AS relationships
+          (SELECT count(*) FROM event_relationships WHERE case_id = :c) AS relationships,
+          (SELECT count(*) FROM facts WHERE case_id = :c AND is_proven) AS proven_facts,
+          (SELECT count(*) FROM answer_audits WHERE case_id = :c) AS answer_audits,
+          (SELECT count(*) FROM second_opinion_runs WHERE case_id = :c) AS second_opinions
     """, c=cid)
 
     manifest = {
@@ -79,6 +82,9 @@ def build_package_files(conn: Connection, case_id: UUID) -> dict[str, bytes]:
         "evidence": stats["evidence"],
         "procedural_events": stats["procedural_events"],
         "relationships": stats["relationships"],
+        "proven_facts": stats["proven_facts"],
+        "answer_audits": stats["answer_audits"],
+        "second_opinions": stats["second_opinions"],
         "pipeline_version": s.PIPELINE_VERSION,
         "schema_version": s.SCHEMA_VERSION,
         "layout": {
@@ -87,7 +93,8 @@ def build_package_files(conn: Connection, case_id: UUID) -> dict[str, bytes]:
             "documents/<id>/pages/<n>.json": "página: texto + layout/bbox + procedencia",
             "chunks/chunks.jsonl": "unidades de recuperación (RAG/embeddings) con procedencia",
             "events/timeline.json": "línea de tiempo PROCESAL (actuaciones + relaciones)",
-            "entities/*.jsonl": "partes, entidades, claims, facts, evidencia, decisiones, speakers…",
+            "entities/*.jsonl": "partes, entidades, claims, facts, posiciones, revisiones, evidencia, decisiones, speakers…",
+            "audits/*.jsonl": "auditorias legales y segunda opinion (CKP 1.1)",
             "graph/*.jsonl": "nodos y aristas del knowledge graph",
         },
         "nota": "El PDF/video original es la FUENTE DE VERDAD; los formatos derivados no lo reemplazan.",
@@ -107,6 +114,8 @@ def build_package_files(conn: Connection, case_id: UUID) -> dict[str, bytes]:
     files["entities/events.jsonl"] = _jsonl(rows(conn, "SELECT * FROM events WHERE case_id = :c", c=cid))
     files["entities/claims.jsonl"] = _jsonl(rows(conn, "SELECT * FROM claims WHERE case_id = :c", c=cid))
     files["entities/facts.jsonl"] = _jsonl(rows(conn, "SELECT * FROM facts WHERE case_id = :c", c=cid))
+    files["entities/fact_positions.jsonl"] = _jsonl(rows(conn, "SELECT * FROM fact_positions WHERE case_id = :c", c=cid))
+    files["entities/fact_revisions.jsonl"] = _jsonl(rows(conn, "SELECT * FROM fact_revisions WHERE case_id = :c", c=cid))
     files["entities/evidence.jsonl"] = _jsonl(rows(conn, "SELECT * FROM evidence WHERE case_id = :c", c=cid))
     files["entities/contradictions.jsonl"] = _jsonl(rows(conn, "SELECT * FROM contradictions WHERE case_id = :c", c=cid))
     files["entities/legal_rules.jsonl"] = _jsonl(rows(conn, """
@@ -224,6 +233,24 @@ def build_package_files(conn: Connection, case_id: UUID) -> dict[str, bytes]:
         SELECT fc.* FROM fact_claims fc
         JOIN facts f ON f.id = fc.fact_id
         WHERE f.case_id = :c""", c=cid))
+    files["citations/legal_rule_citations.jsonl"] = _jsonl(rows(conn,
+        "SELECT * FROM legal_rule_citations WHERE case_id = :c", c=cid))
+    files["audits/answer_audits.jsonl"] = _jsonl(rows(conn,
+        "SELECT * FROM answer_audits WHERE case_id = :c ORDER BY created_at", c=cid))
+    files["audits/answer_audit_claims.jsonl"] = _jsonl(rows(conn, """
+        SELECT ac.* FROM answer_audit_claims ac JOIN answer_audits a ON a.id=ac.audit_id
+        WHERE a.case_id=:c""", c=cid))
+    files["audits/answer_audit_findings.jsonl"] = _jsonl(rows(conn, """
+        SELECT af.* FROM answer_audit_findings af JOIN answer_audits a ON a.id=af.audit_id
+        WHERE a.case_id=:c""", c=cid))
+    files["audits/second_opinion_runs.jsonl"] = _jsonl(rows(conn,
+        "SELECT * FROM second_opinion_runs WHERE case_id=:c ORDER BY created_at", c=cid))
+    files["audits/second_opinion_claims.jsonl"] = _jsonl(rows(conn, """
+        SELECT sc.* FROM second_opinion_claims sc JOIN second_opinion_runs r ON r.id=sc.run_id
+        WHERE r.case_id=:c""", c=cid))
+    files["audits/second_opinion_findings.jsonl"] = _jsonl(rows(conn, """
+        SELECT sf.* FROM second_opinion_findings sf JOIN second_opinion_runs r ON r.id=sf.run_id
+        WHERE r.case_id=:c""", c=cid))
 
     # Grafo
     files["graph/nodes.jsonl"] = _jsonl(rows(conn, "SELECT * FROM graph_nodes WHERE case_id = :c", c=cid))

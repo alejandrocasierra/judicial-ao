@@ -14,7 +14,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.errors import AppError, app_error_handler, http_error_handler, unhandled_error_handler, validation_error_handler
 from app.core.i18n import negotiate
-from app.routers import admin, audit_router, auth, cases, chats, citations, documents, folders, graph, health, meta, models, query, review
+from app.routers import (admin, audit_router, audits, auth, cases, chats, citations,
+                         documents, facts, folders, graph, health, meta, models, query,
+                         review, second_opinion)
 
 
 def _warm_intent_embeddings() -> None:
@@ -80,7 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     for r in (auth.router, meta.router, cases.router, documents.router, folders.router, query.router, models.router,
               models.agents_router, citations.router, review.router, audit_router.router, graph.router, admin.router,
-              chats.router):
+              audits.router, facts.router, second_opinion.router, chats.router):
         app.include_router(r, prefix=s.API_PREFIX)
     return app
 
