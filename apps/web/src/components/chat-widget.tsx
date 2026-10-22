@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 import {
   MessageSquare, X, Send, Loader2, Bot, FileText, Video, Cpu, Plus,
   Download, Eye, Archive, AlertTriangle, Square, Copy, RotateCcw, RefreshCw,
-  ThumbsUp, ThumbsDown, BrainCircuit,
+  ThumbsUp, ThumbsDown, BrainCircuit, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,8 @@ interface ChatMessage {
   uncertainties?: string[];
   answer_kind?: AnswerKind;
   degraded?: boolean;
+  /** Duración del turno recién generado (no se guarda en el historial). */
+  elapsed_ms?: number;
   occurrences_note?: string;
   occurrences_term?: string;
   /** Marca el mensaje que todavía se está escribiendo por streaming. */
@@ -106,6 +108,7 @@ interface Session {
 interface SendResponse {
   answer: string; citations?: Citation[]; occurrences?: Citation[]; file_cards?: FileCard[]; uncertainties?: string[];
   answer_kind?: AnswerKind; intent?: string; degraded?: boolean;
+  elapsed_ms?: number; timings?: Record<string, number>;
   occurrences_term?: string; occurrences_note?: string;
   pending_correction?: { tool: string; summary: string; requires_confirmation?: boolean } | null;
   user_message: { id: string }; assistant_message: { id: string };
@@ -125,6 +128,14 @@ const STAGE_LABELS: Record<string, string> = {
 };
 const STAGE_FALLBACK = "Analizando la pregunta…";
 
+/** Una etapa visible del trabajo, no un porcentaje inventado. */
+interface LiveStage {
+  key: string;
+  label: string;
+  detail?: string;
+  state: "active" | "done";
+}
+
 /** Recuerda en el navegador qué conversación del expediente se estaba viendo.
  *  El historial real vive en PostgreSQL; esto solo evita abrir otra al recargar. */
 function lastSessionKey(caseId: string) {
@@ -138,6 +149,11 @@ function mmss(ms: number) {
   const sec = s % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
     : `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+function durationLabel(ms: number) {
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)} s`;
+  return mmss(ms);
 }
 
 function formatSize(bytes?: number) {
@@ -351,7 +367,8 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
   const [docView, setDocView] = useState<{ id: string; page: number; name?: string } | null>(null);
   const [mediaView, setMediaView] = useState<{ id: string; ms: number; name?: string } | null>(null);
   const [pendingCorrection, setPendingCorrection] = useState<{ tool: string; summary: string } | null>(null);
-  const [stage, setStage] = useState<{ label: string; intent?: string } | null>(null);
+  const [liveStages, setLiveStages] = useState<LiveStage[]>([]);
+  const stageSeq = useRef(0);
   /** Veredicto local por mensaje (optimista); el backend lo persiste en intent_feedback. */
   const [feedback, setFeedback] = useState<Record<string, FeedbackState>>({});
   /** Mensaje cuyo «no era esto» está abierto para elegir la intención correcta. */
@@ -517,6 +534,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
             uncertainties: meta.uncertainties ?? mapped[i].uncertainties,
             answer_kind: meta.answer_kind,
             degraded: meta.degraded,
+            elapsed_ms: meta.elapsed_ms,
             occurrences_note: meta.occurrences_note,
             occurrences_term: meta.occurrences_term,
           };
@@ -554,6 +572,24 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
     });
   }
 
+  /** Añade o actualiza una etapa. La anterior se marca como terminada. */
+  function upsertStage(key: string, label: string, detail?: string,
+                       state: "active" | "done" = "active") {
+    setLiveStages((prev) => {
+      const next = prev.map((s) => (s.state === "active" ? { ...s, state: "done" as const } : s));
+      const i = next.findIndex((s) => s.key === key);
+      const stage: LiveStage = { key, label, detail, state };
+      if (i >= 0) next[i] = stage;
+      else next.push(stage);
+      return next.slice(-8);
+    });
+  }
+
+  function resetStages() {
+    stageSeq.current = 0;
+    setLiveStages([]);
+  }
+
   async function sendText(q: string, atts: Attachment[] = [], opts: { appendUser?: boolean } = {}) {
     if (loading || !caseId) return;
     sendingRef.current = true;
@@ -564,7 +600,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
       setMessages((m) => [...m, { role: "user", content: q, attachments: atts }]);
     }
     setLoading(true);
-    setStage({ label: STAGE_LABELS.routing });
+    resetStages();
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -610,14 +646,37 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
               const stageName = typeof d.stage === "string" ? d.stage : "";
               // `stage: done` es el cierre interno del pipeline; el evento `done`
               // con la respuesta completa llega justo después.
-              if (stageName === "done") return;
+              if (stageName === "done") {
+                setLiveStages((prev) => prev.map((s) => ({ ...s, state: "done" as const })));
+                return;
+              }
               const tool = typeof d.tool === "string" ? d.tool : "";
               const label = typeof d.label === "string" && d.label
                 ? d.label
                 : tool
                   ? `Consultando ${tool}…`
                   : STAGE_LABELS[stageName] || STAGE_FALLBACK;
-              setStage({ label, intent: typeof d.intent === "string" ? d.intent : undefined });
+              const detail: string[] = [];
+              // En el cierre de una herramienta el label ya dice qué encontró.
+              if (!(tool && d.phase === "done")) {
+                if (typeof d.evidence === "number" && d.evidence > 0) {
+                  detail.push(`${d.evidence} fragmento${d.evidence === 1 ? "" : "s"}`);
+                }
+                if (Array.isArray(d.sources)) {
+                  const sources = d.sources.filter((s): s is string => typeof s === "string").slice(0, 3);
+                  if (sources.length) detail.push(sources.join(" · "));
+                }
+              }
+              if (typeof d.elapsed_ms === "number" && d.elapsed_ms > 0) {
+                detail.push(`${(d.elapsed_ms / 1000).toFixed(1)} s`);
+              }
+              const key = tool
+                ? `tool:${tool}:${String(d.step ?? "")}`
+                : `${stageName}:${++stageSeq.current}`;
+              upsertStage(key, label, detail.join(" · ") || undefined,
+                d.phase === "done" ? "done" : "active");
+            } else if (event === "done") {
+              setLiveStages((prev) => prev.map((s) => ({ ...s, state: "done" as const })));
             } else if (event === "token") {
               if (typeof d.text === "string" && d.text) appendStreamToken(d.text);
             } else if (event === "error") {
@@ -648,7 +707,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
       if (!res) {
         // Fallback único al POST normal. El mensaje del usuario no se vuelve a
         // añadir en pantalla: el historial recargado es la fuente de verdad.
-        setStage({ label: STAGE_FALLBACK });
+        upsertStage("fallback", "Reintentando por la vía normal…");
         if (serverError) toast.error(serverError);
         res = await api.post<SendResponse>(`/cases/${caseId}/chats/${sid}/messages`, payload);
       }
@@ -681,7 +740,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
       sendingRef.current = false;
       setStreaming(false);
       setLoading(false);
-      setStage(null);
+      setLiveStages([]);
     }
   }
 
@@ -935,9 +994,17 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                 {m.stopped && (
                   <p className="mt-1 text-xs text-muted-foreground">Generación detenida.</p>
                 )}
-                {m.degraded && (
+                {m.role === "assistant" && !m.streaming && m.elapsed_ms != null && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Listo en {durationLabel(m.elapsed_ms)}
+                    {m.citations && m.citations.length > 0
+                      ? ` · ${m.citations.length} fuente${m.citations.length === 1 ? "" : "s"}`
+                      : ""}
+                  </p>
+                )}
+                {m.degraded && m.answer_kind !== "direct" && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Respuesta parcial: se agotó el tiempo de análisis.
+                    Respuesta parcial: falta evidencia para cubrir toda la pregunta.
                   </p>
                 )}
                 {visibleUncertainties(m).length > 0 && (
@@ -1046,9 +1113,33 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
               </div>
             ))}
             {loading && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
-                <span aria-live="polite">{stage?.label || STAGE_FALLBACK}</span>
+              <div className="rounded-lg border bg-muted/30 p-3 text-xs" role="status" aria-live="polite">
+                <p className="mb-2 font-medium text-muted-foreground">Trabajando en tu pregunta</p>
+                <div className="space-y-1.5">
+                  {liveStages.length === 0 && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                      <span>{STAGE_FALLBACK}</span>
+                    </div>
+                  )}
+                  {liveStages.map((s) => (
+                    <div key={s.key} className="flex items-start gap-2">
+                      {s.state === "active" ? (
+                        <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
+                      ) : (
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                      )}
+                      <div className="min-w-0">
+                        <p className={cn("break-words", s.state === "active" ? "text-foreground" : "text-muted-foreground")}>
+                          {s.label}
+                        </p>
+                        {s.detail && (
+                          <p className="mt-0.5 break-words text-[11px] text-muted-foreground">{s.detail}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

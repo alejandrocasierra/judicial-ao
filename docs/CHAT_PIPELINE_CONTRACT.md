@@ -504,13 +504,22 @@ caché para no reutilizar una respuesta de otro tema. **Agentes**: contradicció
 el resto el «Asistente del expediente»; se cargan prompt y skills sin que el
 usuario los mencione. **Partes**: las preguntas de identidad/rol usan la tabla
 `parties` (demandados=2, partes=24), no menciones sueltas de páginas; «qué dice
-la parte demandada» no se confunde con una lista de demandados. **Etapas**: el
-SSE informa agente/skill, investigación, revisión, redacción y verificación.
+la parte demandada» no se confunde con una lista de demandados. **Evidencia
+heredada**: si el seguimiento depende del turno anterior, se resuelven las citas
+del último asistente con fuentes (documento/página o segmento) y se entregan al
+agente como `seed_evidence`; el agente las ve antes de buscar y, si la primera
+síntesis no produce claims, reintenta solo con esas fuentes. Así «¿y qué dijo
+Jorge Rojas sobre lo anterior?» cita la misma página 0067 p. 2 aunque la búsqueda
+nueva no la recupere. **Etapas**: el SSE informa agente/skill, la consulta de
+búsqueda, la herramienta concreta, los fragmentos y fuentes leídas, la revisión,
+la redacción, la verificación y el tiempo total. La UI pinta una línea de trabajo
+con marcas de completado. Una respuesta directa con citas no se marca parcial
+solo porque la etapa opcional haya rozado el presupuesto.
 
-**Límite conocido**: la respuesta profunda tarda 30–60 s con `gemini-3.8-flash`
-(la UI muestra «Consultando el expediente…»); el modo normal sigue en ~10–20 s.
-El corpus de preguntas se puede escalar a miles con `--per-type` alto; el coste y
-la latencia son del proveedor, no del pipeline.
+**Límite conocido**: la respuesta profunda tarda 40 a 100 s con `gemini-3.8-flash`
+(la UI muestra las etapas y el tiempo real, no un porcentaje inventado); el modo
+normal sigue en ~10–20 s. El coste y la latencia son del proveedor, no del
+pipeline. El corpus de preguntas se puede escalar a miles con `--per-type` alto.
 
 ---
 
@@ -519,7 +528,7 @@ la latencia son del proveedor, no del pipeline.
 | Workstream | Archivos |
 |---|---|
 | **A — Retrieval** | `services/intent.py`, `services/retrieval_plan.py`, `services/retrieval_rank.py`, `services/query_rewrite.py`, `services/graph_expand.py`, `services/retrieval_crossencoder.py`, `services/answering.py`, `services/abstention.py`, `services/indexing.py`, tests unitarios de esos módulos |
-| **B — Chat/velocidad** | `services/compose.py`, `services/occurrences.py`, `services/deadline.py`, `services/cache.py`, `services/memory.py`, `services/skills.py`, `routers/query.py`, `routers/chats.py`, `services/agent.py`, `services/verification.py`, `services/case_tools/read.py`, `services/case_tools/__init__.py`, `services/role_answer.py`, `packages/i18n/*.json`, tests unitarios/integración de esos módulos |
+| **B - Chat/velocidad** | `services/compose.py`, `services/occurrences.py`, `services/deadline.py`, `services/cache.py`, `services/memory.py`, `services/skills.py`, `services/evidence_carryover.py`, `services/evidence_labels.py`, `routers/query.py`, `routers/chats.py`, `services/agent.py`, `services/verification.py`, `services/case_tools/read.py`, `services/case_tools/__init__.py`, `services/role_answer.py`, `packages/i18n/*.json`, tests unitarios/integración de esos módulos |
 | **C — UI/prompts** | `apps/web/src/lib/api.ts`, `apps/web/src/components/chat-widget.tsx`, `apps/web/src/components/markdown.tsx` (si hace falta), `packages/prompts/answer_question.v2.md`, `packages/prompts/answer_question.v3.md`, `agent_system.v8.md`, `verify_answer.v2.md` |
 | **D — Evals/tests** | `evals/**`, `scripts/run_evals.py`, `scripts/eval_matrix.py`, `scripts/bench_chat.py`, `scripts/load_chat.py`, `scripts/eval_chat_quality.py`, `app/providers/recording.py`, `tests/behavior/test_chat_pagos.py`, `tests/unit/test_eval_*.py`, `tests/unit/test_judge.py`, `tests/unit/test_recording.py`, `.github/workflows/ci.yml` (solo añadir paso) |
 | **Integrador** | `services/text_terms.py`, `core/config.py`, `schemas.py`, migraciones `0047`, contrato, integración final |

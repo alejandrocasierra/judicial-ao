@@ -33,9 +33,10 @@ from app.core.i18n import negotiate, t
 from app.schemas import ChatMessageIn, ChatSessionIn, IntentFeedbackIn, QueryIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import (audit, case_tools, claim_seed, contradiction_seed, correction,
-                          deadline as deadline_mod, entity_seed, intent as intent_service,
-                          intent_profile, memory, occurrences, party_answer, query_hints,
-                          ratelimit, role_answer, text_terms)
+                          deadline as deadline_mod, entity_seed, evidence_carryover,
+                          evidence_labels, intent as intent_service, intent_profile, memory,
+                          occurrences, party_answer, query_hints, ratelimit, role_answer,
+                          text_terms)
 from app.services.case_tools import ToolContext
 from app.routers.query import _attachment_file_cards, _run_query, _safe_emit
 
@@ -560,6 +561,39 @@ def _seed_claim(p: Principal, case_id: UUID, question: str) -> list[dict]:
         return []
 
 
+def _carryover(p: Principal, case_id: UUID, session_id: UUID, question: str,
+               history: list[dict]) -> list[dict]:
+    """Fuentes ya citadas en el turno anterior, para «lo anterior»."""
+    if not history:
+        return []
+    try:
+        with tx(p.org_id, p.user_id) as c:
+            return evidence_carryover.for_followup(
+                c, str(session_id), question, history,
+                case_id=str(case_id), user_id=str(p.user_id))
+    except Exception:  # noqa: BLE001 — el seguimiento nunca rompe el turno
+        log.debug("evidence carryover failed", exc_info=True)
+        return []
+
+
+def _merge_seed(*groups: list[dict] | None) -> list[dict]:
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for group in groups:
+        for item in group or []:
+            if item.get("document_id") and item.get("page_number") is not None:
+                key = ("doc", str(item["document_id"]), int(item["page_number"]))
+            elif item.get("segment_id"):
+                key = ("seg", str(item["segment_id"]))
+            else:
+                key = ("text", str(item.get("text") or "")[:200])
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+    return out
+
+
 def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Request,
                p: Principal, locale: str, case: dict, s, *, emit=None, deadline=None,
                background: BackgroundTasks | None = None) -> dict:
@@ -598,6 +632,8 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     if session.get("summary"):
         hints = query_hints.merge(hints and "\n".join(hints) or None,
                                   f"Resumen de la conversación previa:\n{session['summary']}")
+    carryover = [] if body.attachments else _carryover(
+        p, case_id, session_id, body.content, history)
 
     decision = intent_service.classify(
         body.content, has_attachments=bool(body.attachments),
@@ -631,10 +667,20 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
     else:
         skill_label = "Analista de documento / evidencia"
     agent_label = selected_agent or ("Agente seleccionado" if session.get("agent_id") else "Asistente del expediente")
+    deep_turn = bool(contradiction_items or decision.intent is intent_service.Intent.ANALYSIS)
     _safe_emit(emit, "routing", {
         "intent": intent_value, "agent": agent_label, "skill": skill_label,
-        "label": f"Analizando la pregunta · Agente: {agent_label} · Skill: {skill_label}",
+        "deep": deep_turn,
+        "label": (f"Analizando la pregunta · Agente: {agent_label} · Skill: {skill_label}"
+                  + (" · Análisis profundo" if deep_turn else "")),
     })
+    if carryover:
+        _safe_emit(emit, "retrieving", {
+            "strategy": "carryover",
+            "label": f"Revisando {len(carryover)} fuentes citadas en la respuesta anterior…",
+            "evidence": len(carryover),
+            "sources": evidence_labels.many(carryover),
+        })
 
     def _query(strategy: str, seed: list[dict] | None = None) -> dict:
         query_body = QueryIn(question=body.content, strategy=strategy,
@@ -644,7 +690,7 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
         return _run_query(case_id, query_body, request, p, locale, case, s,
                           history=history, hints=hints, ocr_mode=ocr_mode, asr_mode=asr_mode,
                           intent_decision=decision, emit=emit, deadline=deadline,
-                          seed_items=seed, background=background)
+                          seed_items=_merge_seed(carryover, seed), background=background)
 
     if body.strategy == "agent":
         result = _query("agent")
@@ -722,7 +768,10 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
 
     answer_kind = result.get("answer_kind") or "direct"
     intent_out = result.get("intent") or intent_value
-    degraded = bool(result.get("degraded") or deadline.degraded)
+    # `_run_query` ya decidió si la respuesta quedó completa. El deadline de
+    # `_send_core` es solo el inicial y puede haberse quedado corto sin que la
+    # respuesta final esté degradada.
+    degraded = bool(result.get("degraded", deadline.degraded))
     result["answer_kind"], result["intent"], result["degraded"] = answer_kind, intent_out, degraded
     result.setdefault("occurrences", [])
     result.setdefault("occurrences_term", None)
@@ -829,11 +878,13 @@ def stream_message(case_id: UUID, session_id: UUID, body: ChatMessageIn, request
                     yield _sse("error", data)
                     continue
                 if event == "tool":
-                    yield _sse("stage", {
+                    payload = {
                         "stage": "retrieving",
-                        "label": f"Consultando {data.get('name', 'el expediente')}…",
-                        "tool": data.get("name"),
-                    })
+                        **data,
+                    }
+                    if not payload.get("label"):
+                        payload["label"] = f"Consultando {data.get('name', 'el expediente')}…"
+                    yield _sse("stage", payload)
                     continue
                 # routing/retrieving/synthesizing/validating → SIEMPRE evento `stage`.
                 yield _sse("stage", {"stage": event, **data})

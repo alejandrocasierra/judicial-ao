@@ -57,7 +57,7 @@
     "UNKNOWN_TOOL": "Tool not recognized for this agent."
   },
   "messages": {
-    "insufficient_evidence": "No evidence was found in the case to answer this question.",
+    "insufficient_evidence": "I could not find the answer in the retrieved sources. I searched documents, transcripts, and the graph; I can narrow it by document, date, or name.",
     "unsupported_claims_removed": "Claims without a verifiable source were omitted.",
     "contradiction_requires_review": "Contradiction detected: requires human review; the platform does not decide which version is true.",
     "external_knowledge_label": "External knowledge (not from the case file)",

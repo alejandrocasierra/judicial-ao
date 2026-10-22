@@ -26,9 +26,9 @@ from app.providers.llm import get_llm
 from app.schemas import QueryIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import (agent, answering, audit, cache, case_tools, compose,
-                          deadline as deadline_mod, intent as intent_service, intent_profile,
-                          metrics, query_hints, query_rewrite, ratelimit, role_answer, skills,
-                          text_terms, verification)
+                          deadline as deadline_mod, evidence_labels, intent as intent_service,
+                          intent_profile, metrics, query_hints, query_rewrite, ratelimit,
+                          role_answer, skills, text_terms, verification)
 from app.services.compose import ComposeResult
 
 router = APIRouter(prefix="/cases/{case_id}", tags=["ai"])
@@ -141,7 +141,7 @@ def _pg_array(values: list[object]) -> str:
     return "{" + ",".join(str(v) for v in values) + "}"
 
 
-ANSWER_CACHE_VERSION = "r1-2026.10.22"
+ANSWER_CACHE_VERSION = "r2-2026.10.22"
 _CONTEXTUAL_QUESTION = re.compile(
     r"\b(lo anterior|eso|esto|el mismo|la misma|dich[oa]|anterior|sigue|entonces|"
     r"y el|y la|tambi[eé]n|aquel|aquella)\b", re.I)
@@ -546,6 +546,13 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                 if executor is not None:
                     executor.shutdown(wait=False)
             coverage = diagnostics.get("coverage")
+        if items:
+            _safe_emit(emit, "retrieving", {
+                "strategy": "rag",
+                "label": f"Recuperé {len(items)} fragmentos de OCR/ASR/pgvector…",
+                "evidence": len(items),
+                "sources": evidence_labels.many(items),
+            })
         if seed_items:
             # Cadena procesal / lista de rol: entra como evidencia de primera clase.
             try:
@@ -558,12 +565,14 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         system, prompt_id, prompt_version = _answer_system_prompt(locale, deep=deep)
         task = "answer_question"
         _safe_emit(emit, "reviewing", {
-            "label": "Revisando la evidencia recuperada…",
+            "label": f"Revisando {len(items)} fragmentos recuperados…",
             "evidence": len(items),
+            "sources": evidence_labels.many(items),
         })
         _safe_emit(emit, "synthesizing", {
-            "label": "Redactando la respuesta…",
+            "label": f"Redactando con {len(items)} fragmentos…",
             "evidence": len(items),
+            "model": getattr(llm, "model", ""),
         })
         synthesis_failed = False
         if deadline.can("synthesizing", 50):
@@ -729,7 +738,8 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
 
     _safe_emit(emit, "validating", {
         "claims": len(validated["claims"]),
-        "label": "Verificando citas, cifras y nombres…",
+        "label": (f"Verificando {len(validated['claims'])} afirmaciones y sus citas…"
+                  if validated["claims"] else "Verificando que haya citas verificables…"),
     })
     with deadline.stage("compose"):
         composed: ComposeResult = compose.render(
@@ -752,11 +762,31 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                                      uncertainties=composed.uncertainties)
 
     by_handle = {str(it["handle"]): it for it in items if it.get("handle")}
-    degraded = bool(deadline.degraded or deadline.expired)
+    # Una respuesta directa, con citas y esquema válido, está completa aunque
+    # la etapa opcional de verificación/composición haya rozado el presupuesto.
+    # Antes se marcaba como parcial y la UI decía «se agotó el tiempo» sobre una
+    # respuesta correcta de 1:35.
+    complete_direct = (composed.answer_kind == compose.DIRECT and bool(composed.answer)
+                       and bool(validated.get("schema_valid", True))
+                       and (bool(validated["claims"]) or bool(composed.used_handles)))
+    degraded = False if complete_direct else bool(deadline.degraded or deadline.expired)
+    degraded_reason = None
+    if degraded:
+        if composed.answer_kind == compose.INSUFFICIENT:
+            degraded_reason = "no_evidence"
+        elif not validated.get("schema_valid", True):
+            degraded_reason = "synthesis"
+        elif deadline.expired_stage:
+            degraded_reason = deadline.expired_stage
+        else:
+            degraded_reason = "partial"
     output_payload = {"raw_text": (raw_text or "")[:20000], "claims": validated["claims"],
                       "unsupported_claims": validated["unsupported_claims"],
                       "uncertainties": composed.uncertainties, "answer_kind": composed.answer_kind,
-                      "intent": intent_value, "degraded": degraded, "tool_calls": tool_calls}
+                      "intent": intent_value, "degraded": degraded,
+                      "degraded_reason": degraded_reason,
+                      "elapsed_ms": deadline.elapsed_ms(), "timings": dict(deadline.timings),
+                      "tool_calls": tool_calls}
     validation_payload = {"schema_valid": validated.get("schema_valid", True),
                           "unsupported": len(validated["unsupported_claims"]),
                           "answer_kind": composed.answer_kind}
@@ -875,9 +905,13 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     note = t("messages.occurrences_note", locale).format(term=term) if term else None
 
     _safe_emit(emit, "done", {"answer_kind": composed.answer_kind, "degraded": degraded,
-                              "intent": intent_value, "citations": len(citations)})
+                              "degraded_reason": degraded_reason, "intent": intent_value,
+                              "citations": len(citations), "elapsed_ms": deadline.elapsed_ms(),
+                              "timings": dict(deadline.timings)})
     response = {"answer": composed.answer, "answer_kind": composed.answer_kind,
-                "intent": intent_value, "degraded": degraded, "claims": claims,
+                "intent": intent_value, "degraded": degraded,
+                "degraded_reason": degraded_reason, "elapsed_ms": deadline.elapsed_ms(),
+                "timings": dict(deadline.timings), "claims": claims,
                 "citations": citations,
                 "citations_used": [c["citation_id"] for c in citations],
                 "unsupported_claims": [u["text"] for u in validated["unsupported_claims"]],

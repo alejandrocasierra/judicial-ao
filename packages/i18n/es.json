@@ -57,7 +57,7 @@
     "UNKNOWN_TOOL": "Herramienta no reconocida para este agente."
   },
   "messages": {
-    "insufficient_evidence": "No se encontró evidencia en el expediente para responder esta pregunta.",
+    "insufficient_evidence": "No encontré la respuesta en las fuentes recuperadas. Busqué en documentos, transcripciones y grafo; puedo acotar la búsqueda por documento, fecha o nombre.",
     "unsupported_claims_removed": "Se omitieron afirmaciones sin fuente verificable.",
     "contradiction_requires_review": "Contradicción detectada: requiere revisión humana; la plataforma no decide cuál versión es verdadera.",
     "external_knowledge_label": "Conocimiento externo (no proviene del expediente)",

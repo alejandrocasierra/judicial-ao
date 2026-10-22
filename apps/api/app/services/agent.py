@@ -12,7 +12,7 @@ from sqlalchemy.engine import Connection
 from app.core.config import get_settings
 from app.core.i18n import t
 from app.providers.llm import get_llm
-from app.services import agent_tools, answering, case_tools, skills, verification
+from app.services import agent_tools, answering, case_tools, evidence_labels, skills, verification
 
 log = logging.getLogger(__name__)
 MAX_STEPS = 5
@@ -121,6 +121,69 @@ def _format_tool_result(tool: str, result: list[dict[str, Any]],
     return "<tool_result>\n" + "\n".join(lines) + "\n</tool_result>"
 
 
+def _carried_evidence_block(items: list[dict[str, Any]]) -> str:
+    """Páginas/segmentos ya citados: el agente los ve antes de buscar de nuevo."""
+    max_chars = get_settings().AGENT_TOOL_RESULT_MAX_CHARS
+    lines: list[str] = []
+    for item in items[:8]:
+        handle = html.escape(str(item.get("handle") or ""), quote=False)
+        if not handle:
+            continue
+        label = html.escape(evidence_labels.one(item), quote=False)
+        hint = html.escape(_evidence_hint(item, max_chars=max_chars), quote=False)
+        lines.append(f"- {handle} ({label}): {hint}")
+    if not lines:
+        return ""
+    return (
+        "<carried_evidence>\n"
+        "Estas son las fuentes exactas que se citaron en la respuesta anterior. "
+        "Úsalas para resolver el seguimiento y cita su handle. No las ignores.\n"
+        + "\n".join(lines) + "\n</carried_evidence>\n"
+    )
+
+
+_TOOL_VERBS = {
+    "search_case": "Buscando en el expediente",
+    "read_document": "Leyendo el documento",
+    "get_document_page": "Leyendo la página",
+    "find_person": "Buscando a la persona y sus relaciones",
+    "graph_query": "Consultando el grafo del caso",
+    "search_transcript_by_time": "Revisando la transcripción",
+    "get_claims": "Revisando las afirmaciones registradas",
+    "get_file": "Abriendo el archivo",
+}
+
+
+def _tool_label(tool: str, arguments: dict[str, Any]) -> str:
+    verb = _TOOL_VERBS.get(tool, f"Consultando {tool}")
+    query = (arguments.get("query") or arguments.get("term") or arguments.get("name")
+             or arguments.get("q"))
+    if tool in ("read_document", "get_document_page"):
+        name = arguments.get("document_id") or arguments.get("filename")
+        page = arguments.get("page_number") or arguments.get("page")
+        if name:
+            query = str(name)
+            if page is not None:
+                query += f" · p. {page}"
+    if query:
+        text = " ".join(str(query).split())[:110]
+        return f"{verb}: «{text}»…"
+    return f"{verb}…"
+
+
+def _tool_done_label(tool: str, items: list[dict[str, Any]]) -> str:
+    primary = [it for it in items if it.get("source_type") in ("document_page", "transcript_segment")]
+    count = len(primary)
+    noun = "fragmento" if count == 1 else "fragmentos"
+    sources = evidence_labels.many(primary, limit=2)
+    if count:
+        label = f"Encontré {count} {noun}"
+        if sources:
+            label += ": " + " · ".join(sources)
+        return label
+    return "No encontré fragmentos citables en esta búsqueda"
+
+
 def _evidence_hint(it: dict[str, Any], max_chars: int | None = None) -> str:
     """Describe una evidencia de forma que el modelo vea minuto/hablante/página/filename.
     Sin esto, el modelo no sabía en qué minuto ni quién lo dijo aunque la cita sí lo mostraba."""
@@ -210,6 +273,10 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                         "</conversation_history>\nThe conversation above is context; "
                         "answer the NEW question below.\n")
         history += f"<question>\n{html.escape(question, quote=False)}\n</question>\n"
+        if seed_evidence:
+            carried = _carried_evidence_block(seed_evidence)
+            if carried:
+                history += carried
         if attachments:
             lines = "\n".join(f"- {a.get('kind')}: {a.get('name') or ''} (id: {a.get('id')})" for a in attachments)
             history += (f"<attached_files>\n{html.escape(lines, quote=False)}\n</attached_files>\n"
@@ -250,13 +317,24 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                 tool_calls.append({"name": str(tool), "arguments": args, "allowed": False})
             else:
                 tool_calls.append({"name": str(tool), "arguments": args, "allowed": True})
-                _emit(emit, "tool", {"name": str(tool), "step": step + 1})
+                _emit(emit, "tool", {
+                    "name": str(tool), "step": step + 1, "phase": "start",
+                    "arguments": args, "label": _tool_label(str(tool), args),
+                })
                 try:
                     result_items = agent_tools.execute(conn, case_id, tool, args)
                 except Exception as exc:  # noqa: BLE001
                     result_items = [{"handle": "ERR", "source_type": "error",
                                      "text": f"Error ejecutando {tool}: {exc}"}]
                     tool_errors += 1
+                _emit(emit, "tool", {
+                    "name": str(tool), "step": step + 1, "phase": "done",
+                    "evidence": len([it for it in result_items
+                                     if it.get("source_type") in
+                                     ("document_page", "transcript_segment")]),
+                    "sources": evidence_labels.many(result_items, limit=2),
+                    "label": _tool_done_label(str(tool), result_items),
+                })
             # Correcciones: guardamos tool+argumentos exactos para que el servidor
             # pueda aplicarlas de forma determinista cuando el usuario confirme.
             for it in result_items:
@@ -299,7 +377,11 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
         # Síntesis final con el prompt de respuesta RAG existente (v3 en modo profundo)
         system, prompt_id, prompt_version = answering.system_prompt(locale, deep=deep)
         user = answering.build_user_prompt(question, evidence, history=history_turns, deep=deep)
-        _emit(emit, "synthesizing", {"label": "Redactando la respuesta…"})
+        _emit(emit, "synthesizing", {
+            "label": f"Redactando la respuesta con {len(evidence)} fragmentos…",
+            "evidence": len(evidence),
+            "sources": evidence_labels.many(evidence),
+        })
         try:
             result = llm.complete(system, user)
         except Exception as exc:  # noqa: BLE001
@@ -313,6 +395,37 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                     "corrections_done": corrections_done, "tool_calls": tool_calls,
                     "degraded": True, "evidence_count": len(evidence)}
         validated = answering.parse_and_validate(result.text, evidence, get_settings().ANSWER_MIN_GROUNDING_OVERLAP)
+        # Un seguimiento no puede quedarse sin respuesta si ya existen páginas
+        # citadas en el turno anterior: se reintenta la síntesis SOLO con esas
+        # fuentes, sin volver a buscar ni inventar hechos.
+        if not validated["claims"] and seed_evidence:
+            carried = [it for it in seed_evidence
+                       if it.get("handle") and it.get("source_type") in
+                       ("document_page", "transcript_segment")]
+            if carried:
+                _emit(emit, "reviewing", {
+                    "label": "Revisando las fuentes citadas en la respuesta anterior…",
+                    "evidence": len(carried),
+                    "sources": evidence_labels.many(carried),
+                })
+                try:
+                    retry_system, retry_pid, retry_ver = answering.system_prompt(locale, deep=False)
+                    retry_prompt = answering.build_user_prompt(
+                        question, carried, history=history_turns, deep=False)
+                    retry_prompt += (
+                        "\n\n<retry>La síntesis anterior no produjo afirmaciones citables. "
+                        "Responde únicamente con las fuentes de <evidence>. Si un fragmento "
+                        "contiene la declaración, cítalo con su handle; si solo responde en "
+                        "parte, di exactamente qué falta.</retry>")
+                    retry_result = llm.complete(retry_system, retry_prompt)
+                    retry_validated = answering.parse_and_validate(
+                        retry_result.text, carried, get_settings().ANSWER_MIN_GROUNDING_OVERLAP)
+                    if retry_validated["claims"]:
+                        validated = retry_validated
+                        result = retry_result
+                        prompt_id, prompt_version = retry_pid, retry_ver
+                except Exception as exc:  # noqa: BLE001 — si falla, se mantiene la abstención
+                    log.warning("carryover synthesis failed: %s", exc)
         if (steps_exhausted or tool_errors) and not validated["claims"]:
             degraded = True
 

@@ -33,6 +33,8 @@ def test_ut_dln_03_stage_does_not_raise_and_tracks():
     with d.stage("retrieving") as current:
         assert current is d
     assert not d.degraded
+    assert "retrieving" in d.timings
+    assert d.elapsed_ms() >= d.timings["retrieving"]
 
 
 def test_ut_dln_04_stage_marks_degraded_after_overflow():

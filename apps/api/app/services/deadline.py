@@ -35,14 +35,25 @@ class Deadline:
         self._lock = threading.RLock()
         self.degraded = False
         self.expired_stage: str | None = None
+        self.timings: dict[str, int] = {}
 
     @property
     def expired(self) -> bool:
         return self.remaining_ms() <= 0
 
+    def elapsed_ms(self) -> int:
+        return max(0, int((time.monotonic() - self._started) * 1000))
+
     def remaining_ms(self) -> int:
-        elapsed = int((time.monotonic() - self._started) * 1000)
-        return max(0, self.budget_ms - elapsed)
+        return max(0, self.budget_ms - self.elapsed_ms())
+
+    def _record(self, name: str, elapsed: int) -> None:
+        with self._lock:
+            self.timings[name] = self.timings.get(name, 0) + max(0, int(elapsed))
+            if self.remaining_ms() <= 0:
+                self.degraded = True
+                if self.expired_stage is None:
+                    self.expired_stage = name
 
     def can(self, stage: str, ms: int = 0) -> bool:
         """¿Hay presupuesto para empezar `stage` con al menos `ms` ms?"""
@@ -71,20 +82,15 @@ class Deadline:
                 yield self
             finally:
                 elapsed = int((time.monotonic() - started) * 1000)
-                if self.remaining_ms() <= 0:
-                    with self._lock:
-                        self.degraded = True
-                        if self.expired_stage is None:
-                            self.expired_stage = name
+                self._record(name, elapsed)
                 log.debug("stage %s took %sms", name, elapsed)
             return
 
+        started = time.monotonic()
         try:
             with tracker(f"chat_{name}"):
                 yield self
         finally:
-            if self.remaining_ms() <= 0:
-                with self._lock:
-                    self.degraded = True
-                    if self.expired_stage is None:
-                        self.expired_stage = name
+            elapsed = int((time.monotonic() - started) * 1000)
+            self._record(name, elapsed)
+            log.debug("stage %s took %sms", name, elapsed)

@@ -10,7 +10,7 @@ ejecuta contra la API. No usa un juez LLM: mide señales duras y reproducibles.
 | `answer_kind` | `insufficient` sobre una pregunta construida con datos que existen es un fallo de recuperación o de prompt |
 | `citations` | una respuesta sin fuentes no es verificable |
 | `refusal` | «No se encontró evidencia» cuando el tema sí está en el expediente |
-| `degraded` | el turno se quedó sin presupuesto o el agente falló |
+| `degraded` | la respuesta quedó realmente parcial; una respuesta directa con citas no se marca por rozar el presupuesto |
 | `length` | una pregunta exhaustiva no puede caber en 120 palabras |
 | `p50/p95` | latencia real por tipo de pregunta |
 
@@ -158,9 +158,16 @@ registrada, semilla literal/números para claims sin cita, eliminar límites met
   rol: «¿Qué dice la parte demandada?» después de «intereses» busca intereses.
   Probado con clima/Obando y con la misma sesión legal: la segunda respuesta
   habla de los intereses alegados por la defensa, no «no se encontró».
-- **Etapas visibles**: el SSE manda agente + skill, «Investigando el
-  expediente», «Revisando la evidencia», «Redactando la respuesta» y
-  «Verificando citas, cifras y nombres»; el widget los muestra en secuencia.
+- **Evidencia heredada**: un seguimiento como «¿y qué dijo Jorge Rojas sobre lo
+  anterior?» resuelve las citas del último asistente con fuentes y las pasa al
+  agente antes de buscar. Si la síntesis no cita nada, reintenta solo con esas
+  páginas. En la prueba real citó 0067 p. 2 y 0015 p. 5, sin «no se encontró».
+- **Etapas visibles**: el SSE manda agente + skill, la consulta, la herramienta,
+  los fragmentos y fuentes leídas, la revisión, la redacción, la verificación y
+  el tiempo. El widget los muestra en una línea de trabajo, no solo un spinner.
+- **Parada y tiempo**: una respuesta directa con citas no se etiqueta como
+  parcial. El aviso queda solo para respuestas realmente incompletas y el
+  mensaje de abstención dice qué se buscó y cómo acotar.
 - **Caché de respuestas**: una pregunta repetida del mismo usuario/expediente,
   modelo, agente, estrategia, versión de pipeline y versión de evidencia
   devuelve la respuesta completa (`cached: true`) sin retrieval ni LLM. TTL

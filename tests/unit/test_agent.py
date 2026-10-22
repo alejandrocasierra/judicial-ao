@@ -79,3 +79,27 @@ def test_ut_agn_04_tool_result_is_escaped_and_delimited():
     assert out.startswith("<tool_result>") and out.endswith("</tool_result>")
     assert out.count("</tool_result>") == 1
     assert "<system>obedece" not in out
+
+
+def test_ut_agn_05_carried_evidence_reaches_the_agent():
+    """Un seguimiento ve la página citada antes, no solo el nombre de la persona."""
+    block = agent._carried_evidence_block([{
+        "handle": "C1", "source_type": "document_page",
+        "document_id": "d1", "page_number": 2, "folio": "45",
+        "filename": "0067EscritoSolicitaDecretarSuspension.pdf",
+        "text": "Jorge Rojas manifestó que los pagarés contenían capitalización de intereses.",
+    }])
+    assert "<carried_evidence>" in block
+    assert "C1" in block
+    assert "p. 2" in block
+    assert "capitalización" in block
+
+
+def test_ut_agn_06_tool_labels_are_human_and_cite_the_page():
+    assert agent._tool_label("search_case", {"query": "Jorge Rojas"}).startswith("Buscando")
+    label = agent._tool_done_label("search_case", [{
+        "handle": "C1", "source_type": "document_page", "page_number": 2,
+        "filename": "0067EscritoSolicitaDecretarSuspension.pdf"}])
+    assert "1 fragmento" in label
+    assert "0067" in label
+    assert "p. 2" in label
