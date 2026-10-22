@@ -84,6 +84,7 @@ Derivados del proceso local:
 - `1079` revisiones.
 - `826` chunks `fact` con embeddings.
 - `19.641` aristas de grafo, incluidas `POSITION_ON` y `DECISION_PROVES_FACT`.
+- `38` normas activas por organización (`76` filas en las dos organizaciones locales), con URL oficial y checksum.
 
 Scripts:
 
@@ -116,6 +117,8 @@ Scripts:
 | Migraciones `0055` a `0061` | upgrade/downgrade probados en BD de test |
 | Build web | Next.js compila y genera las rutas nuevas |
 | Salud local | API, web, worker, worker-media y MCP healthy |
+| Segunda opinión real | Gemini 3.8 Flash como respondedor y DeepSeek Chat como verificador: `COMPLETED`, `PARTIAL`, 4 s, 9.095 tokens de entrada, 444 de salida, costo `0.005213` |
+| Corpus piloto | 38 normas por organización, 76 filas en total; CGP/Ley 1564, Código Civil/Ley 57 y Código de Comercio/Decreto 410 |
 
 Comandos:
 
@@ -152,6 +155,8 @@ python scripts/rebuild_graphs.py --all
 
 ```bash
 python scripts/import_legal_rules.py --dir data/legal_rules/co --organization-id <uuid>
+# o para todas las organizaciones:
+python scripts/import_legal_rules.py --dir data/legal_rules/co --all
 ```
 
 Sin normas cargadas, el gate bloquea las conclusiones jurídicas en lugar de
@@ -185,3 +190,14 @@ El corpus oficial de normas y la clave del modelo de segunda opinión son
 configuración de entorno. El sistema falla cerrado si faltan; no hay una ruta
 silenciosa que invente una norma o use el mismo modelo. El comando de importación
 y la política por proceso ya están implementados.
+
+
+---
+
+## 6. Estado real de cobertura
+
+El núcleo de los tres módulos está implementado y probado. La segunda opinión real
+ya se ejecutó y el corpus piloto está cargado. La cobertura legal todavía no es
+completa: el corpus tiene 38 normas por organización y faltan E2E, golden set y
+despliegue de producción. Los gaps concretos, con prioridad y acción, están en
+[`AUDITORIA_MODULOS_LEGALES_2026-10-22.md`](AUDITORIA_MODULOS_LEGALES_2026-10-22.md).

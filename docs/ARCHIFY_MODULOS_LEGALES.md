@@ -9,7 +9,11 @@
 
 ## 0. Estado actual
 
-No existe hoy una carpeta `docs/architecture/` ni artefactos Archify versionados en el repositorio. La arquitectura vive dispersa en `docs/SSD_Judicial_AI_Platform.md`, `docs/CHAT_PIPELINE_CONTRACT.md`, `docs/MCP_PARITY.md` y el código. Este plan crea la capa visual que faltaba, sin reescribir el SSD.
+La carpeta `docs/architecture/` ya existe con cuatro diagramas Archify validados:
+contexto, gate legal, segunda opinión y ciclo de vida de hechos. Quedan pendientes
+`04-data-model.html` y `05-ux-navigation.html` para cumplir los seis del plan. La
+arquitectura sigue viviendo también en `docs/SSD_Judicial_AI_Platform.md`,
+`docs/CHAT_PIPELINE_CONTRACT.md`, `docs/MCP_PARITY.md` y el código.
 
 La fuente de verdad sigue siendo el código y las migraciones. Los diagramas explican, no reemplazan.
 

@@ -434,7 +434,7 @@ def persist(conn: Connection, *, org_id: str, case_id: str, question: str, answe
          idem=idem, u=actor_id)
     audit_id = str(audit_id["id"])
     for c in result.get("claims") or []:
-        conn.execute(text("""
+        claim_row = conn.execute(text("""
             INSERT INTO answer_audit_claims
               (organization_id, audit_id, claim_index, claim_text, claim_hash, claim_type,
                citation_handles, status, grounding_score, missing_numbers, missing_dates,
@@ -443,6 +443,7 @@ def persist(conn: Connection, *, org_id: str, case_id: str, question: str, answe
               (:o, :a, :i, :t, :h, :ct, CAST(:ch AS text[]), :st, :gs,
                CAST(:mn AS text[]), CAST(:md AS text[]), CAST(:mp AS text[]),
                CAST(:lr AS uuid[]), CAST(:rs AS jsonb), 'DETERMINISTIC')
+            RETURNING id
         """), {"o": org_id, "a": audit_id, "i": int(c.get("claim_index") or 0), "t": c.get("text") or "",
                "h": _hash(c.get("text") or ""), "ct": c.get("claim_type") or "FACT",
                "ch": "{" + ",".join(c.get("citations") or []) + "}",
@@ -451,7 +452,16 @@ def persist(conn: Connection, *, org_id: str, case_id: str, question: str, answe
                "md": "{" + ",".join(c.get("missing_dates") or []) + "}",
                "mp": "{" + ",".join(c.get("missing_parties") or []) + "}",
                "lr": "{" + ",".join(c.get("legal_rule_ids") or []) + "}",
-               "rs": json.dumps(c.get("reasons") or [], ensure_ascii=False, default=str)})
+               "rs": json.dumps(c.get("reasons") or [], ensure_ascii=False, default=str)}).first()
+        claim_id = str(claim_row[0]) if claim_row else None
+        if claim_id:
+            for rule_id in c.get("legal_rule_ids") or []:
+                conn.execute(text("""
+                    INSERT INTO legal_rule_citations
+                      (organization_id, case_id, legal_rule_id, target_type, target_id, quote)
+                    VALUES (:o,:c,:r,'claim',:t,:q)
+                """), {"o": org_id, "c": case_id, "r": rule_id, "t": claim_id,
+                       "q": (c.get("text") or "")[:1000]})
     for cit in result.get("citation_checks") or []:
         conn.execute(text("""
             INSERT INTO answer_audit_citations
