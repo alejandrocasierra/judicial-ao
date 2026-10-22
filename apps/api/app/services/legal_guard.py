@@ -290,7 +290,7 @@ def _lookup_legal_rule(conn: Connection, org_id: str, jurisdiction: str,
                        norm: dict[str, str], claim_text: str = "") -> dict[str, Any] | None:
     ident = norm["identifier"]
     common = """
-        SELECT id, jurisdiction, source, identifier, title, text, version_date
+        SELECT id, jurisdiction, source, identifier, title, text, version_date, metadata
         FROM legal_rules
         WHERE organization_id = :o AND is_active
           AND (jurisdiction = :j OR :j = '')
@@ -846,6 +846,18 @@ def audit(conn: Connection, *, org_id: str, case_id: str, question: str, answer:
                     reasons.append({"code": "LEGAL_RULE_MISSING", "norm": norm})
                     critical = bool(policy.get("block_on_legal_conclusion", True))
                 else:
+                    # Una norma cargada solo a nivel de ley no puede respaldar
+                    # una consecuencia jurídica concreta: falta el artículo.
+                    if (norm["kind"] == "law"
+                            and bool((rule.get("metadata") or {}).get("law_level_only"))
+                            and _LEGAL_CONCLUSION_RE.search(text_claim)):
+                        _add_finding(
+                            findings, code="LEGAL_ARTICLE_MISSING", severity="CRITICAL",
+                            message=("La norma existe, pero el corpus solo la cubre a nivel de ley; "
+                                     "no hay artículo que respalde la consecuencia afirmada."),
+                            claim_index=index, metadata={"norm": norm, "rule_id": str(rule["id"])})
+                        reasons.append({"code": "LEGAL_ARTICLE_MISSING", "norm": norm})
+                        critical = True
                     if norm["kind"] == "article":
                         legal_rule_ids.append(str(rule["id"]))
                         legal_rules.append({
