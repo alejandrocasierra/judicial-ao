@@ -147,6 +147,30 @@ def test_legal_modules_require_second_opinion_blocks_publication(client, auth, i
                          "require_second_opinion": False}, headers=admin)
 
 
+def test_reaudit_reuses_evidence_snapshot_and_keeps_status(client, auth, ids):
+    """Reauditar no debe degradar el estado: los claims citan handles E1… y el
+    snapshot de la auditoría original es el mapa correcto."""
+    h = auth("abogada.alfa")
+    case_id = ids["pago"]
+    client.put(f"/v1/cases/{case_id}/verification-policy",
+               json={"mode": "BALANCED", "require_legal_norm": False}, headers=h)
+    session = client.post(f"/v1/cases/{case_id}/chats", headers=h, json={})
+    assert session.status_code == 201, session.text
+    sent = client.post(f"/v1/cases/{case_id}/chats/{session.json()['id']}/messages", headers=h,
+                       json={"content": "¿Qué evidencia hay sobre pagos y abonos?"})
+    assert sent.status_code == 201, sent.text
+    body = sent.json()
+    message_id = body["assistant_message"]["id"]
+    original = body.get("audit_status")
+    assert original, body
+
+    reaudit = client.post(f"/v1/cases/{case_id}/messages/{message_id}/audit", headers=h)
+    assert reaudit.status_code == 200, reaudit.text
+    result = reaudit.json()
+    assert result["status"] == original, result
+    assert result["claims_supported"] >= 1, result
+
+
 def test_evidence_supported_requires_admissible_evidence(app_db, ids, org_ids):
     import psycopg
     import pytest as _pytest

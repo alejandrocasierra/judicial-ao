@@ -26,11 +26,14 @@ export function AuditBadge({
   auditId,
   caseId,
   blocked,
+  onNavigate,
 }: {
   status?: string | null;
   auditId?: string | null;
   caseId: string;
   blocked?: boolean;
+  /** Se ejecuta al abrir el detalle; el chat lo usa para cerrarse y no tapar la página. */
+  onNavigate?: () => void;
 }) {
   if (!status) return null;
   const label = blocked ? "Publicación retenida" : LABELS[status] || `Auditoría: ${status}`;
@@ -45,6 +48,7 @@ export function AuditBadge({
       )}
       title={`${label}. Abrir detalle de auditoría.`}
       aria-label={`${label}. Abrir detalle de auditoría.`}
+      onClick={onNavigate}
     >
       <ShieldCheck className="h-3 w-3 shrink-0" aria-hidden="true" />
       <span className="truncate">{label}</span>

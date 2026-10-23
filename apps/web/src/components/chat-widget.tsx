@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 import {
   MessageSquare, X, Send, Loader2, Bot, FileText, Video, Cpu, Plus,
   Download, Eye, Archive, AlertTriangle, Square, Copy, RotateCcw, RefreshCw,
-  ThumbsUp, ThumbsDown, BrainCircuit, Check,
+  ThumbsUp, ThumbsDown, BrainCircuit, Check, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useChatStore } from "@/lib/chat-store";
+import { useAuth } from "@/lib/auth";
 import { DocumentOcrViewer } from "@/components/document-ocr-viewer";
 import { MediaTranscriptViewer } from "@/components/media-transcript-viewer";
 import { Markdown } from "@/components/markdown";
@@ -143,6 +144,15 @@ const STAGE_LABELS: Record<string, string> = {
   validating: "Verificando citas, cifras y nombres…",
 };
 const STAGE_FALLBACK = "Analizando la pregunta…";
+
+/** Cómo se nombra el resultado de la auditoría en el chat (mismo lenguaje que el badge). */
+const AUDIT_LABELS: Record<string, string> = {
+  PASSED: "verificada",
+  WARNING: "advertencia",
+  NEEDS_REVIEW: "revisión",
+  BLOCKED: "bloqueada",
+  ERROR: "error",
+};
 
 /** Una etapa visible del trabajo, no un porcentaje inventado. */
 interface LiveStage {
@@ -376,6 +386,12 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [releasingId, setReleasingId] = useState<string | null>(null);
+  const [auditingId, setAuditingId] = useState<string | null>(null);
+  /** Ya llegaron tokens: el panel de etapas deja paso al texto para no duplicar el “trabajando”. */
+  const [receiving, setReceiving] = useState(false);
+  /** Segundos transcurridos del turno: el panel no parece colgado si el modelo tarda. */
+  const [waitSec, setWaitSec] = useState(0);
+  const canAudit = useAuth((s) => s.user?.permissions.includes("audit.run") ?? false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -494,6 +510,16 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // Reloj del turno: la síntesis tarda decenas de segundos y sin un contador
+  // el panel parece colgado. Se reinicia en cada pregunta.
+  useEffect(() => {
+    if (!loading) return;
+    const started = Date.now();
+    setWaitSec(0);
+    const timer = setInterval(() => setWaitSec(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [loading]);
+
   const agentOptions = useMemo(() => {
     const f = (menu?.type === "agent" ? menu.filter : "").toLowerCase();
     return agents.filter((a) => a.name.toLowerCase().includes(f)).slice(0, 8);
@@ -587,6 +613,28 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
     }
   }
 
+  /** Re-ejecuta el gate legal sobre una respuesta ya publicada. No “aprueba”:
+   * vuelve a medir claims y hallazgos, y el badge refleja el resultado real. */
+  async function reaudit(message: ChatMessage) {
+    const id = message.id;
+    if (!id || auditingId) return;
+    setAuditingId(id);
+    try {
+      const result = await api.post<{ status?: string }>(`/cases/${caseId}/messages/${id}/audit`);
+      const status = result.status || "";
+      const label = AUDIT_LABELS[status] || status || "sin estado";
+      if (status === "PASSED") toast.success(`Auditoría: ${label}.`);
+      else toast.message(`Auditoría: ${label}.`, {
+        description: "Abre el detalle para ver los claims y hallazgos que impiden verificarla.",
+      });
+      if (sessionId) await loadMessages(sessionId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo auditar la respuesta.");
+    } finally {
+      setAuditingId(null);
+    }
+  }
+
   async function send() {
     if ((!input.trim() && attachments.length === 0) || loading || !caseId) return;
     const q = input.trim() || `Analiza ${attachments.map((a) => "@" + a.name).join(", ")}`;
@@ -640,6 +688,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
       setMessages((m) => [...m, { role: "user", content: q, attachments: atts }]);
     }
     setLoading(true);
+    setReceiving(false);
     resetStages();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -718,7 +767,10 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
             } else if (event === "done") {
               setLiveStages((prev) => prev.map((s) => ({ ...s, state: "done" as const })));
             } else if (event === "token") {
-              if (typeof d.text === "string" && d.text) appendStreamToken(d.text);
+              if (typeof d.text === "string" && d.text) {
+                setReceiving(true);
+                appendStreamToken(d.text);
+              }
             } else if (event === "error") {
               serverError = typeof d.message === "string" && d.message
                 ? d.message
@@ -779,8 +831,9 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
       abortRef.current = null;
       sendingRef.current = false;
       setStreaming(false);
-      setLoading(false);
       setLiveStages([]);
+      setLoading(false);
+      setReceiving(false);
     }
   }
 
@@ -1038,6 +1091,7 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                       auditId={m.audit_id}
                       caseId={caseId}
                       blocked={m.publication_blocked}
+                      onNavigate={() => setOpen(false)}
                     />
                     {m.publication_blocked && (
                       <div className="flex flex-wrap items-center gap-2">
@@ -1128,6 +1182,18 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                         <RotateCcw className="mr-1 h-3 w-3" aria-hidden="true" /> Regenerar
                       </Button>
                     )}
+                    {!m.error && m.id && canAudit && (
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs"
+                        title={m.audit_status ? "Volver a ejecutar la auditoría legal" : "Ejecutar la auditoría legal"}
+                        aria-label={m.audit_status ? "Volver a ejecutar la auditoría legal" : "Ejecutar la auditoría legal"}
+                        disabled={auditingId === m.id}
+                        onClick={() => void reaudit(m)}>
+                        {auditingId === m.id
+                          ? <Loader2 className="mr-1 h-3 w-3 animate-spin" aria-hidden="true" />
+                          : <ShieldCheck className="mr-1 h-3 w-3" aria-hidden="true" />}
+                        {m.audit_status ? "Re-auditar" : "Auditar"}
+                      </Button>
+                    )}
                     {m.error && (
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-xs"
                         title="Reintentar" aria-label="Reintentar" onClick={() => regenerate(i)}>
@@ -1180,9 +1246,16 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                 )}
               </div>
             ))}
-            {loading && (
+            {loading && !receiving && (
               <div className="rounded-lg border bg-muted/30 p-3 text-xs" role="status" aria-live="polite">
-                <p className="mb-2 font-medium text-muted-foreground">Trabajando en tu pregunta</p>
+                <p className="mb-2 flex items-baseline justify-between gap-2 font-medium text-muted-foreground">
+                  <span>Trabajando en tu pregunta</span>
+                  {waitSec >= 3 && (
+                    <span className="text-[11px] font-normal tabular-nums" aria-label={`${waitSec} segundos transcurridos`}>
+                      {waitSec} s
+                    </span>
+                  )}
+                </p>
                 <div className="space-y-1.5">
                   {liveStages.length === 0 && (
                     <div className="flex items-center gap-2 text-muted-foreground">
@@ -1208,6 +1281,11 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                     </div>
                   ))}
                 </div>
+                {waitSec >= 15 && (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    El modelo sigue redactando. La respuesta se publica completa cuando pasa el gate legal.
+                  </p>
+                )}
               </div>
             )}
           </div>

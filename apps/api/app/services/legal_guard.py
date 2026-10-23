@@ -1112,6 +1112,35 @@ def audit_and_persist(conn: Connection, **kwargs) -> dict[str, Any]:
     return result
 
 
+def _reaudit_items(conn: Connection, org_id: str, message_id: str) -> list[dict[str, Any]]:
+    """Evidencia original de la última auditoría del mensaje.
+
+    Los claims del `model_run` citan handles de evidencia (`E1`, `E2`…), no los
+    `citation_id` publicados. Reconstruir el mapa desde `chat_messages.citations`
+    dejaba todos los claims sin cita y convertía un WARNING en BLOCKED. La
+    auditoría ya persiste el snapshot con esos handles: se reutiliza tal cual.
+    """
+    row = one(conn, """
+        SELECT evidence_snapshot FROM answer_audits
+        WHERE organization_id = :o AND chat_message_id = :m
+        ORDER BY created_at DESC LIMIT 1
+    """, o=org_id, m=message_id)
+    items: list[dict[str, Any]] = []
+    for it in (row or {}).get("evidence_snapshot") or []:
+        if not isinstance(it, dict):
+            continue
+        items.append({
+            "handle": str(it.get("handle") or f"E{len(items) + 1}"),
+            "source_type": it.get("source_type"),
+            "document_id": str(it["document_id"]) if it.get("document_id") else None,
+            "page_number": it.get("page_number"),
+            "media_id": str(it["media_id"]) if it.get("media_id") else None,
+            "segment_id": str(it["segment_id"]) if it.get("segment_id") else None,
+            "text": str(it.get("text") or ""),
+        })
+    return items
+
+
 def audit_message(conn: Connection, *, org_id: str, case_id: str, message_id: str,
                   actor_id: str | None = None) -> dict[str, Any] | None:
     """Reaudita un mensaje usando los claims de su model_run y sus citas.
@@ -1132,41 +1161,75 @@ def audit_message(conn: Connection, *, org_id: str, case_id: str, message_id: st
         return None
     raw_claims = output.get("claims") or []
     claims: list[dict[str, Any]] = []
-    items: list[dict[str, Any]] = []
-    citations = msg.get("citations") if isinstance(msg.get("citations"), list) else []
-    by_id = {str(c.get("citation_id")): c for c in citations if isinstance(c, dict)}
-    for _idx, cl in enumerate(raw_claims):
-        if not isinstance(cl, dict):
-            continue
-        handles = []
-        for cid in cl.get("citations") or []:
-            cite = by_id.get(str(cid))
-            if not cite:
+    items = _reaudit_items(conn, org_id, message_id)
+    prior_claims = rows(conn, """
+        SELECT c.claim_text, c.claim_type, c.citation_handles
+        FROM answer_audit_claims c
+        JOIN answer_audits a ON a.id = c.audit_id
+        WHERE a.organization_id = :o AND a.chat_message_id = :m
+          AND c.auditor = 'DETERMINISTIC'
+          AND a.id = (SELECT id FROM answer_audits
+                      WHERE organization_id = :o AND chat_message_id = :m
+                      ORDER BY created_at DESC LIMIT 1)
+        ORDER BY c.claim_index
+    """, o=org_id, m=message_id)
+    if items and prior_claims:
+        # El texto publicado es el de los claims auditados: reauditar el run
+        # original incluiría claims que el gate ya había retirado.
+        for cl in prior_claims:
+            claims.append({
+                "text": cl.get("claim_text") or "",
+                "citations": [str(h) for h in (cl.get("citation_handles") or [])],
+                "claim_type": cl.get("claim_type"),
+            })
+    elif items:
+        # Camino normal: los handles del snapshot son los mismos que citan los claims.
+        for cl in raw_claims:
+            if not isinstance(cl, dict):
                 continue
-            handle = f"H{len(items) + 1}"
-            item = {"handle": handle, "source_type": cite.get("source_type")}
-            if cite.get("document_id"):
-                item.update({"document_id": cite.get("document_id"), "page_number": cite.get("page")})
-                page = one(conn, """SELECT p.text, p.folio, p.ocr_confidence, d.filename
-                                     FROM document_pages p JOIN documents d ON d.id=p.document_id
-                                     WHERE p.document_id=:d AND p.page_number=:n""",
-                           d=str(cite.get("document_id")), n=cite.get("page"))
-                if page:
-                    item.update({"text": page.get("text") or "", "folio": page.get("folio"),
-                                 "ocr_confidence": page.get("ocr_confidence"),
-                                 "filename": page.get("filename")})
-            else:
-                item.update({"media_id": cite.get("media_id"),
-                             "segment_id": cite.get("segment_id"),
-                             "start_ms": cite.get("start_ms"), "end_ms": cite.get("end_ms")})
-                seg = one(conn, """SELECT s.text, m.filename FROM transcript_segments s
-                                    JOIN media m ON m.id=s.media_id WHERE s.id=:s""",
-                          s=str(cite.get("segment_id")))
-                if seg:
-                    item.update({"text": seg.get("text") or "", "filename": seg.get("filename")})
-            items.append(item)
-            handles.append(handle)
-        claims.append({"text": cl.get("text") or "", "citations": handles, "claim_type": cl.get("claim_type")})
+            claims.append({
+                "text": cl.get("text") or "",
+                "citations": [str(c) for c in (cl.get("citations") or [])],
+                "claim_type": cl.get("claim_type"),
+            })
+    else:
+        citations = msg.get("citations") if isinstance(msg.get("citations"), list) else []
+        by_id = {str(c.get("citation_id")): c for c in citations if isinstance(c, dict)}
+        for cite in citations:
+            if isinstance(cite, dict) and cite.get("marker"):
+                by_id.setdefault(f"E{cite['marker']}", cite)
+        for _idx, cl in enumerate(raw_claims):
+            if not isinstance(cl, dict):
+                continue
+            handles = []
+            for cid in cl.get("citations") or []:
+                cite = by_id.get(str(cid))
+                if not cite:
+                    continue
+                handle = f"H{len(items) + 1}"
+                item = {"handle": handle, "source_type": cite.get("source_type")}
+                if cite.get("document_id"):
+                    item.update({"document_id": cite.get("document_id"), "page_number": cite.get("page")})
+                    page = one(conn, """SELECT p.text, p.folio, p.ocr_confidence, d.filename
+                                         FROM document_pages p JOIN documents d ON d.id=p.document_id
+                                         WHERE p.document_id=:d AND p.page_number=:n""",
+                               d=str(cite.get("document_id")), n=cite.get("page"))
+                    if page:
+                        item.update({"text": page.get("text") or "", "folio": page.get("folio"),
+                                     "ocr_confidence": page.get("ocr_confidence"),
+                                     "filename": page.get("filename")})
+                else:
+                    item.update({"media_id": cite.get("media_id"),
+                                 "segment_id": cite.get("segment_id"),
+                                 "start_ms": cite.get("start_ms"), "end_ms": cite.get("end_ms")})
+                    seg = one(conn, """SELECT s.text, m.filename FROM transcript_segments s
+                                        JOIN media m ON m.id=s.media_id WHERE s.id=:s""",
+                              s=str(cite.get("segment_id")))
+                    if seg:
+                        item.update({"text": seg.get("text") or "", "filename": seg.get("filename")})
+                items.append(item)
+                handles.append(handle)
+            claims.append({"text": cl.get("text") or "", "citations": handles, "claim_type": cl.get("claim_type")})
     result = audit(conn, org_id=org_id, case_id=case_id, question="", answer=msg["content"],
                    claims=claims, items=items)
     audit_id = persist(conn, org_id=org_id, case_id=case_id, question="", answer=msg["content"],
