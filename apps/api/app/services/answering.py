@@ -15,7 +15,8 @@ from sqlalchemy.engine import Connection
 from app.core.config import get_settings
 from app.core.db import rows
 from app.providers.embeddings import get_embedding_provider
-from app.services import abstention, retrieval_crossencoder, retrieval_rank, text_terms
+from app.services import (abstention, evidence_meta, retrieval_crossencoder,
+                          retrieval_rank, text_terms)
 from app.services.intent import Intent, classify
 from app.services.retrieval_plan import RetrievalPlan, build as build_plan, replace_queries
 
@@ -563,10 +564,16 @@ def system_prompt(locale: str, deep: bool = False) -> tuple[str, str, str]:
     meta, body = raw.split("---", 2)[1], raw.split("---", 2)[2]
     pid = re.search(r"prompt_id:\s*(\S+)", meta).group(1)
     ver = re.search(r"version:\s*(\S+)", meta).group(1)
-    rendered = body.strip().replace("{{LOCALE}}", locale)
-    if deep:
-        rendered = (rendered.replace("{{MAX_CLAIMS}}", str(s.DEEP_MAX_CLAIMS))
-                    .replace("{{MAX_WORDS}}", "900"))
+    # Turno estándar: 8 claims / 350 palabras. Análisis profundo: el tope de
+    # claims configurado (20) y margen para el informe extenso (1200 palabras).
+    max_claims = s.DEEP_MAX_CLAIMS if deep else 8
+    max_words = 1200 if deep else 350
+    # `str.replace` y no `.format`: el prompt trae llaves JSON y un `.format`
+    # fallaría; si un placeholder no existe, el replace es un no-op.
+    rendered = (body.strip()
+                .replace("{{LOCALE}}", locale)
+                .replace("{{MAX_CLAIMS}}", str(max_claims))
+                .replace("{{MAX_WORDS}}", str(max_words)))
     return rendered, pid, ver
 
 
@@ -589,6 +596,11 @@ _STOP = {
 def _norm(t: str) -> str:
     import unicodedata
     return "".join(ch for ch in unicodedata.normalize("NFKD", t.lower()) if not unicodedata.combining(ch))
+
+
+# F4 · R4: por debajo del umbral de publicación puede haber una afirmación con
+# cita válida y solape razonable. Se conserva para revisión humana, no se borra.
+REVIEW_OVERLAP_MIN = 0.20
 
 
 def grounding(claim: str, evidence: str) -> tuple[float, list[str]]:
@@ -674,6 +686,11 @@ def _required_supported(claim: str, evidence: str) -> bool:
                    if _norm(token) not in _CONNECTORS and len(token) >= 3]
         if not content:
             continue
+        # La comparación por nombres completos tolera iniciales y alias; el
+        # conteo de tokens por separado confundía «Juan Carlos Garzón» con
+        # «Carlos Alfonso Garzón».
+        if evidence_meta._mentions(evidence, " ".join(sequence)):
+            continue
         hits = sum(1 for token in content if _word_present(token, evidence_words))
         if hits / len(content) < 0.7:
             return False
@@ -686,12 +703,7 @@ def _evidence_context(it: dict) -> str:
     El modelo cita el minuto y el hablante (Â«minuto 01:58 Â· Ãlvaro LÃºzico ÃlvarezÂ»),
     pero esos datos viven en la ETIQUETA de la evidencia, no en el texto. Sin incluirlos
     aquÃ­, el validador de grounding descartaba esas afirmaciones correctas."""
-    parts = [it.get("text") or ""]
-    for key in ("filename", "speaker", "start_mmss", "page_number", "folio", "name"):
-        v = it.get(key)
-        if v:
-            parts.append(str(v))
-    return " ".join(parts)
+    return evidence_meta.context(it)
 
 
 def _is_citable_item(item: dict) -> bool:
@@ -700,6 +712,49 @@ def _is_citable_item(item: dict) -> bool:
         return True
     return bool(item.get("media_id") and item.get("segment_id")
                 and item.get("start_ms") is not None)
+
+
+# F3 · R3: el informe narrativo es lo que lee el usuario; los claims siguen
+# siendo la capa auditable. El Markdown se valida antes de llegar al compositor.
+NARRATIVE_INVALID_UNCERTAINTY = (
+    "La síntesis narrativa no superó la validación de citas; se muestra el detalle verificado."
+)
+_FENCED_CODE = re.compile(r"```.*?(?:```|\Z)", re.S)
+_HTML_BLOCK = re.compile(r"<(script|style)\b[^>]*>.*?(?:</\1\s*>|\Z)", re.S | re.I)
+_HTML_TAG = re.compile(r"<\s*/?\s*[A-Za-z][^<>]*>")
+_CITE_MARKER = re.compile(r"\[([A-Z]{1,3}\d+(?:\s*,\s*[A-Z]{1,3}\d+)*)\]")
+_HEADING = re.compile(r"^#{1,6}\s+\S", re.M)
+
+
+def cited_handles(markdown: str) -> list[str]:
+    """Handles `[E1]`/`[E1, E2]` en orden de primera aparición."""
+    out: list[str] = []
+    for match in _CITE_MARKER.finditer(markdown or ""):
+        for handle in (part.strip() for part in match.group(1).split(",")):
+            if handle and handle not in out:
+                out.append(handle)
+    return out
+
+
+def clean_answer_markdown(value: object, handles: set[str],
+                          max_chars: int) -> str | None:
+    """Markdown seguro para el usuario, o None si no cumple el contrato.
+
+    Nunca se interpreta como HTML: se eliminan bloques de código y etiquetas
+    HTML antes de decidir. Un handle inexistente invalida el informe completo:
+    dejar `[E99]` en el texto sería citar una fuente que no existe.
+    """
+    if not isinstance(value, str):
+        return None
+    text = _HTML_TAG.sub("", _HTML_BLOCK.sub("", _FENCED_CODE.sub("", value))).strip()
+    if not text or not _HEADING.search(text):
+        return None
+    if not 120 <= len(text) <= max_chars:
+        return None
+    cited = cited_handles(text)
+    if not cited or not set(cited) <= handles:
+        return None
+    return text
 
 
 def parse_and_validate(raw: str, items: list[dict], min_overlap: float = 0.0) -> dict:
@@ -718,7 +773,8 @@ def parse_and_validate(raw: str, items: list[dict], min_overlap: float = 0.0) ->
         data = json.loads(txt)
         assert isinstance(data, dict)
     except Exception:
-        return {"claims": [], "unsupported_claims": [], "uncertainties": [], "schema_valid": False}
+        return {"claims": [], "unsupported_claims": [], "uncertainties": [],
+                "schema_valid": False, "answer_markdown": None}
     supported, unsupported = [], []
     for c in data.get("claims") or []:
         if not isinstance(c, dict) or not isinstance(c.get("text"), str):
@@ -730,15 +786,36 @@ def parse_and_validate(raw: str, items: list[dict], min_overlap: float = 0.0) ->
         cited_text = " ".join(_evidence_context(by_handle[h]) for h in cites)
         ratio, missing_nums = grounding(c["text"], cited_text)
         if ratio < min_overlap or missing_nums:
+            if (not missing_nums and ratio >= REVIEW_OVERLAP_MIN
+                    and _required_supported(c["text"], cited_text)):
+                # Cita válida y sin cifras inventadas: se publica con aviso de
+                # revisión en vez de borrarse.
+                supported.append({"text": c["text"], "citations": cites,
+                                  "needs_review": True, "overlap": round(ratio, 3)})
+                continue
             unsupported.append({"text": c["text"], "citations": cites, "reason": "not_grounded",
                                 "overlap": round(ratio, 3), "missing_numbers": missing_nums})
             continue
         supported.append({"text": c["text"], "citations": cites})
+    raw_markdown = data.get("answer_markdown")
+    answer_markdown = clean_answer_markdown(
+        raw_markdown, handles, get_settings().LEGAL_GUARD_MAX_ANSWER_CHARS)
+    # F4 · R6.1: sin al menos una afirmación soportada no hay capa de auditoría.
+    # La prosa del modelo se descarta y el compositor legado arma la respuesta.
+    if not supported:
+        answer_markdown = None
     unc = [u for u in (data.get("uncertainties") or []) if isinstance(u, str)]
-    return {"claims": supported, "unsupported_claims": unsupported, "uncertainties": unc, "schema_valid": True}
+    # Solo se avisa cuando había un informe y se descartó: la ausencia del campo
+    # es un proveedor que lo ignora, no un fallo que el usuario deba leer.
+    if (raw_markdown and answer_markdown is None and supported
+            and NARRATIVE_INVALID_UNCERTAINTY not in unc):
+        unc.append(NARRATIVE_INVALID_UNCERTAINTY)
+    return {"claims": supported, "unsupported_claims": unsupported, "uncertainties": unc,
+            "schema_valid": True, "answer_markdown": answer_markdown}
 
 
-_ASR_HINTS = ("grabaci", "grabacion", "audio", "video", "minuto")
+_ASR_HINTS = ("grabaci", "grabacion", "audio", "video", "minuto", "audiencia",
+              "interrogatorio", "declaracion", "declar", "testific", "testimonio")
 _DOC_HINTS = ("acta", "escrito", "documento", "memorial", "correo", "pdf", "folio")
 _QUALITY_HINTS = ("ocr", "digitalizacion", "ilegible", "no se lee", "texto degradado",
                   "asr", "transcripcion", "transcripción")
@@ -800,6 +877,13 @@ def revalidate_claims(claims: list[dict], items: list[dict],
         if best is not None:
             supported.append({"text": text, "citations": [best[1]], "reassigned": True})
             continue
+        if (not missing_nums and ratio >= REVIEW_OVERLAP_MIN
+                and _required_supported(text, cited_text)):
+            # F4 · R4: ninguna otra fuente la sostiene mejor, pero la cita es
+            # válida y no hay cifras ausentes. Se conserva para revisión.
+            supported.append({"text": text, "citations": cites,
+                              "needs_review": True, "overlap": round(ratio, 3)})
+            continue
         unsupported.append({"text": text, "citations": cites, "reason": "not_grounded",
                             "overlap": round(ratio, 3), "missing_numbers": missing_nums})
     return {"claims": supported, "unsupported_claims": unsupported}
@@ -824,6 +908,10 @@ def clean_uncertainties(uncertainties: list[str], items: list[dict],
         # Un límite meta («no se recuperó…») no es una afirmación jurídica y el
         # juez lo marca como no soportado. Se omite; la respuesta ya cita lo que sí hay.
         if any(hint in folded for hint in _META_LIMITS):
+            continue
+        # Frase de la plantilla antigua: el usuario la rechazó explícitamente.
+        # No es un límite jurídico y no debe reaparecer aunque el modelo la copie.
+        if "sin fuente verificable" in folded:
             continue
         if any(hint in folded for hint in _QUALITY_HINTS):
             low_quality = any(

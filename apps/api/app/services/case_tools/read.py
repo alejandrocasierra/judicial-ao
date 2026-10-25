@@ -1365,6 +1365,17 @@ def search_claims(conn: Connection, case_id: str, ctx: ToolContext, query: str, 
           "Busca hechos (facts) ya extraÃ­dos y verificados.",
           {"query": {"type": "string"}, "k": {"type": "integer", "default": 5}})
 def search_facts(conn: Connection, case_id: str, ctx: ToolContext, query: str, k: int = 5) -> list[dict[str, Any]]:
+    """Hechos ya resueltos a su página/segmento primario.
+
+    Un `source_type="fact"` no es citable y `agent.py` lo descarta antes de la
+    síntesis. Por eso se reutiliza `fact_seed.for_question`: devuelve el hecho
+    con la página o el segmento que lo respalda.
+    """
+    from app.services import fact_seed
+
+    resolved = fact_seed.for_question(conn, case_id, query, limit=k)
+    if resolved:
+        return resolved
     where, params = _ilike_terms(query, column="proposition")
     if not where:
         return []
@@ -1467,6 +1478,22 @@ def list_facts_tool(conn: Connection, case_id: str, ctx: ToolContext,
                     limit: int = 50) -> list[dict[str, Any]]:
     from app.services import party_facts
     facts = party_facts.list_facts(conn, case_id, proof=proof, side=side, q=q, limit=limit)
+    from app.services import fact_seed
+
+    out: list[dict[str, Any]] = []
+    for fact in facts:
+        payload = {"id": str(fact.get("id") or ""),
+                   "proposition": str(fact.get("proposition") or ""),
+                   "proof_status": fact.get("proof_status")}
+        terms = fact_seed._fact_terms(payload)
+        query = fact_seed.or_query(terms)
+        resolved = fact_seed._resolve(conn, case_id, payload, query) if query else None
+        item = fact_seed._citation_item(payload, resolved, len(out) + 1) if resolved else None
+        if item is not None:
+            item["positions"] = fact.get("positions") or []
+            out.append(item)
+    if out:
+        return out
     return [{"handle": f"F{i}", "source_type": "fact", "text": f.get("proposition") or "",
              "fact_id": str(f.get("id")), "proof_status": f.get("proof_status"),
              "is_proven": bool(f.get("is_proven")), "positions": f.get("positions") or []}

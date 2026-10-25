@@ -66,6 +66,7 @@ class AnthropicLLM:
         self.api_version = api_version or s.LLM_API_VERSION
         self.timeout = s.LLM_TIMEOUT_SECONDS
         self.max_tokens = s.LLM_MAX_TOKENS
+        self.temperature = s.LLM_TEMPERATURE
 
     def complete(self, system: str, user: str) -> LLMResult:
         from app.providers import circuit
@@ -78,6 +79,7 @@ class AnthropicLLM:
                        headers={"x-api-key": self.api_key, "anthropic-version": self.api_version,
                                 "content-type": "application/json"},
                        json={"model": self.model, "max_tokens": self.max_tokens, "system": system,
+                             "temperature": self.temperature,
                              "messages": [{"role": "user", "content": user}]})
         r.raise_for_status()
         d = r.json()
@@ -104,6 +106,7 @@ class OpenAiLLM:
         self.api_base_url = api_base_url or s.LLM_API_BASE_URL
         self.timeout = s.LLM_TIMEOUT_SECONDS
         self.max_tokens = s.LLM_MAX_TOKENS
+        self.temperature = s.LLM_TEMPERATURE
 
     def complete(self, system: str, user: str) -> LLMResult:
         from app.providers import circuit
@@ -116,7 +119,8 @@ class OpenAiLLM:
         headers = {"authorization": f"Bearer {self.api_key}", "content-type": "application/json"}
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         r = httpx.post(url, timeout=self.timeout, headers=headers,
-                       json={"model": self.model, "max_tokens": self.max_tokens, "messages": messages})
+                       json={"model": self.model, "max_tokens": self.max_tokens, "messages": messages,
+                             "temperature": self.temperature})
         if r.status_code == 400 and "max_tokens" in r.text:
             r = httpx.post(url, timeout=self.timeout, headers=headers,
                            json={"model": self.model, "max_completion_tokens": self.max_tokens,

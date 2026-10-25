@@ -96,3 +96,20 @@ def test_rpl_10_history_context_reaches_the_queries():
     question = "¿y los pagos?"
     plan = retrieval_plan.build(question, _decision(question), history=history)
     assert any("¿Qué pasó con el contrato?" in q for q in plan.queries)
+
+
+def test_rpl_11_analysis_usa_el_presupuesto_profundo_por_defecto():
+    """A8: el modo profundo necesita más evidencia y más páginas por archivo."""
+    question = "compara la demanda con la contestación"
+    plan = retrieval_plan.build(question, _decision(question), settings=get_settings())
+    assert plan.final_k == 40
+    assert plan.candidate_k == 240
+    assert plan.max_per_file == 8
+
+
+def test_rpl_12_lookup_usa_el_presupuesto_normal_por_defecto():
+    question = "¿Qué evidencia hay sobre pagos?"
+    plan = retrieval_plan.build(question, _decision(question), settings=get_settings())
+    assert plan.final_k == 18
+    assert plan.candidate_k == 80
+    assert plan.max_per_file == 4

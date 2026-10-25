@@ -77,6 +77,13 @@ LEGAL_SYNONYMS: dict[str, tuple[str, ...]] = {
     "comprobante": ("pago", "transferencia", "recibo"),
     "pagaré": ("pagare", "título valor", "titulo valor"),
     "pagare": ("pagaré", "título valor", "titulo valor"),
+    "interregatorios": ("interrogatorios", "interrogatorio", "declaracion", "confesion"),
+    "interrogatorios": ("interrogatorio", "declaracion", "confesion"),
+    "interrogatorio": ("declaracion", "confesion"),
+    "declaracion": ("interrogatorio", "confesion"),
+    "usura": ("capitalizacion", "anatocismo", "886", "codigo de comercio", "ley 45 de 1990"),
+    "capitalizacion": ("usura", "anatocismo", "886", "codigo de comercio"),
+    "intereses": ("usura", "capitalizacion", "886"),
     "demanda": ("escrito de demanda", "libelo"),
     "demandas": ("escritos de demanda", "libelos"),
     "contestacion": ("contestación", "respuesta a la demanda"),
@@ -267,6 +274,10 @@ def specific_term(question: str | None) -> str | None:
 
     chosen_idx, chosen = max(enumerate(terms), key=_score)
     if any(ch.isdigit() for ch in chosen):
+        # «oficio 2834»: el sustantivo es genérico y «cuaderno 2834» no existe
+        # en el expediente. El identificador solo es el término correcto.
+        if re.search(r"\boficio\s+" + re.escape(chosen) + r"\b", norm(text)):
+            return chosen
         # "pagaré 001" / "NIT 521.606": el identificador solo no basta; se
         # acompaña del sustantivo anterior no genérico para acotar el locate.
         for prev in reversed(terms[:chosen_idx]):

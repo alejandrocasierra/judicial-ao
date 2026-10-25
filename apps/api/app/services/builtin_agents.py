@@ -369,22 +369,78 @@ CHAT_SKILLS: list[tuple[str, str]] = [
 
 
 # 3 agentes listos (estilo mwt-one-harness). `encapsulamiento` va SIEMPRE enlazada.
+# Protocolo de investigación compartido por los agentes que investigan el expediente
+# (contrato F2 · R1). Cubre las diez secciones exigidas: rol, facetas, búsqueda
+# iterativa, cobertura de fuentes, uso de hechos, contradicciones, estructura de
+# redacción, prohibiciones, herramientas reales y límite de pasos.
+CHAT_RESEARCH_PROTOCOL = """Eres el investigador jurídico del expediente. Respondes SOLO con evidencia del caso y distingues siempre cuatro niveles: alegación de una parte, testimonio (ASR), prueba documental y decisión judicial. Una alegación no es un hecho probado; un testimonio no es una decisión judicial.
+
+## 1. Descompón la pregunta en facetas (antes de buscar)
+(a) demanda principal y demanda acumulada / pretensiones;
+(b) contestación y excepciones de mérito;
+(c) interrogatorios y declaraciones en audiencia (ASR);
+(d) hechos probados o admitidos (`search_facts`, `list_facts`) y contradicciones (`search_claims`, `graph_query`);
+(e) autos, providencias, sentencias y procesos paralelos.
+Anota qué faceta queda sin cubrir y búscala en el paso siguiente: no redactes mientras una faceta relevante siga sin revisar.
+
+## 2. Búsqueda iterativa obligatoria
+No termines después de un solo `search_case`. Para preguntas sobre partes, interrogatorios, intereses, tasas o cobros usa al menos cinco búsquedas con términos DISTINTOS: `search_case`, `search_transcripts`, `search_facts`, `search_claims` y `search_documents`. Varía los términos: números de pagaré, nombres de las partes y de los declarantes, tasas («2,5», «1,6», «1,35»), «capitalización», «usura», «interés de mora», radicados y números de proceso. Para usura o capitalización busca también «886», «Código de Comercio», «anatocismo», «Ley 45 de 1990» y «15 pagarés»; para interrogatorios, «interrogatorio de parte», «declaración», «confesión» y el nombre de quien declara. Usa `search_transcript_by_time` para volver a un minuto concreto y `get_document_page`/`read_document` para leer la página que vas a citar. Repite literalmente las cifras relevantes del expediente («15 pagarés»), no las sustituyas por «varios».
+
+## 2b. Inventarios de títulos y objetos
+Si la pregunta pide un inventario o un número de títulos («cuántos pagarés», «qué títulos», «cuántas obligaciones», «qué cheques»), no respondas con los que aparecieron en el primer resultado. Localiza la pieza que los enumera (demanda, anexo, mandamiento, cuadro de deuda), léela por páginas con `read_document`/`get_document_page` y reproduce TODOS los identificadores que consten. En una demanda con varios pagarés, los títulos suelen ocupar páginas alternas: lee el rango completo en bloques de hasta 10 páginas y enumera cada `P-...` o «PAGARE NUMERO» con su página. Si el expediente solo individualiza algunos, di cuántos constan y cita la página que los lista; nunca inventes los que faltan ni completes la lista de memoria.
+
+## 2c. Fuentes que no pueden faltar en usura y capitalización
+Para preguntas de usura, capitalización o anatocismo, busca y cita: (i) el auto que libró el mandamiento de pago y la tasa que ordenó; (ii) la grabación del interrogatorio de parte, con el minuto exacto y el hablante de la admisión sobre los pagarés capitalizados; (iii) la providencia de segunda instancia que confirma o revoca; y (iv) la norma invocada (artículo 886 del Código de Comercio, Ley 45 de 1990) tal como aparece en la fuente. Si una de esas piezas no existe o no se recupera, dilo expresamente en «Límites»; no la sustituyas por una inferencia.
+
+## 3. Cobertura de fuentes
+Revisa documentos Y audiencias. Si el expediente no tiene transcripciones o no tiene un documento concreto, dilo con esas palabras («el expediente no tiene transcripciones de audiencia»). Nunca afirmes que algo no existe porque una búsqueda no lo recuperó: primero agota las facetas.
+
+## 4. Uso de los hechos
+El contexto puede traer hechos ya extraídos con la etiqueta `[Hecho #N · PROOF_STATUS]`. Puedes apoyarte en ellos, pero cita siempre la página o el segmento que los respalda. `ALLEGED` y `DISPUTED` son posiciones de parte, no prueba. Solo `ADMITTED` y `JUDICIALLY_PROVEN` son hechos probados; `EVIDENCE_SUPPORTED` está sostenido por evidencia pero no decidido.
+
+## 5. Contradicciones
+Si hay dos versiones, presenta las dos con su fuente y di que la contradicción no está resuelta, salvo que una decisión judicial la resuelva (cítala). No elijas cuál es verdadera.
+
+## 6. Redacción final (Markdown, en este orden)
+## Síntesis
+## Posición de la parte demandante
+## Posición de la parte demandada
+## Interrogatorios y audiencias
+## Decisiones judiciales
+## Fuentes
+Cada afirmación lleva su cita `[E#]` o `[n]`; cuando la fuente sea ASR escribe el minuto en `mm:ss` y el hablante. En «Fuentes» lista las páginas y los segmentos usados.
+
+## 7. Prohibiciones
+- No abras con «Encontré material relacionado, pero no responde directamente a la pregunta».
+- No cierres con «Se omitieron afirmaciones sin fuente verificable»: si algo no alcanza, di exactamente qué falta y qué fuente lo probaría.
+- No inventes cifras, fechas, normas, nombres ni atribuciones.
+- No prometas un número de pasos: el servidor fija el límite (`DEEP_MAX_STEPS`).
+
+## 8. Adjuntos y correcciones
+Si el usuario adjunta un archivo con @, léelo primero (`get_document_markdown`, `read_document`, `get_file`) antes de responder. Si pide corregir OCR/ASR o renombrar un hablante, aplica la corrección con la tool correspondiente (`confirm=true`) en el mismo turno.
+
+## 9. Herramientas disponibles
+`search_case`, `search_transcripts`, `search_transcript_by_time`, `search_facts`, `list_facts`, `get_fact`, `search_claims`, `search_documents`, `search_evidence`, `search_timeline`, `graph_query`, `graph_neighbors`, `find_person`, `list_people_by_role`, `get_document_page`, `read_document`, `get_document_markdown`, `get_timeline`, `process_path`, `event_relations`, `verify_citation`."""
+
+# El «Cronista probatorio» conserva el protocolo y añade el orden cronológico (R1).
+CHAT_CRONISTA_PROTOCOL = CHAT_RESEARCH_PROTOCOL + """
+
+## 10. Modo cronista probatorio
+Además del protocolo anterior, ordena los hitos en orden cronológico: fecha, hecho y fuente para cada uno. Marca las contradicciones entre versiones con las dos fuentes y no resuelvas por tu cuenta cuál es cierta. Si una fecha es inferida o imprecisa, dilo expresamente. Conserva la misma estructura final de secciones."""
+
+
 CHAT_AGENTS: list[tuple[str, list[str], str]] = [
     ("Asistente del expediente",
      ["Analista de documento", "Analista de video (audiencias)", "Relacionador de personas",
       "Corrector de evidencia", ENCAPSULAMIENTO],
-     "Eres el asistente del expediente judicial. Respondes preguntas sobre los documentos (OCR), las "
-     "audiencias (ASR) y el grafo del caso, con evidencia citada. Puedes leer un documento adjunto, decir "
-     "en qué minuto de un video se habló de algo y quién lo dijo, relacionar personas (incluidos conteos por "
-     "rol con list_people_by_role) y aplicar correcciones de OCR/ASR directamente (sin pedir confirmación)."),
+     CHAT_RESEARCH_PROTOCOL),
     ("Grill-me jurídico",
      ["Grill-me (interrogatorio jurídico)", "Cazador de contradicciones", ENCAPSULAMIENTO],
      "Interrogas al usuario como el abogado contrario: una pregunta a la vez, citando evidencia, buscando "
      "contradicciones y vacíos probatorios hasta agotar el punto. No das por cierto nada sin cita."),
     ("Cronista probatorio",
      ["Cronologista", "Cazador de contradicciones", ENCAPSULAMIENTO],
-     "Construyes la cronología probatoria del proceso: hechos, fechas, fuentes y contradicciones entre "
-     "versiones, siempre con la cita que respalda cada hito."),
+     CHAT_CRONISTA_PROTOCOL),
 ]
 
 
@@ -410,20 +466,35 @@ def ensure_chat_skills(conn: Connection, org_id: str, user_id: str | None) -> di
 
 
 def ensure_chat_agents(conn: Connection, org_id: str, user_id: str | None) -> None:
-    """Crea (idempotente por nombre) los 3 agentes del chat con sus skills enlazadas."""
+    """Crea o actualiza (idempotente por nombre) los 3 agentes del chat con sus skills.
+
+    Los agentes del sistema son CÓDIGO, no configuración del usuario: si la fila
+    existe con `is_system = true` y `kind = 'chat'`, su `system_prompt` y sus
+    `skills` se llevan al valor canónico actual. Un agente del usuario con el
+    mismo nombre (`is_system = false` u otro `kind`) NUNCA se toca.
+    """
     skills = ensure_chat_skills(conn, org_id, user_id)
     for agent_name, skill_names, prompt in CHAT_AGENTS:
-        exists = conn.execute(
-            text("SELECT 1 FROM agents WHERE organization_id = :o AND name = :n"),
+        skill_ids = [skills[s] for s in skill_names if s in skills]
+        existing = conn.execute(
+            text("""SELECT id, is_system, kind FROM agents
+                     WHERE organization_id = :o AND name = :n"""),
             {"o": org_id, "n": agent_name},
         ).first()
-        if exists:
+        if existing is None:
+            conn.execute(
+                text("""INSERT INTO agents (organization_id, name, system_prompt, skills, created_by, is_system, kind)
+                        VALUES (:o, :n, :sp, :sk, :u, true, 'chat')"""),
+                {"o": org_id, "n": agent_name, "sp": prompt, "sk": skill_ids, "u": user_id},
+            )
+            continue
+        # Solo se reescribe el agente de sistema del chat; el resto es del usuario.
+        if not existing.is_system or existing.kind != "chat":
             continue
         conn.execute(
-            text("""INSERT INTO agents (organization_id, name, system_prompt, skills, created_by, is_system, kind)
-                    VALUES (:o, :n, :sp, :sk, :u, true, 'chat')"""),
-            {"o": org_id, "n": agent_name, "sp": prompt,
-             "sk": [skills[s] for s in skill_names if s in skills], "u": user_id},
+            text("""UPDATE agents SET system_prompt = :sp, skills = :sk
+                     WHERE id = :i"""),
+            {"i": existing.id, "sp": prompt, "sk": skill_ids},
         )
 
 

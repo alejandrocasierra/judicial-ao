@@ -1,5 +1,6 @@
 """UT-ANS — contrato de respuesta y aislamiento de contenido no confiable."""
 import json
+import re
 
 import pytest
 
@@ -43,7 +44,9 @@ def test_ut_ans_05_untrusted_content_cannot_break_out():
 
 def test_ut_ans_06_system_prompt_is_versioned_and_localized():
     body, pid, ver = answering.system_prompt("en")
-    assert pid == "answer_question" and ver.isdigit() and "UNTRUSTED" in body and "{{LOCALE}}" not in body
+    # El cargador reporta la versión del prompt; desde F3 es 2.1/3.1 (no entera).
+    assert re.fullmatch(r"\d+(\.\d+)?", ver)
+    assert pid == "answer_question" and "UNTRUSTED" in body and "{{LOCALE}}" not in body
 
 
 def test_ut_ans_10_grounding_rejects_invented_numbers():

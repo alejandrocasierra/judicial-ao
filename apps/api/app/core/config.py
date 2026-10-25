@@ -213,6 +213,9 @@ class Settings(BaseSettings):
     GEMINI_BASE_URL: str
     LLM_MAX_TOKENS: int = Field(gt=0)
     LLM_TIMEOUT_SECONDS: int = Field(gt=0)
+    # Temperatura del proveedor. 0 = respuestas jurídicas reproducibles; el
+    # pipeline no depende de creatividad y la evaluación compara corridas.
+    LLM_TEMPERATURE: float = Field(default=0.0, ge=0.0, le=2.0)
     # JSON opcional: {"task": {"provider": "openai", "model": "gpt-4o-mini", "api_key": "..."}}.
     # Si falta una clave hereda del LLM default. Vacío/null = sin routing.
     LLM_ROUTING: dict | None = Field()
@@ -222,11 +225,11 @@ class Settings(BaseSettings):
     RETRIEVAL_SNIPPET_MAX_CHARS: int = Field(gt=100)
     # Embudo de recuperación (chat): candidatos por rama antes del rerank y
     # evidencias finales que llegan a la síntesis.
-    RETRIEVAL_CANDIDATE_K: int = Field(default=50, gt=0, le=500)
-    RETRIEVAL_FINAL_K: int = Field(default=10, gt=0, le=50)
+    RETRIEVAL_CANDIDATE_K: int = Field(default=80, gt=0, le=500)
+    RETRIEVAL_FINAL_K: int = Field(default=18, gt=0, le=50)
     RETRIEVAL_DOC_QUOTA: float = Field(default=0.6, ge=0.0, le=1.0)
-    RETRIEVAL_MAX_PER_FILE: int = Field(default=2, gt=0, le=20)
-    RETRIEVAL_MAX_PER_PAGE: int = Field(default=2, gt=0, le=20)
+    RETRIEVAL_MAX_PER_FILE: int = Field(default=4, gt=0, le=20)
+    RETRIEVAL_MAX_PER_PAGE: int = Field(default=3, gt=0, le=20)
     RETRIEVAL_STRICT_EMBEDDING_VERSION: bool = False
     # Si los chunks están etiquetados con otro modelo, NO se mezclan vectores por
     # defecto: se usa FTS y se registra el desajuste. Se activa solo tras decidir
@@ -239,22 +242,27 @@ class Settings(BaseSettings):
     ANSWER_CACHE_TTL_SECONDS: int = Field(default=86400, ge=0)
     # Presupuesto de latencia de un turno. Al agotarse se degrada la respuesta
     # (sin juez, sin rerank o con la mejor evidencia disponible) en vez de colgar.
-    REQUEST_DEADLINE_MS: int = Field(default=12000, gt=0)
+    REQUEST_DEADLINE_MS: int = Field(default=45000, gt=0)
     # Análisis exhaustivo (contradicciones, cruces, "todas las..."): recupera y
-    # razona mucho más. Es un presupuesto aparte porque 12 s solo alcanzan para
-    # una respuesta superficial y el usuario percibe que "no investiga".
-    ANALYSIS_DEADLINE_MS: int = Field(default=90000, gt=0)
-    DEEP_RETRIEVAL_FINAL_K: int = Field(default=30, gt=0, le=50)
+    # razona mucho más. Es un presupuesto aparte porque el deadline normal (45 s)
+    # solo alcanza para una respuesta superficial y el usuario percibe que "no investiga".
+    ANALYSIS_DEADLINE_MS: int = Field(default=120000, gt=0)
+    DEEP_RETRIEVAL_FINAL_K: int = Field(default=40, gt=0, le=50)
     DEEP_RETRIEVAL_CANDIDATE_K: int = Field(default=240, gt=0, le=500)
-    DEEP_MAX_PER_FILE: int = Field(default=6, gt=0, le=20)
+    DEEP_MAX_PER_FILE: int = Field(default=8, gt=0, le=20)
     DEEP_MAX_PER_PAGE: int = Field(default=3, gt=0, le=20)
-    DEEP_MAX_STEPS: int = Field(default=8, gt=0, le=16)
+    DEEP_MAX_STEPS: int = Field(default=12, gt=0, le=16)
     DEEP_MAX_CLAIMS: int = Field(default=20, gt=0, le=40)
-    DEEP_MAX_VISIBLE_CITATIONS: int = Field(default=20, gt=0, le=40)
+    DEEP_MAX_VISIBLE_CITATIONS: int = Field(default=25, gt=0, le=40)
     DEEP_MAX_CITATIONS_PER_FILE: int = Field(default=6, gt=0, le=20)
     # Presupuesto de citas visibles del compositor.
-    MAX_VISIBLE_CITATIONS: int = Field(default=4, gt=0, le=20)
-    MAX_CITATIONS_PER_FILE: int = Field(default=2, gt=0, le=20)
+    MAX_VISIBLE_CITATIONS: int = Field(default=12, gt=0, le=20)
+    MAX_CITATIONS_PER_FILE: int = Field(default=6, gt=0, le=20)
+    # Modelo opcional para el modo análisis. Vacío = modelo de la sesión. Se
+    # busca por nombre en `ai_models` de la organización y, si no existe, el
+    # turno sigue con el modelo de la sesión (nunca se rompe).
+    ANALYSIS_MODEL_NAME: str = ""
+    ANALYSIS_MODEL_PROVIDER: str = ""
     NAV_MAX_OCCURRENCES: int = Field(default=8, gt=0, le=100)
     ANSWER_MIN_GROUNDING_OVERLAP: float = Field(ge=0.0, le=1.0)
     # Verificación semántica: sync (bloquea), async (post-response) u off.

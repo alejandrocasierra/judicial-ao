@@ -362,6 +362,22 @@ def _select(items: list[dict], plan: RetrievalPlan, *, reserve_docs: bool = True
             break
         take(pick)
 
+    # Reserva de transcripciones (contrato F2 · R5): DESPUÉS de la cuota de
+    # documentos y sin superar `final_k`. Si no quedan ítems no documento, no se
+    # reserva nada y el flujo sigue igual.
+    transcript_budget = min(int(plan.final_k * max(0.0, plan.transcript_quota)),
+                            plan.final_k - len(selected))
+    reserved = 0
+    while reserved < transcript_budget:
+        transcripts = [it for it in pool if not _is_document(it) and can_take(it)]
+        if not transcripts:
+            break
+        pick = _pick_mmr(transcripts, selected, terms)
+        if pick is None:
+            break
+        take(pick)
+        reserved += 1
+
     while len(selected) < plan.final_k:
         candidates = [it for it in pool if can_take(it)]
         if not candidates:

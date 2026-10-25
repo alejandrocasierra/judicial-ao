@@ -21,7 +21,7 @@ from typing import Any, Iterable
 
 from app.core.config import get_settings
 from app.core.i18n import t
-from app.services import text_terms
+from app.services import evidence_meta, text_terms
 
 DIRECT = "direct"
 PARTIAL = "partial"
@@ -70,13 +70,9 @@ def _context(item: dict) -> str:
 
     Los números de la respuesta pueden venir de la etiqueta de la fuente
     («minuto 01:26») y no del cuerpo del texto; el validador debe verlos.
+    F4 · R2: una sola definición compartida con `answering` y el gate legal.
     """
-    parts = [str(item.get("text") or "")]
-    for key in ("filename", "speaker", "start_mmss", "page_number", "folio", "label"):
-        value = item.get(key)
-        if value not in (None, ""):
-            parts.append(str(value))
-    return " ".join(parts)
+    return evidence_meta.context(item)
 
 
 def _stem_match(left: str, right: str) -> bool:
@@ -204,10 +200,51 @@ def _source_line(item: dict, marker: int, locale: str) -> str:
     return f"[{marker}] {filename}" + (f" · {tail}" if tail else "")
 
 
+# F3 · R4: informe narrativo del modelo. Los handles se renumeran en orden de
+# primera aparición y el Markdown se conserva íntegro (títulos, listas, tablas).
+_CITE_RE = re.compile(r"\[([A-Z]{1,3}\d+(?:\s*,\s*[A-Z]{1,3}\d+)*)\]")
+_HEADING_RE = re.compile(r"^#{1,6}\s+\S", re.M)
+
+
+def _marker_handles(match: re.Match) -> list[str]:
+    return [part.strip() for part in match.group(1).split(",")]
+
+
+def _narrative_markdown(markdown: str | None, by_handle: dict[str, dict],
+                        max_citations: int) -> tuple[str, list[str], dict[str, int]] | None:
+    """Markdown renumerado + handles usados, o None para usar el camino legado.
+
+    Se descarta el informe completo (no se recorta) si cita un handle que no
+    resuelve o si necesita más citas que el presupuesto: una tabla o una frase
+    con la mitad de sus fuentes es peor que el detalle verificado.
+    """
+    if not isinstance(markdown, str):
+        return None
+    text = markdown.strip()
+    if not text or not _HEADING_RE.search(text):
+        return None
+    used: list[str] = []
+    for match in _CITE_RE.finditer(text):
+        for handle in _marker_handles(match):
+            item = by_handle.get(handle)
+            if item is None or not _is_citable(item):
+                return None
+            if handle not in used:
+                used.append(handle)
+    if not used or len(used) > max_citations:
+        return None
+    markers = {handle: index for index, handle in enumerate(used, 1)}
+
+    def _replace(match: re.Match) -> str:
+        return "[" + ", ".join(str(markers[h]) for h in _marker_handles(match)) + "]"
+
+    return _CITE_RE.sub(_replace, text), used, markers
+
+
 def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dict],
            uncertainties: list[str], locale: str, max_citations: int | None = None,
            max_per_file: int | None = None, coverage: float | None = None,
-           deep: bool = False) -> ComposeResult:
+           deep: bool = False, answer_markdown: str | None = None) -> ComposeResult:
     """Compone el Markdown final a partir de claims validados y evidencia."""
     settings = get_settings()
     max_citations = max_citations or settings.MAX_VISIBLE_CITATIONS
@@ -226,6 +263,35 @@ def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dic
         )
 
     by_handle = {str(it.get("handle")): it for it in evidence if it.get("handle")}
+
+    narrative = _narrative_markdown(answer_markdown, by_handle, max_citations)
+    if narrative is not None:
+        body, used, markers = narrative
+        sources = [_source_line(by_handle[h], markers[h], locale) for h in used]
+        claim_texts = [_clean(c.get("text")) for c in claims or [] if isinstance(c, dict)]
+        claim_texts = [text for text in claim_texts if text]
+        if claim_texts:
+            # En análisis exhaustivo el informe se publica completo aunque ninguna
+            # afirmación aislada «responda» a la pregunta.
+            responds = any(_responds(question, text, intent) for text in claim_texts)
+            answer_kind = DIRECT if (responds or deep) else PARTIAL
+        else:
+            # `INSUFFICIENT` exige ausencia de claims Y de markdown válido.
+            answer_kind = DIRECT
+        blocks = [body]
+        if limits:
+            blocks.append("## " + t("messages.compose_limits", locale) + "\n"
+                          + "\n".join(f"- {value}" for value in limits))
+        if sources:
+            blocks.append("## " + t("messages.compose_sources", locale) + "\n" + "\n".join(sources))
+        return ComposeResult(
+            answer_kind=answer_kind,
+            answer="\n\n".join(blocks),
+            used_handles=used,
+            sections={"direct": [body], "evidence": [], "limits": limits, "sources": sources},
+            uncertainties=limits,
+        )
+
     prepared: list[dict] = []
     seen_texts: set[str] = set()
 
@@ -358,12 +424,13 @@ def render(question: str, *, intent: Any, claims: list[dict], evidence: list[dic
         )
         sections["direct"] = [paragraph]
         blocks.append(paragraph)
-    else:
+    elif not deep:
+        # En análisis exhaustivo no se antepone el cartel: el usuario pidió el
+        # análisis y ve directamente la evidencia, con answer_kind=partial.
         header = t("messages.compose_partial_header", locale)
         sections["direct"] = [header]
         blocks.append(header)
-        if not deep:
-            related = related[:3]
+        related = related[:3]
 
     if related:
         bullets = [

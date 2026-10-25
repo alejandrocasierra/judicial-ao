@@ -16,6 +16,8 @@ from app.services import agent_tools, answering, case_tools, evidence_labels, sk
 
 log = logging.getLogger(__name__)
 MAX_STEPS = 5
+# El progreso SSE se pinta en una línea de la UI: 180 caracteres es el tope.
+TOOL_LABEL_MAX_CHARS = 180
 
 
 def _read_prompt(versioned: str, fallback: str) -> str:
@@ -144,8 +146,17 @@ def _carried_evidence_block(items: list[dict[str, Any]]) -> str:
 
 _TOOL_VERBS = {
     "search_case": "Buscando en el expediente",
+    "search_documents": "Buscando en los documentos",
+    "search_transcripts": "Buscando en las transcripciones",
+    "search_facts": "Buscando en los hechos registrados",
+    "list_facts": "Listando los hechos registrados",
+    "search_claims": "Buscando en las afirmaciones registradas",
+    "search_evidence": "Buscando en la evidencia",
+    "search_timeline": "Revisando la línea de tiempo",
+    "get_timeline": "Construyendo la línea de tiempo",
     "read_document": "Leyendo el documento",
     "get_document_page": "Leyendo la página",
+    "get_document_markdown": "Leyendo el documento completo",
     "find_person": "Buscando a la persona y sus relaciones",
     "graph_query": "Consultando el grafo del caso",
     "search_transcript_by_time": "Revisando la transcripción",
@@ -167,8 +178,8 @@ def _tool_label(tool: str, arguments: dict[str, Any]) -> str:
                 query += f" · p. {page}"
     if query:
         text = " ".join(str(query).split())[:110]
-        return f"{verb}: «{text}»…"
-    return f"{verb}…"
+        return f"{verb}: «{text}»…"[:TOOL_LABEL_MAX_CHARS]
+    return f"{verb}…"[:TOOL_LABEL_MAX_CHARS]
 
 
 def _tool_done_label(tool: str, items: list[dict[str, Any]]) -> str:
@@ -181,7 +192,33 @@ def _tool_done_label(tool: str, items: list[dict[str, Any]]) -> str:
         if sources:
             label += ": " + " · ".join(sources)
         return label
+    facts = [it for it in items if it.get("source_type") == "fact"]
+    if facts:
+        # Los hechos son citables solo a través de su página o segmento: se dice
+        # lo que sí se encontró, sin presentarlo como fuente primaria.
+        return (f"Revisé {len(facts)} hechos registrados; ninguna página ni segmento "
+                f"resuelto en esta búsqueda")
     return "No encontré fragmentos citables en esta búsqueda"
+
+
+def _synthesis_system(base: str, agent_prompt: str | None) -> str:
+    """Fusiona el rol/protocolo del agente con el contrato de síntesis (plan F3.1).
+
+    La investigación ya terminó: el bloque deja claro que no debe llamar tools y
+    que el JSON de salida es el del contrato de respuesta. El prompt del agente
+    gobierna el rol y la estructura, no el bucle ReAct.
+    """
+    if not agent_prompt or not str(agent_prompt).strip():
+        return base
+    role = str(agent_prompt).strip()
+    return (
+        "<agent_role>\n" + role + "\n</agent_role>\n\n"
+        "<synthesis_step>\nLa investigación terminó. NO llames herramientas, NO devuelvas "
+        "llamadas de tool y NO pidas más búsquedas. Usa el rol, las facetas y la "
+        "estructura anteriores para redactar la respuesta final; el contrato de "
+        "salida JSON que sigue tiene prioridad sobre cualquier instrucción de tools.\n"
+        "</synthesis_step>\n\n" + base
+    )
 
 
 def _evidence_hint(it: dict[str, Any], max_chars: int | None = None) -> str:
@@ -189,6 +226,11 @@ def _evidence_hint(it: dict[str, Any], max_chars: int | None = None) -> str:
     Sin esto, el modelo no sabía en qué minuto ni quién lo dijo aunque la cita sí lo mostraba."""
     max_chars = max_chars or get_settings().AGENT_TOOL_RESULT_MAX_CHARS
     text = str(it.get("text", ""))[:max_chars]
+    # El estado epistémico del hecho va DELANTE: el modelo debe ver si es una
+    # alegación, un hecho sostenido por evidencia o un hecho probado.
+    label = str(it.get("fact_label") or "").strip()
+    if label:
+        text = f"{label} {text}"
     person = ""
     if it.get("person_name"):
         person = f" · {it.get('role') or 'rol'}: {it['person_name']} ({it.get('mentions')} menciones)"
@@ -213,10 +255,30 @@ def _mmss(ms: Any) -> str:
 
 
 def _dedupe_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen: set[str] = set()
-    out = []
+    """Deduplica por FUENTE, no por handle.
+
+    Cada llamada a `search_case`/`search_documents` reinicia sus handles en
+    E1..En. Usar el handle en la clave descartaba páginas distintas del mismo
+    PDF y dejaba dos ítems con el mismo handle (el segundo sobrescribía al
+    primero en `by_handle`). La identidad es documento+página o media+segmento.
+    """
+    seen: set[tuple] = set()
+    out: list[dict[str, Any]] = []
     for it in evidence:
-        key = str(it.get("document_id") or it.get("segment_id") or it.get("node_id") or it.get("claim_id") or it.get("fact_id") or it.get("evidence_id")) + ":" + str(it.get("handle"))
+        if it.get("document_id") and it.get("page_number") is not None:
+            key = ("doc", str(it["document_id"]), int(it["page_number"]))
+        elif it.get("media_id") and it.get("segment_id"):
+            key = ("seg", str(it["media_id"]), str(it["segment_id"]))
+        elif it.get("fact_id"):
+            key = ("fact", str(it["fact_id"]))
+        elif it.get("node_id"):
+            key = ("node", str(it["node_id"]))
+        elif it.get("claim_id"):
+            key = ("claim", str(it["claim_id"]))
+        elif it.get("evidence_id"):
+            key = ("evidence", str(it["evidence_id"]))
+        else:
+            key = ("text", str(it.get("text") or "")[:200])
         if key in seen:
             continue
         seen.add(key)
@@ -356,6 +418,10 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
             steps_exhausted = True
 
         evidence = _dedupe_evidence(evidence)
+        # Handles únicos: el modelo cita los bloques de <evidence> de la
+        # síntesis, no los handles internos de cada llamada a la herramienta.
+        for index, item in enumerate(evidence, start=1):
+            item["handle"] = f"E{index}"
         # Tarjetas de archivo (get_file/list_case_files): no son evidencia citable;
         # viajan aparte para que la UI pinte botones de ver/descargar.
         file_cards = _file_cards(evidence)
@@ -376,6 +442,7 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
         })
         # Síntesis final con el prompt de respuesta RAG existente (v3 en modo profundo)
         system, prompt_id, prompt_version = answering.system_prompt(locale, deep=deep)
+        system = _synthesis_system(system, agent_prompt)
         user = answering.build_user_prompt(question, evidence, history=history_turns, deep=deep)
         _emit(emit, "synthesizing", {
             "label": f"Redactando la respuesta con {len(evidence)} fragmentos…",
@@ -455,6 +522,7 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
             "unsupported_claims": unsupported,
             "uncertainties": validated["uncertainties"],
             "schema_valid": validated["schema_valid"],
+            "answer_markdown": validated.get("answer_markdown"),
             "raw_text": result.text,
             "prompt_id": prompt_id,
             "prompt_version": prompt_version,

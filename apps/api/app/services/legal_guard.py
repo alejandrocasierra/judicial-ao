@@ -17,13 +17,14 @@ import logging
 import re
 import unicodedata
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.core.config import get_settings
 from app.core.db import one, rows
-from app.services import citations as citations_service, text_terms
+from app.services import citations as citations_service, evidence_meta, text_terms
 
 log = logging.getLogger(__name__)
 
@@ -126,6 +127,16 @@ Devuelve SOLO JSON:
 
 def _norm(value: str) -> str:
     return text_terms.norm(value or "")
+
+
+def _uuid_or_none(value: Any) -> str | None:
+    """Un id ausente o corrupto no puede llegar como texto «None» a una columna uuid."""
+    if value in (None, "", "None"):
+        return None
+    try:
+        return str(UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 
 def _hash(value: str) -> str:
@@ -339,6 +350,15 @@ def _lookup_legal_rule(conn: Connection, org_id: str, jurisdiction: str,
 
 def _party_names(conn: Connection, case_id: str) -> list[dict[str, Any]]:
     return rows(conn, "SELECT id, name, role, aliases FROM parties WHERE case_id = :c", c=case_id)
+
+
+def _party_aliases(value: Any) -> list[str]:
+    """`aliases` es text[] en la base; se acepta también una cadena suelta."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.strip("{}").split(",") if part.strip()]
+    return [str(part) for part in value if part]
 
 
 def _cite_check(conn: Connection, case_id: str, item: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -689,10 +709,13 @@ def audit(conn: Connection, *, org_id: str, case_id: str, question: str, answer:
     policy = policy or load_policy(conn, org_id, case_id)
     by_handle = {str(it.get("handle")): it for it in (items or []) if it.get("handle")}
     parties = _party_names(conn, case_id)
-    party_norms = []
+    # La parte se identifica por su nombre y sus alias: el hablante de un
+    # segmento suele venir abreviado («JORGE H. ROJAS M.»).
+    party_names: list[tuple[dict[str, Any], list[str]]] = []
     for p in parties:
-        names = [p.get("name")] + list(p.get("aliases") or [])
-        party_norms.append((p, [_norm(str(n)) for n in names if n]))
+        names = [str(n) for n in [p.get("name"), *_party_aliases(p.get("aliases"))] if n]
+        if names:
+            party_names.append((p, names))
     decisions = rows(conn, "SELECT id, source_document_id, outcome FROM decisions WHERE case_id = :c", c=case_id)
     contradictions = _open_contradictions(conn, case_id)
     jurisdiction = ""
@@ -731,6 +754,7 @@ def audit(conn: Connection, *, org_id: str, case_id: str, question: str, answer:
         critical = False
         high = False
         claim_quote_hash = str(raw.get("quote_hash") or "").strip() or None
+        cited_text = ""
 
         if not handles:
             _add_finding(findings, code="CITATION_MISSING", severity="CRITICAL",
@@ -781,11 +805,12 @@ def audit(conn: Connection, *, org_id: str, case_id: str, question: str, answer:
                     high = True
                 cited_items.append(item)
 
-            cited_text = " ".join(str(it.get("text") or "") for it in cited_items)
-            cited_norm = _norm(cited_text)
+            cited_text = " ".join(evidence_meta.context(it) for it in cited_items)
             # Cifras: cualquier numero del claim debe aparecer en la fuente. Las
             # cifras que forman parte de la cita normativa ("artículo 422", "Ley
             # 1564 de 2012") no son hechos del expediente y no se buscan en la página.
+            # F4 · R2: el contexto incluye el nombre del archivo, la página y el
+            # folio; sus números son legítimos (radicado, fecha del video).
             claim_facts_text = _ARTICLE_RE.sub(" ", _LAW_RE.sub(" ", text_claim))
             for number in text_terms.numbers(claim_facts_text):
                 if number not in text_terms.numbers(cited_text):
@@ -796,9 +821,10 @@ def audit(conn: Connection, *, org_id: str, case_id: str, question: str, answer:
                              claim_index=index)
                 reasons.append({"code": "NUMBER_MISMATCH", "missing": missing_numbers})
                 critical = bool(policy.get("block_on_numbers", True))
-            # Fechas: fecha explicita del claim debe aparecer en la fuente.
+            # Fechas: la fecha del claim debe coincidir en día, mes y año con una
+            # fecha del contexto (texto, minuto o nombre del archivo).
             for date_value in _extract_dates(text_claim):
-                if _norm(date_value) not in cited_norm:
+                if not evidence_meta.date_supported(date_value, cited_text):
                     missing_dates.append(date_value)
             if missing_dates:
                 _add_finding(findings, code="DATE_MISMATCH", severity="CRITICAL",
@@ -807,11 +833,11 @@ def audit(conn: Connection, *, org_id: str, case_id: str, question: str, answer:
                 reasons.append({"code": "DATE_MISMATCH", "missing": missing_dates})
                 critical = bool(policy.get("block_on_numbers", True))
             # Partes conocidas: si el claim nombra una parte y la cita no la
-            # contiene, no se puede afirmar que esa parte hizo algo.
-            for party, names in party_norms:
-                if any(n and n in _norm(text_claim) for n in names):
-                    if not any(n and n in cited_norm for n in names):
-                        missing_parties.append(str(party.get("name")))
+            # contiene (ni por alias ni por el hablante resuelto), no se puede
+            # afirmar que esa parte hizo algo.
+            for party, names in party_names:
+                if not evidence_meta.party_present(text_claim, cited_text, names):
+                    missing_parties.append(str(party.get("name")))
             if missing_parties and policy.get("block_on_parties", True):
                 _add_finding(findings, code="PARTY_MISMATCH", severity="HIGH",
                              message=f"Partes no soportadas por la cita: {', '.join(missing_parties)}.",
@@ -840,11 +866,25 @@ def audit(conn: Connection, *, org_id: str, case_id: str, question: str, answer:
             for norm in norms:
                 rule = _lookup_legal_rule(conn, org_id, jurisdiction, norm, text_claim)
                 if rule is None:
-                    _add_finding(findings, code="LEGAL_RULE_MISSING", severity="CRITICAL",
-                                 message=f"Norma no verificada en legal_rules: {norm['raw']}.",
-                                 claim_index=index, metadata={"norm": norm})
-                    reasons.append({"code": "LEGAL_RULE_MISSING", "norm": norm})
-                    critical = bool(policy.get("block_on_legal_conclusion", True))
+                    # La norma no está en el corpus local. Si la fuente citada
+                    # la menciona (p. ej. «Ley 45 de 1990» en el escrito de la
+                    # parte), la afirmación no es una invención: se publica con
+                    # revisión humana. Sin esa mención, sigue siendo CRITICAL.
+                    stated = bool(cited_text) and (
+                        _norm(str(norm.get("raw") or "")) in _norm(cited_text)
+                        or _norm(str(norm.get("identifier") or "")) in _norm(cited_text))
+                    _add_finding(findings, code="LEGAL_RULE_MISSING",
+                                 severity="HIGH" if stated else "CRITICAL",
+                                 message=(f"Norma no verificada en legal_rules: {norm['raw']}."
+                                          + (" La fuente citada la menciona; requiere revisión."
+                                             if stated else "")),
+                                 claim_index=index, metadata={"norm": norm, "stated_in_source": stated})
+                    reasons.append({"code": "LEGAL_RULE_MISSING", "norm": norm,
+                                    "stated_in_source": stated})
+                    if stated:
+                        high = True
+                    else:
+                        critical = bool(policy.get("block_on_legal_conclusion", True))
                 else:
                     # Una norma cargada solo a nivel de ley no puede respaldar
                     # una consecuencia jurídica concreta: falta el artículo.
@@ -980,7 +1020,11 @@ def audit(conn: Connection, *, org_id: str, case_id: str, question: str, answer:
         "evidence_snapshot": [
             {"handle": it.get("handle"), "source_type": it.get("source_type"),
              "document_id": it.get("document_id"), "page_number": it.get("page_number"),
+             "folio": it.get("folio"), "filename": it.get("filename"),
              "media_id": it.get("media_id"), "segment_id": it.get("segment_id"),
+             "start_ms": it.get("start_ms"), "end_ms": it.get("end_ms"),
+             "start_mmss": it.get("start_mmss"), "speaker": it.get("speaker"),
+             "fact_label": it.get("fact_label"), "fact_text": it.get("fact_text"),
              "text": str(it.get("text") or "")[:4000]}
             for it in (items or [])[:40]
         ],
@@ -1233,7 +1277,7 @@ def audit_message(conn: Connection, *, org_id: str, case_id: str, message_id: st
     result = audit(conn, org_id=org_id, case_id=case_id, question="", answer=msg["content"],
                    claims=claims, items=items)
     audit_id = persist(conn, org_id=org_id, case_id=case_id, question="", answer=msg["content"],
-                       result=result, model_run_id=str(msg.get("model_run_id")) if msg.get("model_run_id") else None,
+                       result=result, model_run_id=_uuid_or_none(msg.get("model_run_id")),
                        chat_message_id=str(message_id), actor_id=actor_id,
                        pipeline_version=get_settings().PIPELINE_VERSION,
                        idempotency_extra=f"reaudit:{message_id}")

@@ -22,13 +22,13 @@ from app.core.config import get_settings
 from app.core.db import one, rows, tx
 from app.core.errors import AppError
 from app.core.i18n import negotiate, t
-from app.providers.llm import get_llm
+from app.providers.llm import get_llm, get_llm_for_model
 from app.schemas import QueryIn
 from app.security.deps import Principal, case_access, current_principal
-from app.services import (agent, answering, audit, cache, case_tools, compose, legal_guard,
-                          deadline as deadline_mod, evidence_labels, intent as intent_service,
-                          intent_profile, metrics, query_hints, query_rewrite, ratelimit,
-                          role_answer, skills, text_terms, verification)
+from app.services import (agent, answering, audit, cache, case_tools, compose,
+                          legal_guard, deadline as deadline_mod, evidence_labels,
+                          intent as intent_service, intent_profile, metrics, query_hints,
+                          query_rewrite, ratelimit, role_answer, skills, text_terms, verification)
 from app.services.compose import ComposeResult
 
 router = APIRouter(prefix="/cases/{case_id}", tags=["ai"])
@@ -141,7 +141,7 @@ def _pg_array(values: list[object]) -> str:
     return "{" + ",".join(str(v) for v in values) + "}"
 
 
-ANSWER_CACHE_VERSION = "r2-2026.10.22"
+ANSWER_CACHE_VERSION = "r25-2026.10.24"
 _CONTEXTUAL_QUESTION = re.compile(
     r"\b(lo anterior|eso|esto|el mismo|la misma|dich[oa]|anterior|sigue|entonces|"
     r"y el|y la|tambi[eé]n|aquel|aquella)\b", re.I)
@@ -366,21 +366,181 @@ def _mentioned_document_ids(conn, case_id: str, question: str) -> list[str]:
     return found
 
 
-def _publication_claims(guard_result: dict) -> list[dict]:
-    """Claims publicables: aprobados y los que solo requieren revisión.
+# F4 · R3: motivos que impiden publicar un claim aunque tenga cita. Si la cita
+# no existe, no resuelve a una fuente del caso o no contiene el texto citado, la
+# afirmación no se muestra ni como revisión.
+UNPUBLISHABLE_REASONS = frozenset({
+    "CITATION_MISSING", "CITATION_UNRESOLVED", "QUOTE_MISMATCH", "QUOTE_HASH_UNVERIFIED",
+})
+# F4 · R3: el gate marca, no amputa. La narrativa se conserva y los claims
+# bloqueados se publican con `needs_review=True`; el límite agregado avisa.
+GUARD_REPLACED_NARRATIVE = "La síntesis narrativa se conservó con afirmaciones marcadas para revisión."
 
-    `NEEDS_REVIEW` no es una afirmación falsa: se muestra con su cita y una
-    advertencia, pero nunca se convierte en `SUPPORTED`. Los `UNSUPPORTED` no
-    salen. Así una contradicción abierta no borra toda la respuesta.
+
+def _claim_reasons(claim: dict) -> list[str]:
+    return [str(reason.get("code") or "") for reason in (claim.get("reasons") or [])
+            if isinstance(reason, dict)]
+
+
+def _publishable_reason(claim: dict) -> str | None:
+    """Motivo por el que un `UNSUPPORTED` se publica como revisión, o `None`.
+
+    Solo se publica si tiene citas y ninguna de ellas falló: la cita primaria es
+    la condición, no el veredicto. La cifra ausente sigue siendo un motivo de
+    revisión, nunca una aprobación.
     """
-    approved = list(guard_result.get("approved_claims") or [])
-    review = [
-        {"text": c.get("text") or "", "citations": c.get("citations") or [],
-         **({"claim_type": c["claim_type"]} if c.get("claim_type") else {})}
-        for c in guard_result.get("claims") or []
-        if c.get("status") == "NEEDS_REVIEW"
+    if not claim.get("citations"):
+        return None
+    codes = _claim_reasons(claim)
+    if any(code in UNPUBLISHABLE_REASONS for code in codes):
+        return None
+    return codes[0] if codes else "UNSUPPORTED"
+
+
+def _publication_claims(guard_result: dict) -> list[dict]:
+    """Claims publicables: aprobados, revisiones y bloqueos con cita válida.
+
+    F4 · R3: `NEEDS_REVIEW` y los `UNSUPPORTED` cuya cita primaria resuelve se
+    publican con `needs_review=True` y el primer motivo (`review_reason`). No se
+    convierten en `SUPPORTED`: solo dejan de desaparecer en silencio. Los que no
+    tienen cita válida no salen (se cuentan en los límites del turno).
+    """
+    published: list[dict] = []
+    for claim in guard_result.get("approved_claims") or []:
+        entry = {"text": claim.get("text") or "", "citations": claim.get("citations") or []}
+        if claim.get("claim_type"):
+            entry["claim_type"] = claim["claim_type"]
+        published.append(entry)
+    for claim in guard_result.get("claims") or []:
+        status = str(claim.get("status") or "")
+        if status == "SUPPORTED":
+            continue
+        if status == "UNSUPPORTED":
+            reason = _publishable_reason(claim)
+            if reason is None:
+                continue
+        elif status == "NEEDS_REVIEW":
+            codes = _claim_reasons(claim)
+            reason = codes[0] if codes else "NEEDS_REVIEW"
+        else:
+            continue
+        entry = {"text": claim.get("text") or "", "citations": claim.get("citations") or [],
+                 "needs_review": True, "review_reason": reason}
+        if claim.get("claim_type"):
+            entry["claim_type"] = claim["claim_type"]
+        published.append(entry)
+    return published
+
+
+def _review_note(count: int, reason: str) -> str:
+    if count == 1:
+        return f"1 afirmación requiere revisión humana (motivo: {reason})."
+    return f"{count} afirmaciones requieren revisión humana (motivo: {reason})."
+
+
+def _omitted_note(count: int) -> str:
+    if count == 1:
+        return "Se omitió 1 afirmación sin cita primaria válida."
+    return f"Se omitieron {count} afirmaciones sin cita primaria válida."
+
+
+def _publication_notes(guard_result: dict, published: list[dict]) -> list[str]:
+    """Conteos honestos de lo que se publica y de lo que se bloquea (una vez)."""
+    notes: list[str] = []
+    review_codes = [str(claim.get("review_reason") or "") for claim in published
+                    if claim.get("needs_review")]
+    review_codes = [code for code in review_codes if code]
+    if review_codes:
+        notes.append(_review_note(len(review_codes), review_codes[0]))
+    published_texts = {text_terms.norm(str(claim.get("text") or "")) for claim in published}
+    blocked = [
+        claim for claim in guard_result.get("claims") or []
+        if str(claim.get("status") or "") == "UNSUPPORTED"
+        and text_terms.norm(str(claim.get("text") or "")) not in published_texts
     ]
-    return approved + review
+    if blocked:
+        notes.append(_omitted_note(len(blocked)))
+    return notes
+
+
+def _apply_publication(validated: dict, guard_result: dict) -> list[str]:
+    """Aplica el resultado del gate a lo que se va a publicar.
+
+    Devuelve los límites del turno (para añadirlos tras el filtro de
+    `clean_uncertainties`, que descarta los límites meta con cifras). Si el gate
+    bloqueó alguna afirmación, el Markdown narrativo se descarta: no puede
+    seguir afirmando lo que el verificador legal rechazó (F4 · R6.2).
+    """
+    published = _publication_claims(guard_result)
+    validated["claims"] = published
+    notes = _publication_notes(guard_result, published)
+    # R6.2 (revisado): no se borra el Markdown. El plan prohíbe la amputación
+    # silenciosa; el claim bloqueado ya se publica como revisión y el límite
+    # agregado lo advierte. Borrar todo el informe por una frase era peor.
+    blocked = any(str(claim.get("status") or "") == "UNSUPPORTED"
+                  for claim in guard_result.get("claims") or [])
+    if blocked:
+        notes.append(GUARD_REPLACED_NARRATIVE)
+    return notes
+
+
+def _analysis_llm(s, org_id: str, user_id: str, session_llm, *, deep: bool):
+    """Modelo opcional del modo análisis (`ANALYSIS_MODEL_NAME`).
+
+    Sin nombre configurado, sin turno profundo o si el modelo no existe/falla,
+    se conserva el modelo de la sesión: la capacidad es opcional y nunca rompe
+    el turno. El `log.warning` es único por turno (un solo intento).
+    """
+    if not deep:
+        return session_llm
+    name = str(getattr(s, "ANALYSIS_MODEL_NAME", "") or "").strip()
+    if not name:
+        return session_llm
+    provider = str(getattr(s, "ANALYSIS_MODEL_PROVIDER", "") or "").strip()
+    try:
+        with tx(org_id, user_id) as c:
+            if provider:
+                row = one(c, """SELECT id FROM ai_models
+                                WHERE organization_id = :o AND model_name = :m
+                                  AND provider = :p
+                                ORDER BY is_default DESC, created_at LIMIT 1""",
+                          o=org_id, m=name, p=provider)
+            else:
+                row = one(c, """SELECT id FROM ai_models
+                                WHERE organization_id = :o AND model_name = :m
+                                ORDER BY is_default DESC, created_at LIMIT 1""",
+                          o=org_id, m=name)
+        if not row:
+            log.warning("ANALYSIS_MODEL_NAME=%s no existe en la organización: "
+                        "se usa el modelo de la sesión", name)
+            return session_llm
+        return get_llm_for_model(str(row["id"]), org_id, user_id)
+    except Exception as exc:  # noqa: BLE001 — el modelo de análisis es opcional
+        log.warning("ANALYSIS_MODEL_NAME=%s no disponible: se usa el modelo de la sesión (%s)",
+                    name, type(exc).__name__)
+        return session_llm
+
+
+def _agent_progress(items: list[dict]) -> dict:
+    """Payload honesto del progreso del agente (F2 · R6).
+
+    `by_source` siempre lleva las dos claves (aunque valgan 0) para que la UI no
+    tenga que adivinar; el label cuenta lo que de verdad hay.
+    """
+    by_source = {"document_page": 0, "transcript_segment": 0}
+    for item in items:
+        source = str(item.get("source_type") or "")
+        if source in by_source:
+            by_source[source] += 1
+    return {
+        "strategy": "agent",
+        "evidence": len(items),
+        "sources": evidence_labels.many(items, limit=4),
+        "by_source": by_source,
+        "label": (f"El agente reunió {len(items)} fragmentos "
+                  f"({by_source['document_page']} documentos, "
+                  f"{by_source['transcript_segment']} audiencias)…"),
+    }
 
 
 def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, locale: str, case: dict, s,
@@ -389,8 +549,6 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                intent_decision=None, emit=None, deadline=None, seed_items: list[dict] | None = None,
                background=None, verify_mode: str | None = None,
                persist_audit: bool = True) -> dict:
-    from app.providers.llm import get_llm_for_model
-
     try:
         llm = get_llm_for_model(str(body.model_id), p.org_id, p.user_id) if body.model_id else get_llm()
     except LookupError:
@@ -401,6 +559,9 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     corrections_done: list[dict] = []
     coverage: float | None = None
     tool_calls: list[dict] = []
+    # F4 · R3: límites del gate que se añaden tras `clean_uncertainties` (ese
+    # filtro descarta los avisos meta con cifras, y estos conteos son honestos).
+    publication_notes: list[str] = []
 
     # Pregunta repetida del mismo usuario/expediente/modelo: reutilizar la
     # respuesta completa ahorra retrieval, agente y tokens. La clave incluye la
@@ -442,8 +603,11 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     deep = (decision.intent is intent_service.Intent.ANALYSIS
             or any(str(item.get("seed") or "") == "contradiction"
                    for item in (seed_items or [])))
+    if deep:
+        # Modelo de análisis opcional: vacío = el de la sesión (sin regresión).
+        llm = _analysis_llm(s, str(p.org_id), str(p.user_id), llm, deep=deep)
     if deep and deadline.budget_ms < s.ANALYSIS_DEADLINE_MS:
-        # Un análisis exhaustivo no cabe en 12-15 s: se le da su propio presupuesto.
+        # Un análisis exhaustivo no cabe en el deadline normal: se le da su propio presupuesto.
         deadline = deadline_mod.Deadline(s.ANALYSIS_DEADLINE_MS)
     intent_value = _intent_value(decision) or "dato"
     # En el chat, `_send_core` ya emitió routing con agente/skill. Solo el
@@ -491,6 +655,10 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         corrections_pending = agent_result.get("corrections_pending", [])
         corrections_done = agent_result.get("corrections_done", [])
         tool_calls = agent_result.get("tool_calls", [])
+        # Progreso honesto del camino agente (F2 · R6): cuántos fragmentos reunió
+        # y de qué fuente salieron. Con 0 ítems el label dice 0; el evento nunca
+        # rompe el turno.
+        _safe_emit(emit, "retrieving", _agent_progress(items))
         if agent_result.get("degraded"):
             deadline.degraded = True
         if not items:
@@ -522,6 +690,7 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             "unsupported_claims": agent_result["unsupported_claims"],
             "uncertainties": agent_result["uncertainties"],
             "schema_valid": agent_result.get("schema_valid", True),
+            "answer_markdown": agent_result.get("answer_markdown"),
         }
         result = SimpleNamespace(
             provider=agent_result["provider"], model=agent_result["model"],
@@ -657,12 +826,9 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                     question=body.question, answer=raw_text or "",
                     claims=validated.get("claims") or [], items=items)
             if guard_result.get("claims"):
-                validated["claims"] = _publication_claims(guard_result)
-                blocked = [c for c in guard_result["claims"] if c.get("status") == "UNSUPPORTED"]
-                if blocked:
-                    validated["uncertainties"] = list(validated.get("uncertainties") or []) + [
-                        "Se omitieron afirmaciones sin soporte legal verificable."
-                    ]
+                for note in _apply_publication(validated, guard_result):
+                    if note not in publication_notes:
+                        publication_notes.append(note)
                 for limit in guard_result.get("limits") or []:
                     if limit not in (validated.get("uncertainties") or []):
                         validated["uncertainties"] = list(validated.get("uncertainties") or []) + [limit]
@@ -677,7 +843,7 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     legal_judge_verdicts: list[dict] = []
     if guard_result and any(c.get("legal_rules") for c in guard_result.get("claims") or []):
         try:
-            from app.providers.llm import get_llm_for_model, get_llm_for_task
+            from app.providers.llm import get_llm_for_task
             judge_llm = None
             if s.VERIFY_MODEL_ID:
                 try:
@@ -689,7 +855,9 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             legal_judge_verdicts = legal_guard.judge_legal_claims(guard_result, judge_llm)
             if legal_judge_verdicts:
                 legal_guard.apply_judge(guard_result, legal_judge_verdicts)
-                validated["claims"] = _publication_claims(guard_result)
+                # Se recalcula desde el resultado actualizado: reemplaza los
+                # conteos anteriores en vez de acumular dos versiones.
+                publication_notes[:] = _apply_publication(validated, guard_result)
                 if any(v.get("status") in {"UNSUPPORTED", "CONTRADICTED", "NOT_SUPPORTED"}
                        for v in legal_judge_verdicts):
                     note = "El juez jurídico no respaldó una afirmación sobre la norma citada; se omitió."
@@ -817,6 +985,11 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
     visible_items = [item for item in items if str(item.get("handle")) in visible_handles]
     validated["uncertainties"] = answering.clean_uncertainties(
         validated.get("uncertainties") or [], visible_items or items, locale)
+    # F4 · R3: los conteos de publicación describen la respuesta, no la prueba;
+    # se añaden después del filtro para no perder el aviso honesto.
+    for note in publication_notes:
+        if note not in (validated.get("uncertainties") or []):
+            validated["uncertainties"].append(note)
 
     _safe_emit(emit, "validating", {
         "claims": len(validated["claims"]),
@@ -832,7 +1005,10 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             # En una consulta explícita de testimonio se muestra el material
             # recuperado aunque la cobertura léxica global sea baja: el usuario
             # pidió específicamente lo que dijo el testigo, no una abstención.
-            coverage=None if body.mode == "testimony" else coverage, deep=deep)
+            coverage=None if body.mode == "testimony" else coverage, deep=deep,
+            # F3 · R5: el informe narrativo del modelo viaja al compositor; si no
+            # superó la validación, `None` y se usa el camino legado.
+            answer_markdown=validated.get("answer_markdown"))
 
     # Preguntas de rol sin claims del modelo: lista determinista como respuesta.
     if composed.answer_kind == compose.INSUFFICIENT:
@@ -972,7 +1148,13 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             if value and value not in uncertainties and "evidencia" not in low and "evidence" not in low:
                 uncertainties.append(value)
     if validated["unsupported_claims"]:
-        note = t("messages.unsupported_claims_removed", locale)
+        # No se usa la plantilla antigua («Se omitieron afirmaciones sin fuente
+        # verificable»): el usuario la rechazó. Se informa el hecho concreto y
+        # acotado a las que no tenían cita primaria válida.
+        omitted = len(validated["unsupported_claims"])
+        note = (f"{omitted} afirmación no se publicó por no tener cita primaria válida."
+                if omitted == 1 else
+                f"{omitted} afirmaciones no se publicaron por no tener cita primaria válida.")
         if note not in uncertainties:
             uncertainties.append(note)
     if related:
@@ -991,12 +1173,14 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
                      "asr_mode": it.get("asr_mode") or item_meta.get("asr_mode")}
         if it.get("document_id"):
             meta = {"document_id": str(it["document_id"]), "page": it.get("page_number"),
-                    "folio": it.get("folio"), "filename": it.get("filename")}
+                    "page_number": it.get("page_number"), "folio": it.get("folio"),
+                    "filename": it.get("filename")}
             source_type = "document_page"
         else:
             meta = {"media_id": str(it.get("media_id")) if it.get("media_id") else None,
                     "start_ms": it.get("start_ms"), "end_ms": it.get("end_ms"),
-                    "speaker": it.get("speaker"), "filename": it.get("filename")}
+                    "speaker": it.get("speaker"), "filename": it.get("filename"),
+                    "start_mmss": it.get("start_mmss")}
             source_type = "transcript_segment"
         citations.append({"citation_id": cid, "source_type": source_type, "marker": marker, **meta, **mode_meta})
 

@@ -34,7 +34,7 @@ LLM_MIN_ACCEPT = 0.5
 # Se sube a mano cuando cambian las reglas o el umbral. Viaja con cada turno
 # (`chat_messages.router_version`) para poder comparar decisiones entre versiones
 # del router sin adivinar cuál estaba desplegada.
-ROUTER_VERSION = "rules-2026.11"
+ROUTER_VERSION = "rules-2026.12"
 
 
 class Intent(StrEnum):
@@ -158,6 +158,36 @@ _ANALYSIS = re.compile(
     r"|\bcoherencia\b|\bconsistencia\b"
     r"|\bque tan (solido|solida|fuerte|creible|consistente)\b"
     r"|\bcomo (se relaciona|impacta|afecta)\b"
+    # F1 — posición/controversia entre partes: la pregunta pide cruzar versiones,
+    # no recuperar un dato suelto.
+    r"|\bque dice (cada|la|el) parte\b"
+    r"|\bposicion (de la|de las|del|de) (cada )?partes?\b"
+    r"|\bversion (de|del)\b"
+    r"|\balega\b|\balegan\b|\balego\b|\balegaron\b"
+    r"|\bexcepcion(es)?\b"
+    # F1 — verbos de investigación/determinación (solo el infinitivo que usa el
+    # usuario al pedir un análisis; las formas conjugadas de «establece» son
+    # propias de una lectura y se quedan en `lectura`).
+    r"|\bdeterminar\b|\bestablecer\b|\bverificar\b|\bcomprobar\b|\bdemostrar\b"
+    r"|\brevisa(r)?\b|\bindaga(r)?\b|\bexplica(r)? a fondo\b"
+    r"|\bbusca(r)? en\b"
+    # F1 — fondo jurídico-probatorio: usura, capitalización, cobros indebidos.
+    r"|\busura\b|\bcapitalizacion\b|\banatocismo\b|\bdoble cobro\b"
+    r"|\bcobro de lo no debido\b|\bespacios en blanco\b|\bprescripcion\b|\bnulidad\b"
+    r"|\bintereses de (plazo|mora|usura)\b|\bse cobraron\b|\bse pagaron\b"
+)
+
+# F1 — inventarios sustantivos: cuántos/cuáles/qué/lista + objeto jurídico.
+# Deliberadamente NO incluye documentos, anexos, archivos, hechos, audiencias ni
+# roles de personas: esos conservan su ruta (agregación o lectura).
+_INVENTORY_OBJECT = (
+    r"(pagares|titulos(?: valores)?|obligaciones|demandas|inmuebles|bodegas|cheques)"
+)
+_SUBSTANTIVE_INVENTORY = re.compile(
+    r"\b(cuantos|cuantas|cuales|que|lista|listado|inventario)\b[^?]{0,40}\b"
+    + _INVENTORY_OBJECT
+    + r"|\b(busca|buscar|busqueme|encuentra|encuentre)\b[^?]{0,40}\b"
+    + _INVENTORY_OBJECT
 )
 
 _READ = re.compile(
@@ -207,14 +237,55 @@ _META_CORRECTION = re.compile(
     r"(entendimiento|duda|interpretacion|lectura|conclusion)\b"
 )
 
+# F1 — escalamiento multi-fuente. Una pregunta de identidad no es una
+# investigación aunque nombre varias fuentes («¿quién es X en la demanda y en
+# los interrogatorios?»).
+_IDENTITY_QUESTION = re.compile(
+    r"\bquien es\b|\bquien fue\b|\bnombre del\b|\bnombre de la\b|\ba que se dedica\b"
+)
+_SOURCE_MENTION = re.compile(
+    r"\b(documentacion|documentos|interrogatorios|hechos|audiencias|pruebas|"
+    r"demanda|contestacion|pagares|transcripcion|grabacion|declaraciones)\b"
+)
+_SUBORDINATE_CONNECTOR = re.compile(
+    r"\bque lleve a\b|\by adicional\b|\badicionalmente\b|\bademas\b|"
+    r"\basi como\b|\bjunto con\b"
+)
+# Más de 14 palabras: la pregunta ya no cabe en una recuperación puntual.
+MULTI_SOURCE_MIN_WORDS = 14
+MULTI_SOURCE_MIN_SOURCES = 2
+
 _ORDERED_RULES: tuple[tuple[Intent, re.Pattern[str], str], ...] = (
     (Intent.CORRECTION, _CORRECTION, "correction_phrase"),
     (Intent.NAVIGATE, _NAVIGATE, "explicit_location_signal"),
     (Intent.AGGREGATION, _AGGREGATION, "count_or_who_role"),
     (Intent.PROCEDURAL, _PROCEDURAL, "procedural_cause"),
     (Intent.ANALYSIS, _ANALYSIS, "analysis_verb"),
+    (Intent.ANALYSIS, _SUBSTANTIVE_INVENTORY, "substantive_inventory"),
     (Intent.READ, _READ, "read_document_request"),
 )
+
+
+def _escalate_multi_source(question: str, decision: IntentDecision) -> IntentDecision:
+    """Sube a `ANALYSIS` una consulta de `LOOKUP` que en realidad cruza fuentes.
+
+    Solo actúa sobre `LOOKUP` (idempotente para el resto), nunca sobre preguntas
+    de identidad, y exige dos fuentes distintas o una pregunta larga con un
+    conector subordinado. No toca `navegar`, `agregacion` ni `lectura`.
+    """
+    if decision.intent is not Intent.LOOKUP:
+        return decision
+    folded = text_terms.norm(question or "")
+    if not folded or _IDENTITY_QUESTION.search(folded):
+        return decision
+    sources = set(_SOURCE_MENTION.findall(folded))
+    long_with_connector = (
+        len([token for token in folded.split() if token]) > MULTI_SOURCE_MIN_WORDS
+        and bool(_SUBORDINATE_CONNECTOR.search(folded))
+    )
+    if len(sources) < MULTI_SOURCE_MIN_SOURCES and not long_with_connector:
+        return decision
+    return IntentDecision(Intent.ANALYSIS, 0.8, "multi_source_escalation", None, "rules")
 
 
 def _llm_text(llm: Any, system: str, user: str) -> str:
@@ -490,8 +561,13 @@ def classify(question: str, *, has_attachments: bool = False,
 
     if matches:
         intent, reason = matches[0]
-        # Varias familias a la vez = decisión menos fiable (sin llegar a bloquear).
-        confidence = 0.9 if len(matches) == 1 else 0.62
+        # Un inventario sustantivo tiene una confianza propia: es una regla
+        # específica, no una familia genérica de análisis.
+        if reason == "substantive_inventory":
+            confidence = 0.85
+        else:
+            # Varias familias a la vez = decisión menos fiable (sin llegar a bloquear).
+            confidence = 0.9 if len(matches) == 1 else 0.62
         nav_term = text_terms.specific_term(raw) if intent is Intent.NAVIGATE else None
         decision = IntentDecision(intent, confidence, reason, nav_term, "rules")
     elif has_attachments:
@@ -502,6 +578,10 @@ def classify(question: str, *, has_attachments: bool = False,
         # Default del contrato. Confianza deliberadamente baja: si el llamador
         # aporta un LLM barato, puede revisar este caso.
         decision = IntentDecision(Intent.LOOKUP, 0.45, "default_lookup", None, "rules")
+
+    # Antes de heredar historial y antes del LLM: una pregunta que cruza fuentes
+    # no puede responderse con el RAG superficial aunque la regla haya dicho `dato`.
+    decision = _escalate_multi_source(raw, decision)
 
     if not has_attachments:
         inherited = _followup_decision(raw, folded, history, decision)

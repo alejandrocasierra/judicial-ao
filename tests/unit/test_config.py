@@ -13,8 +13,13 @@ def test_ut_cfg_01_sensitive_fields_have_no_default():
     operativos (timeouts, tamaños de lote, pasos) sí pueden traer un default seguro
     documentado en .env.example."""
     sensitive = ("SECRET", "PASSWORD", "API_KEY", "_TOKEN", "TOKEN_", "SUPERUSER", "_PROVIDER")
+    # Excepción justificada (F1/R6): ANALYSIS_MODEL_PROVIDER no es una credencial,
+    # es el selector opcional del proveedor del modelo de análisis. Los *_PROVIDER
+    # que sí son configuración obligatoria (LLM, EMBEDDING) siguen sin default.
+    selectors_with_default = {"ANALYSIS_MODEL_PROVIDER"}
     offenders = [n for n, f in Settings.model_fields.items()
-                 if not f.is_required() and any(h in n for h in sensitive)]
+                 if n not in selectors_with_default and not f.is_required()
+                 and any(h in n for h in sensitive)]
     assert offenders == [], f"campos sensibles con default (deben venir de entorno): {offenders}"
 
 

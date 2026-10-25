@@ -34,9 +34,9 @@ from app.schemas import ChatMessageIn, ChatSessionIn, IntentFeedbackIn, QueryIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import (audit, case_tools, claim_seed, contradiction_seed, correction,
                           deadline as deadline_mod, entity_seed, evidence_carryover,
-                          evidence_labels, intent as intent_service, intent_profile, legal_guard,
-                          memory, occurrences, party_answer, query_hints, ratelimit, role_answer,
-                          second_opinion, text_terms)
+                          evidence_labels, fact_seed, intent as intent_service, intent_profile,
+                          legal_guard, memory, occurrences, party_answer, query_hints, ratelimit,
+                          role_answer, second_opinion, text_terms)
 from app.services.case_tools import ToolContext
 from app.routers.query import _attachment_file_cards, _run_query, _safe_emit
 from app.workers.dispatcher import create_job, enqueue_if_pending
@@ -271,11 +271,11 @@ def _navigate_result(p: Principal, case_id: UUID, content: str, decision, locale
                 "uncertainties": [], "file_cards": [], "evidence_count": 0,
                 "occurrences": [], "occurrences_term": None, "occurrences_note": None}
     locs = _locate_locations(p, case_id, term, ocr_mode, asr_mode)
-    text, cites = occurrences.build(term, locs, locale, max_items=s.NAV_MAX_OCCURRENCES)
+    # El Markdown lleva las primeras ubicaciones (con página/minuto); la UI
+    # recibe la lista completa en `occurrences` para agruparla.
+    text, cites = occurrences.build(term, locs[:5], locale, max_items=5)
     note = t("messages.occurrences_note", locale).format(term=term)
-    # La UI agrupa y pinta `occurrences`; no duplicamos la lista completa en el
-    # Markdown (evita el muro de timestamps del incidente original).
-    answer = note if cites else text
+    answer = text if cites else note
     return {"answer": answer, "answer_kind": "navigational", "intent": "navegar", "degraded": False,
             "claims": [], "citations": [], "citations_used": [], "unsupported_claims": [],
             "uncertainties": [], "file_cards": [], "evidence_count": len(locs),
@@ -568,6 +568,16 @@ def _seed_claim(p: Principal, case_id: UUID, question: str) -> list[dict]:
         return []
 
 
+def _seed_fact(p: Principal, case_id: UUID, question: str) -> list[dict]:
+    """Hechos del caso con su cita primaria resuelta (nunca una página inventada)."""
+    try:
+        with tx(p.org_id, p.user_id) as c:
+            return fact_seed.for_question(c, str(case_id), question, limit=7)
+    except Exception:  # noqa: BLE001 — la semilla es opcional
+        log.debug("fact seed failed", exc_info=True)
+        return []
+
+
 def _carryover(p: Principal, case_id: UUID, session_id: UUID, question: str,
                history: list[dict]) -> list[dict]:
     """Fuentes ya citadas en el turno anterior, para «lo anterior»."""
@@ -651,6 +661,9 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
                                      org_id=p.org_id, user_id=p.user_id)
     intent_value = str(getattr(decision.intent, "value", decision.intent))
     contradiction_items = _seed_contradiction(p, case_id, body.content)
+    # Una sola siembra por turno, compartida por el camino `agent` y el camino `rag`.
+    fact_items = _seed_fact(p, case_id, body.content)
+    claim_items = _seed_claim(p, case_id, body.content)
     party_identity = party_answer.is_identity_question(body.content)
     entity_route = (decision.intent is intent_service.Intent.LOOKUP
                     and _entity_question(p, case_id, body.content))
@@ -697,21 +710,21 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
         return _run_query(case_id, query_body, request, p, locale, case, s,
                           history=history, hints=hints, ocr_mode=ocr_mode, asr_mode=asr_mode,
                           intent_decision=decision, emit=emit, deadline=deadline,
-                          seed_items=_merge_seed(carryover, seed), background=background,
-                          persist_audit=False)
+                          seed_items=_merge_seed(carryover, fact_items, seed, claim_items),
+                          background=background, persist_audit=False)
 
     if body.strategy == "agent":
         result = _query("agent")
     elif body.strategy == "rag":
-        result = _query("rag", _seed_claim(p, case_id, body.content))
+        result = _query("rag")
     elif party_identity:
         # «¿Cuál es el nombre de la parte demandante?» es identidad, no RAG:
         # la ficha de partes es la fuente y evita mezclar demandantes de etapas.
         result = (_aggregation_result(p, case_id, body.content, locale)
-                  or _query("rag", _seed_claim(p, case_id, body.content)))
+                  or _query("rag"))
     elif decision.intent is intent_service.Intent.AGGREGATION:
         result = (_aggregation_result(p, case_id, body.content, locale)
-                  or _query("rag", _seed_claim(p, case_id, body.content)))
+                  or _query("rag"))
     elif decision.intent is intent_service.Intent.NAVIGATE:
         _safe_emit(emit, "synthesizing", {"strategy": "locate"})
         result = _navigate_result(p, case_id, body.content, decision, locale,
@@ -736,7 +749,7 @@ def _send_core(case_id: UUID, session_id: UUID, body: ChatMessageIn, request: Re
         # «¿Quién es X?» / «¿Qué se dice sobre X?»: el grafo y find_person, no solo chunks.
         result = _query("agent", _seed_entity(p, case_id, body.content))
     else:
-        result = _query("rag", _seed_claim(p, case_id, body.content))
+        result = _query("rag")
 
     # Los "@" siempre producen tarjeta ver/descargar, aunque el agente no llamara get_file.
     if body.attachments:

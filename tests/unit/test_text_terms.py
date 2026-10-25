@@ -61,3 +61,12 @@ def test_ut_terms_07_mmss():
 def test_ut_terms_08_norm_removes_accents_and_case():
     assert tt.norm("APELACIÓN") == "apelacion"
     assert tt.norm("Pagaré") == "pagare"
+
+
+def test_ut_terms_09_usura_expands_to_legal_basis_and_interrogation():
+    """Una pregunta de usura debe buscar el 886 y el interrogatorio, no solo la palabra."""
+    variants = {tt.norm(v) for v in tt.expand_query("¿Se cobraron intereses de usura?")}
+    assert "886" in variants
+    assert "capitalizacion" in variants
+    typo = {tt.norm(v) for v in tt.expand_query("revisa los interregatorios y hechos")}
+    assert "interrogatorios" in typo and "confesion" in typo

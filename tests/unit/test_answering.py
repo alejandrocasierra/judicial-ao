@@ -270,3 +270,128 @@ def test_ut_ans_14_cache_key_is_stable_and_scope_aware():
     key_c = ans._cache_key(CASE, "¿Qué evidencia hay sobre pagos?", plan, ["doc-1"], None, None, None)
     assert key_a == key_b
     assert key_a != key_c
+
+
+# --- F3 · R2: cargador de prompts -------------------------------------------------
+
+def test_ut_ans_15_system_prompt_fills_placeholders_for_normal_turn():
+    body, pid, ver = ans.system_prompt("es")
+    assert pid == "answer_question"
+    assert "{{" not in body and "}}" not in body
+    assert "{{MAX_CLAIMS}}" not in body and "{{MAX_WORDS}}" not in body
+    assert "8" in body and "350" in body
+
+
+def test_ut_ans_16_system_prompt_fills_placeholders_for_deep_turn():
+    body, _pid, ver = ans.system_prompt("es", deep=True)
+    assert "{{" not in body and "}}" not in body
+    assert "20" in body and "1200" in body
+    assert ver == "3.1"
+
+
+# --- F3 · R3: answer_markdown en el contrato de respuesta -------------------------
+
+CITABLE = [
+    {"handle": "E1", "source_type": "document_page", "document_id": "d", "page_number": 1,
+     "text": "La demandante afirma que el pago se hizo el 13/12/2024."},
+    {"handle": "E2", "source_type": "transcript_segment", "segment_id": "s", "media_id": "m",
+     "start_ms": 1000, "end_ms": 2000, "speaker": "Rojas", "text": "El demandado niega el pago."},
+]
+
+LONG_PARA = ("La demandante afirma que el pago se hizo el 13/12/2024. "
+             "El demandado niega el pago en la audiencia. Son dos versiones que se presentan "
+             "sin resolver el conflicto, porque el expediente no contiene el comprobante. ")
+
+
+def _answer_payload(markdown: str | None, *, text: str = "La demandante afirma que el pago se hizo el 13/12/2024.",
+                    citations: list[str] | None = None) -> str:
+    import json
+    payload: dict = {"claims": [{"text": text, "citations": citations or ["E1"]}],
+                     "uncertainties": []}
+    if markdown is not None:
+        payload["answer_markdown"] = markdown
+    return json.dumps(payload)
+
+
+def test_ut_ans_17_parse_returns_valid_answer_markdown():
+    markdown = "## Síntesis\n\n" + LONG_PARA * 2 + "[E1]"
+    result = ans.parse_and_validate(_answer_payload(markdown), CITABLE)
+    assert result["answer_markdown"] == markdown
+    assert result["claims"] and result["uncertainties"] == []
+
+
+def test_ut_ans_18_invalid_markdown_adds_uncertainty_but_keeps_claims():
+    markdown = "## Síntesis\n\n" + LONG_PARA * 2 + " Ver [E99]."
+    result = ans.parse_and_validate(_answer_payload(markdown), CITABLE)
+    assert result["answer_markdown"] is None
+    assert result["claims"], "el markdown no elimina la capa auditable de claims"
+    assert any("síntesis narrativa" in u.lower() for u in result["uncertainties"])
+
+
+def test_ut_ans_19_grouped_handles_are_accepted():
+    markdown = "## Síntesis\n\n" + LONG_PARA * 2 + " [E1, E2]"
+    result = ans.parse_and_validate(_answer_payload(markdown), CITABLE)
+    assert result["answer_markdown"] == markdown
+
+
+def test_ut_ans_20_html_and_code_fences_are_removed():
+    markdown = ("## Síntesis\n\n" + LONG_PARA * 2 + "[E1]\n\n"
+                "```python\nprint('no')\n```\n<script>alert('x')</script>\n")
+    result = ans.parse_and_validate(_answer_payload(markdown), CITABLE)
+    md = result["answer_markdown"]
+    assert md is not None
+    assert "```" not in md and "print('no')" not in md
+    assert "<script>" not in md and "alert('x')" not in md
+
+
+def test_ut_ans_21_missing_markdown_does_not_break_the_turn():
+    result = ans.parse_and_validate(_answer_payload(None), CITABLE)
+    assert result["answer_markdown"] is None
+    assert result["claims"]
+    assert not any("síntesis narrativa" in u.lower() for u in result["uncertainties"])
+
+
+def test_ut_ans_22_markdown_without_markers_is_discarded():
+    markdown = "## Síntesis\n\n" + LONG_PARA * 2
+    result = ans.parse_and_validate(_answer_payload(markdown), CITABLE)
+    assert result["answer_markdown"] is None
+    assert any("síntesis narrativa" in u.lower() for u in result["uncertainties"])
+
+# --- F4 · R6.1: sin claims auditables no se publica prosa --------------------------
+
+def test_ut_ans_23_markdown_without_claims_is_discarded():
+    import json
+
+    markdown = "## Síntesis\n\n" + LONG_PARA * 2 + "[E1]"
+    raw = json.dumps({"answer_markdown": markdown, "claims": [], "uncertainties": []})
+
+    result = ans.parse_and_validate(raw, CITABLE)
+
+    assert result["answer_markdown"] is None
+    assert result["claims"] == []
+
+
+def test_ut_ans_24_markdown_with_only_rejected_claims_is_discarded():
+    import json
+
+    markdown = "## Síntesis\n\n" + LONG_PARA * 2 + "[E1]"
+    raw = json.dumps({
+        "answer_markdown": markdown,
+        "claims": [{"text": "El Tribunal Superior de Bogotá declaró inadmisible la apelación.",
+                    "citations": ["E99"]}],
+        "uncertainties": [],
+    })
+
+    result = ans.parse_and_validate(raw, CITABLE)
+
+    assert result["answer_markdown"] is None
+    assert result["unsupported_claims"]
+
+
+def test_clean_uncertainties_drops_the_old_amputation_phrase():
+    items = [{"handle": "E1", "source_type": "document_page", "document_id": "d1",
+              "page_number": 1, "filename": "x.pdf", "text": "Contenido."}]
+    limits = ans.clean_uncertainties(
+        ["Se omitieron afirmaciones sin fuente verificable.",
+         "No se recuperó una sentencia de fondo."], items)
+    assert limits == []

@@ -1,0 +1,62 @@
+# Set dorado de investigación (Fase 0 del plan de chat-investigador).
+#
+# Son las 3 preguntas reales del usuario sobre el expediente
+# 11001310302120180036100. La línea base se mide con
+# `scripts/eval_golden_chat.py --label before`; la comparación después con
+# `--label after`.
+#
+# Los criterios NO se ajustan para que un caso pase: si un caso falla, se
+# registra el fallo y se corrige la causa en la fase correspondiente.
+version: 1
+case_ref: "11001310302120180036100"
+cases:
+  - id: INV-01
+    locale: es
+    question: "¿Cuántos pagarés hay en el proceso?"
+    expected_answer_kind: direct
+    must_contain: ["15", "77391469", "78213828"]
+    must_cite_any:
+      - filename_contains: "CuadernoDemandaEjecutivaAcumulada2018-361.pdf"
+      - filename_contains: "AutoAdmiteAcumulacionyLibraMandamientodePago2018-361.pdf"
+      - filename_contains: "EscritoSolicitaDecretarSuspension201800361.pdf"
+    min_citations: 3
+    min_length: 600
+    required_headings: []
+    forbidden_phrases: ["Encontré material relacionado", "Se omitieron afirmaciones"]
+    latency_budget_ms: 120000
+    notes: >-
+      La pregunta pide el número y la identificación del conjunto. Se exige el
+      conteo (15), el primer título individualizado (P-77391469) y la fuente de
+      la demanda. La enumeración de los 15 seriales es una consulta de
+      seguimiento («enumera los pagarés»), no un requisito de esta pregunta.
+
+  - id: INV-02
+    locale: es
+    question: "¿Se cobraron intereses de usura?"
+    expected_answer_kind: direct
+    must_contain: ["usura", "886", "capitaliz"]
+    must_cite_any:
+      - filename_contains: "AutoAdmiteAcumulacionyLibraMandamientodePago2018-361.pdf"
+      - filename_contains: "ConfirmaAutoApeladoAuto25Junio2025.pdf"
+      - filename_contains: "Grabacion25Junio2025"
+    min_citations: 4
+    min_length: 1200
+    required_headings: []
+    forbidden_phrases: ["Encontré material relacionado", "Se omitieron afirmaciones"]
+    latency_budget_ms: 120000
+
+  - id: INV-03
+    locale: es
+    question: "busque que dice cada parte sobre los intereses de usura que lleve a determinar si se cobraron intereses de usura o no y adicional revisa en la documentacion, interregatorios, hechos que llegen a responder esta pregunta sobre el cobro de intereses"
+    expected_answer_kind: direct
+    must_contain: ["15 pagarés", "2,5", "1,6", "886", "Rojas Melo"]
+    must_cite_any:
+      - filename_contains: "CuadernoDemandaEjecutivaAcumulada2018-361.pdf"
+      - filename_contains: "GrabacionAudiencia13Dic2024"
+      - filename_contains: "Grabacion25Junio2025"
+      - filename_contains: "ProvidenciaHonorableSalaFamiliaTribunalSuperiorCund"
+    min_citations: 8
+    min_length: 2500
+    required_headings: ["Síntesis", "Demandante", "Demandada", "Interrogatorio", "Decisión"]
+    forbidden_phrases: ["Encontré material relacionado", "Se omitieron afirmaciones"]
+    latency_budget_ms: 120000

@@ -293,3 +293,93 @@ def test_int_30_el_l2_tiene_corte_duro_y_no_bloquea_el_turno(monkeypatch):
     decision = intent.classify("háblame del pagaré", llm=_SlowLLM())
     assert decision.intent is INT.LOOKUP
     assert decision.source == "rules"
+
+
+# --- F1: preguntas serias al camino serio -----------------------------------
+
+
+def test_int_31_usura_es_analisis():
+    """A1: el fondo jurídico-probatorio no puede quedarse en `dato`."""
+    decision = intent.classify("¿Se cobraron intereses de usura?")
+    assert decision.intent is INT.ANALYSIS
+    assert decision.reason == "analysis_verb"
+
+
+def test_int_32_inventario_de_pagares_es_analisis():
+    """A2: un inventario sustantivo no es una lista de roles ni un dato suelto."""
+    decision = intent.classify("¿Cuántos pagarés hay en el proceso?")
+    assert decision.intent is INT.ANALYSIS
+    assert decision.reason == "substantive_inventory"
+    assert decision.confidence == 0.85
+
+
+def test_int_33_pregunta_inv_03_escala_a_analisis():
+    """A3: la pregunta completa del set dorado abandona el RAG de 10 fragmentos."""
+    question = (
+        "busque que dice cada parte sobre los intereses de usura que lleve a determinar "
+        "si se cobraron intereses de usura o no y adicional revisa en la documentacion, "
+        "interregatorios, hechos que llegen a responder esta pregunta sobre el cobro de intereses"
+    )
+    decision = intent.classify(question)
+    assert decision.intent is INT.ANALYSIS
+    assert decision.reason in ("multi_source_escalation", "analysis_verb")
+
+
+def test_int_34_peritos_siguen_siendo_agregacion():
+    """A4: los roles de personas no son inventarios sustantivos."""
+    assert intent.classify("¿Cuántos peritos hay?").intent is INT.AGGREGATION
+
+
+def test_int_35_evidencia_sobre_pagos_sigue_siendo_dato():
+    """A5: «pagos» no es «pagarés»; la pregunta del incidente no se toca."""
+    assert intent.classify("¿Qué evidencia hay sobre pagos?").intent is INT.LOOKUP
+
+
+def test_int_36_identidad_sigue_siendo_dato():
+    """A6: preguntar por una persona no es investigar el fondo."""
+    assert intent.classify("¿Quién es Jorge Rojas?").intent is INT.LOOKUP
+
+
+def test_int_37_documentos_del_expediente_siguen_siendo_agregacion():
+    """A7: los documentos/anexos conservan su ruta de agregación."""
+    assert intent.classify("¿Cuántos documentos conforman el expediente?").intent is INT.AGGREGATION
+
+
+def test_int_38_escalamiento_por_dos_fuentes_sin_verbo_de_analisis():
+    decision = intent.classify("¿Qué dicen los documentos y los interrogatorios sobre el pago?")
+    assert decision.intent is INT.ANALYSIS
+    assert decision.reason == "multi_source_escalation"
+    assert decision.confidence == 0.8
+
+
+def test_int_39_escalamiento_por_longitud_y_conector():
+    question = (
+        "Quiero que revises la demanda y adicional me digas si el pago de mayo se hizo "
+        "antes de la audiencia de diciembre del año pasado"
+    )
+    decision = intent.classify(question)
+    assert decision.intent is INT.ANALYSIS
+    assert decision.reason == "multi_source_escalation"
+
+
+def test_int_40_pregunta_corta_de_una_sola_fuente_no_escala():
+    decision = intent.classify("¿Qué dice la demanda sobre el pago?")
+    assert decision.intent is INT.LOOKUP
+    assert decision.reason != "multi_source_escalation"
+
+
+def test_int_41_identidad_no_escala_aunque_mencione_varias_fuentes():
+    decision = intent.classify("¿Quién es Jorge Rojas en la demanda y en los interrogatorios?")
+    assert decision.intent is INT.LOOKUP
+    assert decision.reason != "multi_source_escalation"
+
+
+def test_int_42_el_escalamiento_es_idempotente():
+    already = intent.IntentDecision(INT.ANALYSIS, 0.9, "analysis_verb", None, "rules")
+    result = intent._escalate_multi_source(
+        "¿Qué dicen los documentos y los interrogatorios sobre el pago?", already)
+    assert result is already
+
+
+def test_int_43_router_version_actual():
+    assert intent.ROUTER_VERSION == "rules-2026.12"

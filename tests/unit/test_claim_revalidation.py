@@ -230,3 +230,62 @@ def test_apply_verdicts_removes_claim_even_if_judge_truncates_text():
 
     assert result["claims"] == []
     assert result["unsupported_claims"][0]["reason"] == "not_supported"
+
+# --- F4 · R4: revisión, no borrado -------------------------------------------------
+
+def _review_items() -> list[dict]:
+    return [_item("E1", "document_page", "Obra el pagaré en el expediente.",
+                  document_id="d1", page_number=4)]
+
+
+def test_f4_low_overlap_with_valid_citation_is_kept_for_review():
+    claims = [{"text": "El pagaré fue entregado a la sociedad demandante.", "citations": ["E1"]}]
+
+    result = answering.revalidate_claims(claims, _review_items())
+
+    assert result["unsupported_claims"] == []
+    assert len(result["claims"]) == 1
+    assert result["claims"][0]["needs_review"] is True
+    assert result["claims"][0]["overlap"] == 0.25
+
+
+def test_f4_low_overlap_with_missing_number_stays_unsupported():
+    """La regla de cifras no se relaja: una cifra ausente sigue bloqueando."""
+    claims = [{"text": "El pagaré fue entregado a la sociedad demandante por $9.400.000.",
+               "citations": ["E1"]}]
+
+    result = answering.revalidate_claims(claims, _review_items())
+
+    assert result["claims"] == []
+    assert result["unsupported_claims"][0]["missing_numbers"] == ["9.400.000"]
+
+
+def test_f4_overlap_below_review_threshold_stays_unsupported():
+    claims = [{"text": "El documento fue firmado por la sociedad demandante en Bogotá.",
+               "citations": ["E1"]}]
+
+    result = answering.revalidate_claims(claims, _review_items())
+
+    assert result["claims"] == []
+    assert result["unsupported_claims"][0]["reason"] == "not_grounded"
+
+
+def test_f4_parse_and_validate_keeps_low_overlap_claim_for_review():
+    raw = json.dumps({"claims": [{
+        "text": "El pagaré fue entregado a la sociedad demandante.", "citations": ["E1"]}]})
+
+    result = answering.parse_and_validate(raw, _review_items())
+
+    assert result["unsupported_claims"] == []
+    assert len(result["claims"]) == 1
+    assert result["claims"][0]["needs_review"] is True
+
+
+def test_f4_parse_and_validate_discards_low_overlap_without_numbers_rule():
+    raw = json.dumps({"claims": [{
+        "text": "El pagaré fue entregado por $9.400.000.", "citations": ["E1"]}]})
+
+    result = answering.parse_and_validate(raw, _review_items())
+
+    assert result["claims"] == []
+    assert result["unsupported_claims"][0]["missing_numbers"] == ["9.400.000"]

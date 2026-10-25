@@ -103,3 +103,51 @@ def test_ut_agn_06_tool_labels_are_human_and_cite_the_page():
     assert "1 fragmento" in label
     assert "0067" in label
     assert "p. 2" in label
+
+
+def test_ut_agn_07_tool_done_label_includes_minute_and_speaker_for_asr():
+    """T4 (F2 · R6): el progreso del ASR dice minuto y hablante, no solo el archivo."""
+    label = agent._tool_done_label("search_transcripts", [{
+        "handle": "TR1", "source_type": "transcript_segment", "media_id": "m1",
+        "segment_id": "s1", "start_ms": 95000, "filename": "GrabacionAudiencia13Dic2024.mp4",
+        "speaker": "Rojas Melo", "text": "yo niego la capitalización de intereses"}])
+    assert "1 fragmento" in label
+    assert "01:35" in label
+    assert "Rojas Melo" in label
+
+
+def test_ut_agn_08_tool_done_label_for_facts_is_honest():
+    label = agent._tool_done_label("search_facts", [{
+        "handle": "F1", "source_type": "fact", "fact_id": "f1",
+        "text": "El demandante cobró intereses de usura."}])
+    assert "1 hechos" in label
+    assert "página" in label and "segmento" in label
+
+
+def test_ut_agn_09_tool_label_is_capped_and_names_the_page():
+    long_query = "intereses de usura " * 40
+    label = agent._tool_label("search_case", {"query": long_query})
+    assert len(label) <= agent.TOOL_LABEL_MAX_CHARS
+    assert label.startswith("Buscando en el expediente: «")
+    page_label = agent._tool_label("get_document_page",
+                                   {"document_id": "doc-1", "page_number": 4})
+    assert "p. 4" in page_label
+    assert "Leyendo la página" in page_label
+
+
+def test_ut_agn_10_evidence_hint_puts_the_fact_label_first():
+    hint = agent._evidence_hint({
+        "source_type": "document_page", "document_id": "d1", "page_number": 10,
+        "filename": "0015 Contestacion.pdf", "text": "cobró intereses de usura",
+        "fact_label": "[Hecho #7 · EVIDENCE_SUPPORTED]"})
+    assert hint.startswith("[0015 Contestacion.pdf · página 10] [Hecho #7 · EVIDENCE_SUPPORTED]")
+
+
+def test_ut_agn_11_synthesis_merges_agent_role_and_forbids_tools():
+    """F3.1: el protocolo del agente gobierna la redacción final, no el bucle."""
+    base = "CONTRATO DE SALIDA"
+    merged = agent._synthesis_system(base, "Eres investigador judicial.")
+    assert "<agent_role>" in merged and "Eres investigador judicial." in merged
+    assert "NO llames herramientas" in merged
+    assert merged.endswith(base)
+    assert agent._synthesis_system(base, None) == base
