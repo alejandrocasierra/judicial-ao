@@ -26,7 +26,7 @@ from app.providers.llm import get_llm, get_llm_for_model
 from app.schemas import QueryIn
 from app.security.deps import Principal, case_access, current_principal
 from app.services import (agent, answering, audit, cache, case_tools, compose,
-                          legal_guard, deadline as deadline_mod, evidence_labels,
+                          legal_guard, deadline as deadline_mod,
                           intent as intent_service, intent_profile, metrics, query_hints,
                           query_rewrite, ratelimit, role_answer, skills, text_terms, verification)
 from app.services.compose import ComposeResult
@@ -141,7 +141,7 @@ def _pg_array(values: list[object]) -> str:
     return "{" + ",".join(str(v) for v in values) + "}"
 
 
-ANSWER_CACHE_VERSION = "r26-2026.10.26"
+ANSWER_CACHE_VERSION = "r27-2026.10.26"
 _CONTEXTUAL_QUESTION = re.compile(
     r"\b(lo anterior|eso|esto|el mismo|la misma|dich[oa]|anterior|sigue|entonces|"
     r"y el|y la|tambi[eé]n|aquel|aquella)\b", re.I)
@@ -721,8 +721,7 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         if items:
             _safe_emit(emit, "retrieving", {
                 "strategy": "rag",
-                "label": f"Recuperé {len(items)} fragmentos de OCR/ASR/pgvector…",
-                "sources": evidence_labels.many(items),
+                "label": "Recuperé evidencia del expediente…",
             })
         if seed_items:
             # Cadena procesal / lista de rol: entra como evidencia de primera clase.
@@ -736,11 +735,10 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         system, prompt_id, prompt_version = _answer_system_prompt(locale, deep=deep)
         task = "answer_question"
         _safe_emit(emit, "reviewing", {
-            "label": f"Revisando {len(items)} fragmentos recuperados…",
-            "sources": evidence_labels.many(items),
+            "label": "Revisando la evidencia recuperada…",
         })
         _safe_emit(emit, "synthesizing", {
-            "label": f"Redactando con {len(items)} fragmentos…",
+            "label": "Redactando la respuesta…",
             "model": getattr(llm, "model", ""),
         })
         synthesis_failed = False

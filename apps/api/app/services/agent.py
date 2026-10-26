@@ -186,10 +186,9 @@ def _tool_label(tool: str, arguments: dict[str, Any]) -> str:
 def _tool_done_label(tool: str, items: list[dict[str, Any]]) -> str:
     primary = [it for it in items if it.get("source_type") in ("document_page", "transcript_segment")]
     count = len(primary)
-    noun = "fragmento" if count == 1 else "fragmentos"
     sources = evidence_labels.many(primary, limit=2)
     if count:
-        label = f"Encontré {count} {noun}"
+        label = "Encontré evidencia"
         if sources:
             extra = " (entre otros)" if count > len(sources) else ""
             label += ": " + " · ".join(sources) + extra
@@ -198,8 +197,8 @@ def _tool_done_label(tool: str, items: list[dict[str, Any]]) -> str:
     if facts:
         # Los hechos son citables solo a través de su página o segmento: se dice
         # lo que sí se encontró, sin presentarlo como fuente primaria.
-        return (f"Revisé {len(facts)} hechos registrados; ninguna página ni segmento "
-                f"resuelto en esta búsqueda")
+        return ("Revisé hechos registrados; ninguna página ni segmento "
+                "resuelto en esta búsqueda")
     return "No encontré fragmentos citables en esta búsqueda"
 
 
@@ -478,15 +477,13 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
 
         _emit(emit, "reviewing", {
             "label": "Revisando la evidencia que devolvieron las herramientas…",
-            "evidence": len(evidence),
         })
         # Síntesis final con el prompt de respuesta RAG existente (v3 en modo profundo)
         system, prompt_id, prompt_version = answering.system_prompt(locale, deep=deep)
         system = _synthesis_system(system, agent_prompt)
         user = answering.build_user_prompt(question, evidence, history=history_turns, deep=deep)
         _emit(emit, "synthesizing", {
-            "label": f"Redactando la respuesta con {len(evidence)} fragmentos…",
-            "sources": evidence_labels.many(evidence),
+            "label": "Redactando la respuesta…",
         })
         # En análisis el proveedor puede tardar más que el timeout ordinario: el
         # presupuesto profundo (120 s) da margen sin alargar el turno normal.

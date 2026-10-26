@@ -100,7 +100,7 @@ def test_ut_agn_06_tool_labels_are_human_and_cite_the_page():
     label = agent._tool_done_label("search_case", [{
         "handle": "C1", "source_type": "document_page", "page_number": 2,
         "filename": "0067EscritoSolicitaDecretarSuspension.pdf"}])
-    assert "1 fragmento" in label
+    assert "evidencia" in label
     assert "0067" in label
     assert "p. 2" in label
 
@@ -111,7 +111,6 @@ def test_ut_agn_07_tool_done_label_includes_minute_and_speaker_for_asr():
         "handle": "TR1", "source_type": "transcript_segment", "media_id": "m1",
         "segment_id": "s1", "start_ms": 95000, "filename": "GrabacionAudiencia13Dic2024.mp4",
         "speaker": "Rojas Melo", "text": "yo niego la capitalización de intereses"}])
-    assert "1 fragmento" in label
     assert "01:35" in label
     assert "Rojas Melo" in label
 
@@ -120,7 +119,7 @@ def test_ut_agn_08_tool_done_label_for_facts_is_honest():
     label = agent._tool_done_label("search_facts", [{
         "handle": "F1", "source_type": "fact", "fact_id": "f1",
         "text": "El demandante cobró intereses de usura."}])
-    assert "1 hechos" in label
+    assert "hechos registrados" in label
     assert "página" in label and "segmento" in label
 
 
