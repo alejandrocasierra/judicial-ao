@@ -43,29 +43,6 @@ def test_cfs_03_merge_seed_dedupes_the_same_page_between_fact_and_claim():
     assert merged == [FACT]
 
 
-def test_cfs_04_agent_progress_counts_both_sources():
-    items = [
-        dict(FACT),
-        {"source_type": "transcript_segment", "media_id": "m1", "segment_id": "s1",
-         "start_ms": 95000, "filename": "audiencia.mp4", "speaker": "Rojas Melo"},
-    ]
-    payload = query._agent_progress(items)
-    assert payload["strategy"] == "agent"
-    assert payload["evidence"] == 2
-    assert payload["by_source"] == {"document_page": 1, "transcript_segment": 1}
-    assert "2 fragmentos" in payload["label"]
-    assert "1 documentos, 1 audiencias" in payload["label"]
-
-
-def test_cfs_05_agent_progress_without_items_still_has_both_keys():
-    """A7: incluso sin ítems, `by_source` lleva las dos claves y el label dice 0."""
-    payload = query._agent_progress([])
-    assert payload["by_source"] == {"document_page": 0, "transcript_segment": 0}
-    assert payload["evidence"] == 0
-    assert payload["sources"] == []
-    assert "0 fragmentos" in payload["label"]
-
-
 def test_cfs_06_normalize_seed_items_keeps_fact_fields():
     """R4: los `seed_items` de hecho sobreviven la normalización de query.py."""
     normalized = query._normalize_seed_items([dict(FACT)])

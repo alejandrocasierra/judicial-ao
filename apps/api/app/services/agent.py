@@ -5,6 +5,7 @@ import html
 import json
 import logging
 import re
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy.engine import Connection
@@ -190,7 +191,8 @@ def _tool_done_label(tool: str, items: list[dict[str, Any]]) -> str:
     if count:
         label = f"Encontré {count} {noun}"
         if sources:
-            label += ": " + " · ".join(sources)
+            extra = " (entre otros)" if count > len(sources) else ""
+            label += ": " + " · ".join(sources) + extra
         return label
     facts = [it for it in items if it.get("source_type") == "fact"]
     if facts:
@@ -199,6 +201,44 @@ def _tool_done_label(tool: str, items: list[dict[str, Any]]) -> str:
         return (f"Revisé {len(facts)} hechos registrados; ninguna página ni segmento "
                 f"resuelto en esta búsqueda")
     return "No encontré fragmentos citables en esta búsqueda"
+
+
+def _fallback_claims(evidence: list[dict[str, Any]], limit: int = 6) -> list[dict[str, Any]]:
+    """Afirmaciones extractivas cuando la síntesis no responde.
+
+    No redacta ni infiere: publica el texto literal de la fuente con su handle.
+    Es la diferencia entre «no encontré nada» y «esto es lo que dicen las
+    fuentes recuperadas», incluso si el proveedor agotó su timeout.
+    """
+    claims: list[dict[str, Any]] = []
+    for item in evidence or []:
+        handle = item.get("handle")
+        if not handle or item.get("source_type") not in ("document_page", "transcript_segment"):
+            continue
+        text = " ".join(str(item.get("text") or "").split())
+        if not text:
+            continue
+        sentences = re.split(r"(?<=[.!?])\s", text, maxsplit=2)
+        body = " ".join(sentences[:2])[:600].strip()
+        if body:
+            claims.append({"text": body, "citations": [str(handle)]})
+        if len(claims) >= limit:
+            break
+    return claims
+
+
+def _compact_evidence(evidence: list[dict[str, Any]], limit: int = 10,
+                      chars: int = 700) -> list[dict[str, Any]]:
+    """Copia recortada de las fuentes para reintentar una síntesis lenta."""
+    compact: list[dict[str, Any]] = []
+    for item in (evidence or [])[:limit]:
+        if item.get("source_type") not in ("document_page", "transcript_segment"):
+            continue
+        clone = dict(item)
+        clone["text"] = str(item.get("text") or "")[:chars]
+        if clone["text"]:
+            compact.append(clone)
+    return compact
 
 
 def _synthesis_system(base: str, agent_prompt: str | None) -> str:
@@ -446,22 +486,56 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
         user = answering.build_user_prompt(question, evidence, history=history_turns, deep=deep)
         _emit(emit, "synthesizing", {
             "label": f"Redactando la respuesta con {len(evidence)} fragmentos…",
-            "evidence": len(evidence),
             "sources": evidence_labels.many(evidence),
         })
+        # En análisis el proveedor puede tardar más que el timeout ordinario: el
+        # presupuesto profundo (120 s) da margen sin alargar el turno normal.
+        synthesis_timeout = None
+        if deep:
+            settings = get_settings()
+            synthesis_timeout = max(float(settings.LLM_TIMEOUT_SECONDS),
+                                    float(settings.ANALYSIS_DEADLINE_MS) / 1000.0 * 0.75)
         try:
-            result = llm.complete(system, user)
+            if synthesis_timeout:
+                result = llm.complete(system, user, timeout=synthesis_timeout)
+            else:
+                result = llm.complete(system, user)
+            validated = answering.parse_and_validate(
+                result.text, evidence, get_settings().ANSWER_MIN_GROUNDING_OVERLAP)
         except Exception as exc:  # noqa: BLE001
             log.warning("agent synthesis failed: %s", exc)
-            return {"answer": t("messages.insufficient_evidence", locale), "claims": [], "citations": [],
-                    "unsupported_claims": [], "uncertainties": [], "schema_valid": False,
-                    "raw_text": "", "prompt_id": "", "prompt_version": "",
-                    "provider": getattr(llm, "name", ""), "model": getattr(llm, "model", ""),
-                    "tokens_in": 0, "tokens_out": 0, "evidence": evidence, "file_cards": file_cards,
-                    "post_commit": list(ctx.post_commit), "corrections_pending": corrections_pending,
-                    "corrections_done": corrections_done, "tool_calls": tool_calls,
-                    "degraded": True, "evidence_count": len(evidence)}
-        validated = answering.parse_and_validate(result.text, evidence, get_settings().ANSWER_MIN_GROUNDING_OVERLAP)
+            result = SimpleNamespace(text="", provider=getattr(llm, "name", ""),
+                                     model=getattr(llm, "model", ""),
+                                     tokens_in=0, tokens_out=0)
+            validated = {"claims": [], "unsupported_claims": [], "uncertainties": [],
+                         "schema_valid": False}
+
+        if not validated["claims"]:
+            # Reintento compacto: menos fuentes y sin el prompt largo del agente.
+            # Un timeout de síntesis NO es ausencia de evidencia.
+            compact = _compact_evidence(evidence)
+            if compact:
+                _emit(emit, "synthesizing", {
+                    "label": f"La síntesis no terminó; reintentando con {len(compact)} fuentes principales…",
+                })
+                try:
+                    retry_system, retry_pid, retry_ver = answering.system_prompt(locale, deep=False)
+                    retry_prompt = answering.build_user_prompt(
+                        question, compact, history=history_turns, deep=False)
+                    retry_prompt += (
+                        "\n\n<retry>La síntesis anterior no produjo afirmaciones citables. "
+                        "Responde únicamente con las fuentes de <evidence>. Si un fragmento "
+                        "contiene la declaración, cítalo con su handle; si solo responde en "
+                        "parte, di exactamente qué falta.</retry>")
+                    retry_result = llm.complete(retry_system, retry_prompt)
+                    retry_validated = answering.parse_and_validate(
+                        retry_result.text, compact, get_settings().ANSWER_MIN_GROUNDING_OVERLAP)
+                    if retry_validated["claims"]:
+                        validated = retry_validated
+                        result = retry_result
+                        prompt_id, prompt_version = retry_pid, retry_ver
+                except Exception as exc:  # noqa: BLE001 — queda el respaldo extractivo
+                    log.warning("compact synthesis failed: %s", exc)
         # Un seguimiento no puede quedarse sin respuesta si ya existen páginas
         # citadas en el turno anterior: se reintenta la síntesis SOLO con esas
         # fuentes, sin volver a buscar ni inventar hechos.
@@ -472,7 +546,6 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
             if carried:
                 _emit(emit, "reviewing", {
                     "label": "Revisando las fuentes citadas en la respuesta anterior…",
-                    "evidence": len(carried),
                     "sources": evidence_labels.many(carried),
                 })
                 try:
@@ -491,8 +564,19 @@ def run_agent_query(conn: Connection, case_id: str, question: str, locale: str,
                         validated = retry_validated
                         result = retry_result
                         prompt_id, prompt_version = retry_pid, retry_ver
-                except Exception as exc:  # noqa: BLE001 — si falla, se mantiene la abstención
+                except Exception as exc:  # noqa: BLE001 — si falla, queda el respaldo
                     log.warning("carryover synthesis failed: %s", exc)
+        # Último recurso: publicar el texto literal de las fuentes recuperadas.
+        # Antes, un timeout del proveedor convertía 28 fragmentos en «no encontré».
+        if not validated["claims"]:
+            fallback = _fallback_claims(evidence)
+            if fallback:
+                validated["claims"] = fallback
+                validated["schema_valid"] = False
+                note = ("La síntesis del modelo no terminó a tiempo; se publican los "
+                        "fragmentos recuperados con su cita.")
+                if note not in validated["uncertainties"]:
+                    validated["uncertainties"].append(note)
         if (steps_exhausted or tool_errors) and not validated["claims"]:
             degraded = True
 

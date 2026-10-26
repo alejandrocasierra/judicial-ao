@@ -106,7 +106,7 @@ class RecordingLLM:
             self._records[rec["key"]] = rec
             self.recorded += 1
 
-    def complete(self, system: str, user: str) -> LLMResult:
+    def complete(self, system: str, user: str, timeout: float | None = None) -> LLMResult:
         key = record_key(system, user, self.name, self.model)
         if self.mode == "replay":
             rec = self._lookup(key)
@@ -120,9 +120,9 @@ class RecordingLLM:
                 self.misses += 1
             if self.on_miss == "error":
                 raise RecordingMiss(f"no hay cassette para la clave {key} en {self.path}")
-            return self._inner.complete(system, user)
+            return self._inner.complete(system, user, timeout)
 
-        result = self._inner.complete(system, user)
+        result = self._inner.complete(system, user, timeout)
         if self.mode == "record":
             self._append({
                 "key": key,

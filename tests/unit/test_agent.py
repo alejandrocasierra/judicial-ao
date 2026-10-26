@@ -151,3 +151,35 @@ def test_ut_agn_11_synthesis_merges_agent_role_and_forbids_tools():
     assert "NO llames herramientas" in merged
     assert merged.endswith(base)
     assert agent._synthesis_system(base, None) == base
+
+
+def test_ut_agn_12_synthesis_timeout_publishes_recovered_evidence(monkeypatch):
+    """Un timeout del proveedor no puede convertir la evidencia en «no encontré»."""
+    class SlowLLM:
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, _system, _user, timeout=None):
+            self.calls += 1
+            if self.calls == 1:
+                text = '{"tool": "search_documents", "arguments": {"query": "demanda"}}'
+            elif self.calls == 2:
+                text = '{"done": true}'
+            else:
+                raise TimeoutError("The read operation timed out")
+            return SimpleNamespace(text=text, provider="fake", model="fake",
+                                   tokens_in=1, tokens_out=1)
+
+    llm = SlowLLM()
+    monkeypatch.setattr(agent, "get_llm", lambda: llm)
+
+    def fake_execute(_conn, _case, _tool, _arguments):
+        return [{"handle": "E1", "source_type": "document_page", "document_id": "d1",
+                 "page_number": 1, "text": "Se presentó demanda ejecutiva."}]
+
+    monkeypatch.setattr(agent.agent_tools, "execute", fake_execute)
+    result = agent.run_agent_query(MagicMock(), "case", "¿Se presentó demanda?", "es",
+                                   llm=llm, deep=True, verify=False)
+    assert result["claims"], "el timeout no puede dejar claims vacíos"
+    assert result["claims"][0]["citations"] == ["E1"]
+    assert "no terminó" in " ".join(result["uncertainties"])

@@ -739,7 +739,8 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                 setLiveStages((prev) => prev.map((s) => ({ ...s, state: "done" as const })));
                 return;
               }
-              const tool = typeof d.tool === "string" ? d.tool : "";
+              const tool = typeof d.tool === "string" ? d.tool
+                : typeof d.name === "string" ? d.name : "";
               const label = typeof d.label === "string" && d.label
                 ? d.label
                 : tool
@@ -1122,11 +1123,6 @@ function ChatWidgetInner({ caseId }: { caseId: string }) {
                     {m.citations && m.citations.length > 0
                       ? ` · ${m.citations.length} fuente${m.citations.length === 1 ? "" : "s"}`
                       : ""}
-                  </p>
-                )}
-                {m.degraded && m.answer_kind !== "direct" && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Respuesta parcial: falta evidencia para cubrir toda la pregunta.
                   </p>
                 )}
                 {visibleUncertainties(m).length > 0 && (

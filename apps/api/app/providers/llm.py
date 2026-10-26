@@ -24,7 +24,7 @@ class FakeLLM:
     def capabilities(self) -> Capabilities:
         return Capabilities(streaming=True, json_mode=True, tool_calling=False)
 
-    def complete(self, system: str, user: str) -> LLMResult:
+    def complete(self, system: str, user: str, timeout: float | None = None) -> LLMResult:
         if FakeLLM.script:
             out = FakeLLM.script(system, user)
         else:
@@ -68,14 +68,14 @@ class AnthropicLLM:
         self.max_tokens = s.LLM_MAX_TOKENS
         self.temperature = s.LLM_TEMPERATURE
 
-    def complete(self, system: str, user: str) -> LLMResult:
+    def complete(self, system: str, user: str, timeout: float | None = None) -> LLMResult:
         from app.providers import circuit
 
         return circuit.call(f"anthropic:{self.model}:{self.api_base_url}",
-                            lambda: self._complete(system, user))
+                            lambda: self._complete(system, user, timeout))
 
-    def _complete(self, system: str, user: str) -> LLMResult:
-        r = httpx.post(_messages_url(self.api_base_url), timeout=self.timeout,
+    def _complete(self, system: str, user: str, timeout: float | None = None) -> LLMResult:
+        r = httpx.post(_messages_url(self.api_base_url), timeout=timeout or self.timeout,
                        headers={"x-api-key": self.api_key, "anthropic-version": self.api_version,
                                 "content-type": "application/json"},
                        json={"model": self.model, "max_tokens": self.max_tokens, "system": system,
@@ -108,21 +108,21 @@ class OpenAiLLM:
         self.max_tokens = s.LLM_MAX_TOKENS
         self.temperature = s.LLM_TEMPERATURE
 
-    def complete(self, system: str, user: str) -> LLMResult:
+    def complete(self, system: str, user: str, timeout: float | None = None) -> LLMResult:
         from app.providers import circuit
 
         return circuit.call(f"openai:{self.model}:{self.api_base_url}",
-                            lambda: self._complete(system, user))
+                            lambda: self._complete(system, user, timeout))
 
-    def _complete(self, system: str, user: str) -> LLMResult:
+    def _complete(self, system: str, user: str, timeout: float | None = None) -> LLMResult:
         url = _chat_completions_url(self.api_base_url)
         headers = {"authorization": f"Bearer {self.api_key}", "content-type": "application/json"}
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-        r = httpx.post(url, timeout=self.timeout, headers=headers,
+        r = httpx.post(url, timeout=timeout or self.timeout, headers=headers,
                        json={"model": self.model, "max_tokens": self.max_tokens, "messages": messages,
                              "temperature": self.temperature})
         if r.status_code == 400 and "max_tokens" in r.text:
-            r = httpx.post(url, timeout=self.timeout, headers=headers,
+            r = httpx.post(url, timeout=timeout or self.timeout, headers=headers,
                            json={"model": self.model, "max_completion_tokens": self.max_tokens,
                                  "messages": messages})
         r.raise_for_status()

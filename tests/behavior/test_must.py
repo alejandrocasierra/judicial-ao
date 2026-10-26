@@ -61,9 +61,11 @@ def test_must_04_allegations_are_distinguished_from_facts(client, auth, ids):
 
 
 def test_must_05_relevant_contradictions_are_surfaced(client, auth, ids):
-    """§133: una contradicción relevante no se omite; se marca para revisión humana."""
+    """§133: la contradicción viaja en `related_contradictions`, no como cartel genérico."""
     body = _q(client, auth("abogada.alfa"), ids["pago"], "¿Cuándo se firmó el contrato?", "contradiction")
-    assert body["related_contradictions"] and body["uncertainties"]
+    assert body["related_contradictions"]
+    assert all(c.get("id") for c in body["related_contradictions"])
+    assert not any("plataforma no decide" in u.lower() for u in body["uncertainties"])
 
 
 def test_must_06_insufficient_evidence_is_declared_localized(client, auth, ids):

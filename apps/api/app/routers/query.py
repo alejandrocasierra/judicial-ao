@@ -1,4 +1,4 @@
-"""POST /v1/cases/{id}/query — RAG o agente con herramientas y verificación.
+﻿"""POST /v1/cases/{id}/query — RAG o agente con herramientas y verificación.
 
 El formato final NO lo decide el modelo: `parse_and_validate` acepta claims con
 handles y `compose.render` decide tipo de respuesta, presupuesto de citas y
@@ -141,7 +141,7 @@ def _pg_array(values: list[object]) -> str:
     return "{" + ",".join(str(v) for v in values) + "}"
 
 
-ANSWER_CACHE_VERSION = "r25-2026.10.24"
+ANSWER_CACHE_VERSION = "r26-2026.10.26"
 _CONTEXTUAL_QUESTION = re.compile(
     r"\b(lo anterior|eso|esto|el mismo|la misma|dich[oa]|anterior|sigue|entonces|"
     r"y el|y la|tambi[eé]n|aquel|aquella)\b", re.I)
@@ -521,28 +521,6 @@ def _analysis_llm(s, org_id: str, user_id: str, session_llm, *, deep: bool):
         return session_llm
 
 
-def _agent_progress(items: list[dict]) -> dict:
-    """Payload honesto del progreso del agente (F2 · R6).
-
-    `by_source` siempre lleva las dos claves (aunque valgan 0) para que la UI no
-    tenga que adivinar; el label cuenta lo que de verdad hay.
-    """
-    by_source = {"document_page": 0, "transcript_segment": 0}
-    for item in items:
-        source = str(item.get("source_type") or "")
-        if source in by_source:
-            by_source[source] += 1
-    return {
-        "strategy": "agent",
-        "evidence": len(items),
-        "sources": evidence_labels.many(items, limit=4),
-        "by_source": by_source,
-        "label": (f"El agente reunió {len(items)} fragmentos "
-                  f"({by_source['document_page']} documentos, "
-                  f"{by_source['transcript_segment']} audiencias)…"),
-    }
-
-
 def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, locale: str, case: dict, s,
                history: list[dict] | None = None, hints: list[str] | None = None,
                ocr_mode: str | None = None, asr_mode: str | None = None,
@@ -655,10 +633,8 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         corrections_pending = agent_result.get("corrections_pending", [])
         corrections_done = agent_result.get("corrections_done", [])
         tool_calls = agent_result.get("tool_calls", [])
-        # Progreso honesto del camino agente (F2 · R6): cuántos fragmentos reunió
-        # y de qué fuente salieron. Con 0 ítems el label dice 0; el evento nunca
-        # rompe el turno.
-        _safe_emit(emit, "retrieving", _agent_progress(items))
+        # El progreso ya se emitió por cada herramienta; un resumen posterior a la
+        # síntesis aparecía fuera de orden («reunió 30» después de «redactando»).
         if agent_result.get("degraded"):
             deadline.degraded = True
         if not items:
@@ -746,7 +722,6 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
             _safe_emit(emit, "retrieving", {
                 "strategy": "rag",
                 "label": f"Recuperé {len(items)} fragmentos de OCR/ASR/pgvector…",
-                "evidence": len(items),
                 "sources": evidence_labels.many(items),
             })
         if seed_items:
@@ -762,12 +737,10 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         task = "answer_question"
         _safe_emit(emit, "reviewing", {
             "label": f"Revisando {len(items)} fragmentos recuperados…",
-            "evidence": len(items),
             "sources": evidence_labels.many(items),
         })
         _safe_emit(emit, "synthesizing", {
             "label": f"Redactando con {len(items)} fragmentos…",
-            "evidence": len(items),
             "model": getattr(llm, "model", ""),
         })
         synthesis_failed = False
@@ -1155,10 +1128,6 @@ def _run_query(case_id: UUID, body: QueryIn, request: Request, p: Principal, loc
         note = (f"{omitted} afirmación no se publicó por no tener cita primaria válida."
                 if omitted == 1 else
                 f"{omitted} afirmaciones no se publicaron por no tener cita primaria válida.")
-        if note not in uncertainties:
-            uncertainties.append(note)
-    if related:
-        note = t("messages.contradiction_requires_review", locale)
         if note not in uncertainties:
             uncertainties.append(note)
 
