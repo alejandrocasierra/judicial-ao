@@ -16,7 +16,7 @@ ORG ?=
 USER ?=
 GEMINI_KEY ?=
 
-.PHONY: help deploy verify verify-local gemini import migrate admin models reindex parties infra proxy build up down ps logs
+.PHONY: help deploy verify verify-local gemini import migrate admin models reindex parties infra proxy build up down ps logs clean-docker clean-docker-all docker-df
 
 help:
 	@echo "Targets (ENV=$(ENV)):"
@@ -31,6 +31,9 @@ help:
 	@echo "  make reindex CASE=<uuid> ORG=<uuid> USER=<uuid>"
 	@echo "  make parties CASE=<uuid> ORG=<uuid>   extrae y crea las partes de los autos"
 	@echo "  make infra | proxy | build | up | down | ps | logs"
+	@echo "  make docker-df                  espacio que ocupa Docker (imágenes/caché)"
+	@echo "  make clean-docker               recorta la caché de build (BUILD_CACHE_KEEP=2GB)"
+	@echo "  make clean-docker-all           borra toda la caché (el siguiente build va lento)"
 
 deploy:
 	bash scripts/deploy_all.sh $(if $(EXPORT),--export-dir $(EXPORT)) $(if $(INSTANCES),--instances "$(INSTANCES)")
@@ -76,6 +79,15 @@ proxy:
 
 build:
 	docker compose --env-file "$(ENV)" -f docker-compose.yml -f docker-compose.prod.yml build
+
+docker-df:
+	docker system df
+
+clean-docker:
+	BUILD_CACHE_KEEP="$(BUILD_CACHE_KEEP)" bash scripts/docker_cleanup.sh
+
+clean-docker-all:
+	bash scripts/docker_cleanup.sh --all-cache
 
 up:
 	ENV_FILE="$(ENV)" bash scripts/deploy.sh --shared --no-proxy

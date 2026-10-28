@@ -166,6 +166,16 @@ if [ "$DRY" = "1" ]; then
 fi
 
 # --- 4) redespliegue --------------------------------------------------------
+# Si el disco ya está casi lleno, el build muere con "no space left on device".
+# Se borra la caché entera ANTES de construir (deploy_all.sh recorta al final).
+if [ "$DRY" = "0" ] && [ -f "$DEPLOY_SRC/scripts/docker_cleanup.sh" ]; then
+  uso="$(df -P / 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}')"
+  if [ -n "${uso:-}" ] && [ "$uso" -ge "${DISK_CLEANUP_PCT:-85}" ]; then
+    log "disco al ${uso}% (umbral ${DISK_CLEANUP_PCT:-85}%): limpieza de caché de build"
+    ( cd "$DEPLOY_SRC" && bash scripts/docker_cleanup.sh --all-cache ) >>"$LOG" 2>&1 || true
+  fi
+fi
+
 # Flag ANTES de empezar: si el proceso muere a mitad, el próximo cron reintenta.
 touch "$PENDING"
 log "==> redespliegue: bash scripts/deploy_all.sh (desde $DEPLOY_SRC)"

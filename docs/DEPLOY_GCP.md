@@ -110,6 +110,30 @@ Elige **una** opción. `scripts/deploy.sh` ya decide: hace `pull` si hay `REGIST
 
 > `api`, `worker` y `mcp` comparten la **misma** imagen (`api.Dockerfile`).
 
+### 4.1 Caché de build: lo que llena el disco
+BuildKit guarda cada capa construida para acelerar el rebuild y **no la libera sola**. Con esta imagen
+(torch + docling + pyannote) un build puede dejar **varios GB**: si el VPS reconstruye en cada push, la
+caché crece hasta llenar el disco y el deploy muere con `no space left on device`.
+
+`deploy.sh` y `deploy_all.sh` ya la recortan solos al terminar (deja `BUILD_CACHE_KEEP`, 2 GB por defecto).
+Para hacerlo a mano:
+
+```bash
+make docker-df          # cuánto ocupa Docker (imágenes, contenedores, volúmenes, caché)
+make clean-docker       # recorta la caché a 2 GB y borra imágenes <none>
+make clean-docker-all   # borra TODA la caché (el siguiente build tarda 20-40 min)
+BUILD_CACHE_KEEP=5GB make clean-docker   # otro límite
+```
+
+- Nunca toca volúmenes ni contenedores en marcha: `pgdata`, `storage`, `minio` y `caddy` quedan intactos.
+- Si prefieres que lo haga el propio Docker, pon un tope en el daemon (`/etc/docker/daemon.json`) y
+  reinicia (`sudo systemctl restart docker`):
+  ```json
+  { "builder": { "gc": { "enabled": true, "defaultKeepStorage": "5GB" } } }
+  ```
+- `auto_deploy.sh` además borra la caché entera si el disco pasa del 85 % (`DISK_CLEANUP_PCT`), antes de
+  construir, para que el propio deploy no se quede sin espacio.
+
 ## 5) Levantar + administrador
 ```bash
 bash scripts/deploy.sh        # imágenes + up + migraciones + healthcheck

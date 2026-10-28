@@ -76,7 +76,9 @@ done
 log "4/10 Levantando las apps (+ migraciones Alembic)"
 for inst in $INSTANCES; do
   E="$(env_for "$inst")"; echo "  app $inst"
-  ENV_FILE="$E" bash scripts/deploy.sh --shared --no-proxy
+  # DOCKER_CLEANUP=0: la caché de build se recorta UNA vez al final; si no, cada
+  # instancia tiraría la caché que necesita la siguiente y reconstruiría torch.
+  ENV_FILE="$E" DOCKER_CLEANUP=0 bash scripts/deploy.sh --shared --no-proxy
 done
 
 log "5/10 Creando organización + administrador por instancia (seed_admin)"
@@ -115,6 +117,12 @@ if [ "$SKIP_VERIFY" = "0" ]; then
   log "10/10 Verificación"
   bash scripts/verify_deploy.sh || true
 fi
+
+# La caché de build es lo que llena el disco del VPS: se recorta al terminar,
+# no entre instancias (ver DOCKER_CLEANUP=0 en el paso 4).
+log "Limpieza de caché de Docker (BUILD_CACHE_KEEP=${BUILD_CACHE_KEEP:-2GB})"
+BUILD_CACHE_KEEP="${BUILD_CACHE_KEEP:-2GB}" bash scripts/docker_cleanup.sh \
+  || echo "  ADVERTENCIA: no se pudo limpiar la caché de Docker"
 
 echo
 echo "✅ Despliegue completo."

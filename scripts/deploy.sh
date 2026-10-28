@@ -60,6 +60,16 @@ else
   "${DC[@]}" build
 fi
 
+# BuildKit conserva cada capa para acelerar el rebuild y no la libera sola: en un
+# VPS que reconstruye en cada push, la caché llena el disco. Se recorta aquí,
+# con las imágenes ya creadas. DOCKER_CLEANUP=0 lo omite (deploy_all.sh lo hace
+# una sola vez al final, para no tirar la caché entre las 3 instancias).
+if [ "${DOCKER_CLEANUP:-1}" = "1" ]; then
+  echo "==> Limpieza de caché de build (BUILD_CACHE_KEEP=${BUILD_CACHE_KEEP:-2GB})"
+  BUILD_CACHE_KEEP="${BUILD_CACHE_KEEP:-2GB}" bash scripts/docker_cleanup.sh \
+    || echo "    ADVERTENCIA: no se pudo limpiar la caché de Docker"
+fi
+
 echo "==> 2/5 Levantando servicios"
 "${DC[@]}" up -d --remove-orphans "${UP_SERVICES[@]}"
 
